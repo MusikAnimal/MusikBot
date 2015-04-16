@@ -10,7 +10,6 @@ module PermClerk
   @logger.level = Logger::INFO
 
   EDIT_THROTTLE = 3
-  PERMISSION = "Rollback"
   SEARCH_DAYS = 30
   SPLIT_KEY = "====[[User:"
   PERMISSIONS = [
@@ -18,7 +17,7 @@ module PermClerk
     # "Autopatrolled",
     # "Confirmed",
     # "File mover",
-    # "Pending changes reviewer",
+    "Pending changes reviewer",
     # "Reviewer",
     "Rollback"
     # "Template editor"
@@ -28,14 +27,14 @@ module PermClerk
 
   def self.init(mw)
     @mw = mw
-    @baseTimestamp = nil
-    @pageName = "Wikipedia:Requests for permissions/#{PERMISSION}"
-    @startTimestamp = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
     @usersCount = 0
 
     for @permission in PERMISSIONS
       # TODO: check if task is set to run for this permission
+      @baseTimestamp = nil
       @editThrottle = 0
+      @pageName = "Wikipedia:Requests for permissions/#{@permission}"
+      @startTimestamp = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
       unless process(@permission)
         error("Failed to process")
       else
@@ -104,7 +103,7 @@ module PermClerk
 
   def self.newSectionWikitext(section, links)
     linksMessage = links.map{|l| "[#{l}]"}.join
-    comment = "\n:{{comment|Automated comment}} This user has had #{links.length} request#{'s' if links.length > 1} for #{PERMISSION.downcase} declined in the past #{SEARCH_DAYS} days (#{linksMessage}). ~~~~\n"
+    comment = "\n:{{comment|Automated comment}} This user has had #{links.length} request#{'s' if links.length > 1} for #{@permission.downcase} declined in the past #{SEARCH_DAYS} days (#{linksMessage}). ~~~~\n"
     return SPLIT_KEY + section.gsub(/\n+$/,"") + comment
   end
 
@@ -152,9 +151,9 @@ module PermClerk
 
   def self.setPageProps
     if @fetchThrotte < 3
-      info("Fetching page properties, attempt #{@fetchThrotte}")
       sleep @fetchThrotte
       @fetchThrotte += 1
+      info("Fetching page properties, attempt #{@fetchThrotte}")
       begin
         pageObj = @mw.custom_query(prop: 'info|revisions', titles: @pageName, rvprop: 'timestamp|content')[0][0]
         @baseTimestamp = pageObj.attributes['touched']
