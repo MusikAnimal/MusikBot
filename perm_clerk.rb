@@ -17,7 +17,7 @@ module PermClerk
     # "Autopatrolled",
     # "Confirmed",
     # "File mover",
-    "Pending changes reviewer",
+    # "Pending changes reviewer",
     # "Reviewer",
     "Rollback"
     # "Template editor"
@@ -34,16 +34,21 @@ module PermClerk
       @baseTimestamp = nil
       @editThrottle = 0
       @pageName = "Wikipedia:Requests for permissions/#{@permission}"
-      @startTimestamp = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
       unless process(@permission)
         error("Failed to process")
       else
         info("Processing of #{@permission} complete")
       end
+      @logger.info("\n#{'=' * 100}")
     end
   end
 
   def self.editPage(newWikitext)
+    if @usersCount == 0
+      info("No links found for any of the current requests")
+      return true
+    end
+
     if @editThrottle < 3
       sleep @editThrottle
       @editThrottle += 1
@@ -54,10 +59,8 @@ module PermClerk
       begin
         @mw.edit(@pageName, newWikitext, {
           basetimestamp: @baseTimestamp,
-          # bot: true,
           contentformat: 'text/x-wiki',
           section: 1,
-          starttimestamp: @startTimestamp,
           summary: "Bot clerking, #{@usersCount} user#{'s' if @usersCount > 1} with previously declined requests",
           text: newWikitext
         })
@@ -69,7 +72,7 @@ module PermClerk
           warn("API error when writing to page: #{e.code.to_s}, trying again")
           return process(@permission)
         end
-      rescue Exception => e
+      rescue => e
         error("Unknown exception when writing to page: #{e.message}") and return false
       end
     else
@@ -92,9 +95,10 @@ module PermClerk
     for monthIndex in (targetDate.month..currentDate.month)
       monthName = Date::MONTHNAMES[monthIndex]
       info("Checking month #{monthName} for #{userName}")
+      # FIXME: cache these!
       page = @mw.get("Wikipedia:Requests for permissions/Denied/#{monthName} #{Date.today.year}")
       # FIXME: (1) use match instead of scan (2) make sure the date itself is within range
-      matches = page.scan(/{{Usercheck.*#{userName}.*\/#{PERMISSION}\]\].*(http:\/\/.*)\s+link\]/)
+      matches = page.scan(/{{Usercheck.*#{userName}.*\/#{@permission}\]\].*(http:\/\/.*)\s+link\]/)
       links += matches.flatten if matches
     end
 
@@ -117,8 +121,6 @@ module PermClerk
 
     sections = oldWikitext.split(SPLIT_KEY)
 
-    binding.pry
-
     sections.each do |section|
       debug("Checking section: #{section}")
       links = []
@@ -131,13 +133,18 @@ module PermClerk
         else
           info("Searching #{userName}")
 
-          links += findLinks(userName) rescue []
+          begin
+            links += findLinks(userName)
+          rescue => e
+            links += []
+            error("Unknown exception when finding links: #{e.message}") and return false
+          end
           if links.length > 0
             info("#{links.length} links found for #{userName}")
             newWikitext << newSectionWikitext(section, links)
             @usersCount += 1
           else
-            info("no links found for #{userName}")
+            info("No links found for #{userName}")
             newWikitext << SPLIT_KEY + section
           end
         end
@@ -155,18 +162,17 @@ module PermClerk
       @fetchThrotte += 1
       info("Fetching page properties, attempt #{@fetchThrotte}")
       begin
+        @startTimestamp = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
         pageObj = @mw.custom_query(prop: 'info|revisions', titles: @pageName, rvprop: 'timestamp|content')[0][0]
         @baseTimestamp = pageObj.attributes['touched']
         return pageObj.elements['revisions'][0][0].to_s
-      rescue
-        warn("Unable to fetch page properties, trying again")
+      rescue => e
+        warn("Unable to fetch page properties, trying again. Error: #{e.message}")
         return setPageProps
       end
     else
       error("Unable to fetch page properties, continuing to process next permission") and return false
     end
-
-    true
   end
 
   def self.debug(msg); @logger.debug("#{@permission.upcase} : #{msg}"); end
