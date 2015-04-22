@@ -7,7 +7,7 @@ module PermClerk
   require 'logger'
 
   @logger = Logger.new("perm_clerk.log")
-  @logger.level = Logger::INFO
+  @logger.level = Logger::DEBUG
 
   EDIT_THROTTLE = 3
   SEARCH_DAYS = 30
@@ -24,6 +24,7 @@ module PermClerk
   ]
 
   @usersCache = {}
+  @deniedCache = {}
 
   def self.init(mw)
     @mw = mw
@@ -92,17 +93,34 @@ module PermClerk
     targetDate = currentDate - SEARCH_DAYS
     links = []
 
-    for monthIndex in (targetDate.month..currentDate.month)
-      monthName = Date::MONTHNAMES[monthIndex]
-      info("Checking month #{monthName} for #{userName}")
-      # FIXME: cache these!
-      page = @mw.get("Wikipedia:Requests for permissions/Denied/#{monthName} #{Date.today.year}")
-      # FIXME: (1) use match instead of scan (2) make sure the date itself is within range
-      matches = page.scan(/{{Usercheck.*#{userName}.*\/#{@permission}\]\].*(http:\/\/.*)\s+link\]/)
-      links += matches.flatten if matches
+    for date in (targetDate..currentDate)
+      puts date.to_s
+      if dayWikitext = getDeniedForDate(date)
+        if match = dayWikitext.scan(/{{Usercheck.*\|#{userName}}}.*\/#{@permission}\]\].*(http:\/\/.*)\s+link\]/i)[0]
+          # TODO: fetch declining admin's username and ping them
+          links << match.flatten[0]
+        end
+      end
     end
 
     return @usersCache[userName] = links
+  end
+
+  def self.getDeniedForDate(date)
+    key = "#{Date::MONTHNAMES[date.month]} #{date.year}"
+    if @deniedCache[key]
+      info("Cache hit for #{key}")
+      page = @deniedCache[key]
+    else
+      page = @mw.get("Wikipedia:Requests for permissions/Denied/#{key}")
+      @deniedCache[key] = page
+    end
+
+    # binding.pry
+    reduced = page.split(/==\s*\w+\s+/i)
+    dayWikitext = reduced.select{|entry| entry.scan(/^(\d+)\s*==/).flatten[0].to_i == date.day.to_i}
+
+    return dayWikitext[0]
   end
 
   def self.newSectionWikitext(section, links)

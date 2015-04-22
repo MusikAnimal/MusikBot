@@ -8,9 +8,9 @@ MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (http://en.wikipedia.org/M
 mw = MediaWiki::Gateway.new('http://test.wikipedia.org/w/api.php', ignorewarnings: true)
 Auth.login(mw)
 
-# FIXME: fetch duration from User:MusikBot/PermClerk/Offset and run values for each permission in same API call
-# if mw.get("User:MusikBot/PermClerk/Run").to_s.downcase == "true"
+# TODO: fetch duration from User:MusikBot/PermClerk/Offset and run values for each permission in same API call
+if mw.get("User:MusikBot/PermClerk/Run").to_s.downcase == "true"
   PermClerk.init(mw)
-# else
-#   puts "PermClerk disabled"
-# end
+else
+  puts "PermClerk disabled"
+end
