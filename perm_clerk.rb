@@ -17,7 +17,7 @@ module PermClerk
     # "Autopatrolled",
     # "Confirmed",
     # "File mover",
-    # "Pending changes reviewer",
+    "Pending changes reviewer",
     # "Reviewer",
     "Rollback"
     # "Template editor"
@@ -60,7 +60,6 @@ module PermClerk
         @mw.edit(@pageName, newWikitext, {
           basetimestamp: @baseTimestamp,
           contentformat: 'text/x-wiki',
-          section: 1,
           starttimestamp: @startTimestamp,
           summary: "Bot clerking, #{@usersCount} user#{'s' if @usersCount > 1} with previously declined requests",
           text: newWikitext
