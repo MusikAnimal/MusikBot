@@ -10,7 +10,7 @@ module PermClerk
   @logger.level = Logger::DEBUG
 
   EDIT_THROTTLE = 3
-  SEARCH_DAYS = 30
+  SEARCH_DAYS = 90
   SPLIT_KEY = "====[[User:"
   PERMISSIONS = [
     "Account creator",
@@ -19,7 +19,7 @@ module PermClerk
     "File mover",
     "Pending changes reviewer",
     # "Reviewer",
-    "Rollback"
+    "Rollback",
     "Template editor"
   ]
 
@@ -43,6 +43,7 @@ module PermClerk
       @logger.info("\n#{'=' * 100}")
       sleep 2
     end
+    @logger.info("\n#{'~' * 100}")
   end
 
   def self.editPage(newWikitext)
