@@ -13,14 +13,14 @@ module PermClerk
   SEARCH_DAYS = 30
   SPLIT_KEY = "====[[User:"
   PERMISSIONS = [
-    # "Account creator",
-    # "Autopatrolled",
+    "Account creator",
+    "Autopatrolled",
     # "Confirmed",
-    # "File mover",
+    "File mover",
     "Pending changes reviewer",
     # "Reviewer",
     "Rollback"
-    # "Template editor"
+    "Template editor"
   ]
 
   @usersCache = {}
@@ -41,6 +41,7 @@ module PermClerk
         info("Processing of #{@permission} complete")
       end
       @logger.info("\n#{'=' * 100}")
+      sleep 2
     end
   end
 
