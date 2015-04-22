@@ -61,6 +61,7 @@ module PermClerk
           basetimestamp: @baseTimestamp,
           contentformat: 'text/x-wiki',
           section: 1,
+          starttimestamp: @startTimestamp,
           summary: "Bot clerking, #{@usersCount} user#{'s' if @usersCount > 1} with previously declined requests",
           text: newWikitext
         })
@@ -164,7 +165,7 @@ module PermClerk
       begin
         @startTimestamp = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
         pageObj = @mw.custom_query(prop: 'info|revisions', titles: @pageName, rvprop: 'timestamp|content')[0][0]
-        @baseTimestamp = pageObj.attributes['touched']
+        @baseTimestamp = pageObj.elements['revisions'][0].attributes['timestamp']
         return pageObj.elements['revisions'][0][0].to_s
       rescue => e
         warn("Unable to fetch page properties, trying again. Error: #{e.message}")
