@@ -89,7 +89,7 @@ module PermClerk
 
   def self.findLinks(userName)
     if @usersCache[userName]
-      info("Cache hit for #{userName}")
+      debug("Cache hit for #{userName}")
       return @usersCache[userName]
     end
 
@@ -113,12 +113,14 @@ module PermClerk
   def self.getDeniedForDate(date)
     key = "#{Date::MONTHNAMES[date.month]} #{date.year}"
     if @deniedCache[key]
-      info("Cache hit for #{key}")
+      debug("Cache hit for #{key}")
       page = @deniedCache[key]
     else
       page = @mw.get("Wikipedia:Requests for permissions/Denied/#{key}")
       @deniedCache[key] = page
     end
+
+    return nil unless page
 
     reduced = page.split(/==\s*\w+\s+/i)
     dayWikitext = reduced.select{|entry| entry.scan(/^(\d+)\s*==/).flatten[0].to_i == date.day.to_i}
