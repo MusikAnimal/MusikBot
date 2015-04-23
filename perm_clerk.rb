@@ -58,7 +58,7 @@ module PermClerk
       sleep @editThrottle
       @editThrottle += 1
 
-      info("Writing to page, attempt #{@editThrottle}")
+      info("Attempting to write to page [[#{@pageName}]]")
 
       # attempt to save
       begin
@@ -71,7 +71,7 @@ module PermClerk
         })
       rescue MediaWiki::APIError => e
         if e.code.to_s == "editconflict"
-          warn("Edit conflict, trying again")
+          warn("Edit conflict, reattempt ##{@editThrottle}")
           return process(@permission)
         else
           warn("API error when writing to page: #{e.code.to_s}, trying again")
@@ -181,14 +181,14 @@ module PermClerk
     if @fetchThrotte < 3
       sleep @fetchThrotte
       @fetchThrotte += 1
-      info("Fetching page properties, attempt #{@fetchThrotte}")
+      info("Fetching page properties of [[#{@pageName}]]")
       begin
         @startTimestamp = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
         pageObj = @mw.custom_query(prop: 'info|revisions', titles: @pageName, rvprop: 'timestamp|content')[0][0]
         @baseTimestamp = pageObj.elements['revisions'][0].attributes['timestamp']
         return pageObj.elements['revisions'][0][0].to_s
       rescue => e
-        warn("Unable to fetch page properties, trying again. Error: #{e.message}")
+        warn("Unable to fetch page properties, reattmpt ##{@fetchThrotte}. Error: #{e.message}")
         return setPageProps
       end
     else
