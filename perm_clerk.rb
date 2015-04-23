@@ -1,13 +1,15 @@
 # TODO: have the bot update User:MusikBot/task_1 with 'true' unless the task doesn't finish, in which case it will write 'false'
 #       Then on User:MusikBot in the lists of tasks it will transclude the page into a parser function showing whether or not the task is running and when it failed
 
+# NEW TASK: remove extraneous headers if present
+
 module PermClerk
   require 'date'
   require 'pry'
   require 'logger'
 
   @logger = Logger.new("perm_clerk.log")
-  @logger.level = Logger::DEBUG
+  @logger.level = Logger::INFO
 
   EDIT_THROTTLE = 3
   SEARCH_DAYS = 90
@@ -118,7 +120,6 @@ module PermClerk
       @deniedCache[key] = page
     end
 
-    # binding.pry
     reduced = page.split(/==\s*\w+\s+/i)
     dayWikitext = reduced.select{|entry| entry.scan(/^(\d+)\s*==/).flatten[0].to_i == date.day.to_i}
 
