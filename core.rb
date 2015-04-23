@@ -12,5 +12,6 @@ Auth.login(mw)
 if mw.get("User:MusikBot/PermClerk/Run").to_s.downcase == "true"
   PermClerk.init(mw)
 else
-  puts "PermClerk disabled"
+  logger = Logger.new("perm_clerk.log")
+  logger.error("PermClerk disabled")
 end
