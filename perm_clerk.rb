@@ -9,7 +9,7 @@ module PermClerk
   require 'logger'
 
   @logger = Logger.new("perm_clerk.log")
-  @logger.level = Logger::INFO
+  @logger.level = Logger::WARN
 
   EDIT_THROTTLE = 3
   SEARCH_DAYS = 90
@@ -98,7 +98,6 @@ module PermClerk
     links = []
 
     for date in (targetDate..currentDate)
-      puts date.to_s
       if dayWikitext = getDeniedForDate(date)
         if match = dayWikitext.scan(/{{Usercheck.*\|#{userName}}}.*\/#{@permission}\]\].*(http:\/\/.*)\s+link\]/i)[0]
           # TODO: fetch declining admin's username and ping them
