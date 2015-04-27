@@ -1,8 +1,3 @@
-# TODO: have the bot update User:MusikBot/task_1 with 'true' unless the task doesn't finish, in which case it will write 'false'
-#       Then on User:MusikBot in the lists of tasks it will transclude the page into a parser function showing whether or not the task is running and when it failed
-
-# NEW TASK: remove extraneous headers if present
-
 module PermClerk
   require 'date'
   require 'pry'
@@ -71,7 +66,7 @@ module PermClerk
         })
       rescue MediaWiki::APIError => e
         if e.code.to_s == "editconflict"
-          warn("Edit conflict, reattempt ##{@editThrottle}")
+          warn("Edit conflict, trying again")
           return process(@permission)
         else
           warn("API error when writing to page: #{e.code.to_s}, trying again")
