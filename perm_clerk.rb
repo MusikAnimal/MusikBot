@@ -157,7 +157,7 @@ module PermClerk
             error("Unknown exception when finding links: #{e.message}") and return false
           end
           if links.length > 0
-            info("#{links.length} links found for #{userName}")
+            warn("#{links.length} links found for #{userName}")
             newWikitext << newSectionWikitext(section, links)
             @usersCount += 1
           else
