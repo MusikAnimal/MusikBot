@@ -4,7 +4,7 @@ module PermClerk
   require 'logger'
 
   @logger = Logger.new("perm_clerk.log")
-  @logger.level = Logger::WARN
+  @logger.level = Logger::INFO
 
   EDIT_THROTTLE = 3
   SEARCH_DAYS = 90
@@ -12,7 +12,7 @@ module PermClerk
   PERMISSIONS = [
     "Account creator",
     "Autopatrolled",
-    # "Confirmed",
+    "Confirmed",
     "File mover",
     "Pending changes reviewer",
     # "Reviewer",
@@ -25,12 +25,13 @@ module PermClerk
 
   def self.init(mw)
     @mw = mw
-    @usersCount = 0
 
     for @permission in PERMISSIONS
       # TODO: check if task is set to run for this permission
       @baseTimestamp = nil
       @editThrottle = 0
+      @headersRemoved = false
+      @usersCount = 0
       @pageName = "Wikipedia:Requests for permissions/#{@permission}"
       unless process(@permission)
         error("Failed to process")
@@ -40,11 +41,11 @@ module PermClerk
       @logger.info("\n#{'=' * 100}")
       sleep 2
     end
-    @logger.info("\n#{'~' * 100}")
+    @logger.info("Task complete\n#{'~' * 100}")
   end
 
   def self.editPage(newWikitext)
-    if @usersCount == 0
+    unless @usersCount > 0 || @headersRemoved
       info("No links found for any of the current requests")
       return true
     end
@@ -55,13 +56,17 @@ module PermClerk
 
       info("Attempting to write to page [[#{@pageName}]]")
 
+      fixes = []
+      fixes << "#{@usersCount} user#{'s' if @usersCount > 1} with previously declined requests" if @usersCount > 0
+      fixes << "extraneous headers removed" if @headersRemoved
+
       # attempt to save
       begin
         @mw.edit(@pageName, newWikitext, {
           basetimestamp: @baseTimestamp,
           contentformat: 'text/x-wiki',
           starttimestamp: @startTimestamp,
-          summary: "Bot clerking, #{@usersCount} user#{'s' if @usersCount > 1} with previously declined requests",
+          summary: "Bot clerking, #{fixes.join(', ')}",
           text: newWikitext
         })
       rescue MediaWiki::APIError => e
@@ -129,12 +134,19 @@ module PermClerk
   end
 
   def self.process(permission)
-    info("Processing...")
+    info("Processing #{permission}...")
     newWikitext = []
     @fetchThrotte = 0
 
-    oldWikitext = setPageProps
+    oldWikitext = removeHeaders(setPageProps)
     return false unless oldWikitext
+
+    if permission == "Confirmed"
+      if @headersRemoved
+        editPage(CGI.unescapeHTML(oldWikitext))
+      end
+      return true
+    end
 
     sections = oldWikitext.split(SPLIT_KEY)
 
@@ -144,7 +156,7 @@ module PermClerk
       if userNameMatch = section.match(/{{(?:template\:)?rfplinks\|1=(.*)}}/i)
         userName = userNameMatch.captures[0]
 
-        if section.match(/{{(?:template\:)?(done|not done|already done)}}/i) || section.match(/:{{comment|Automated comment}}.*MusikBot/)
+        if section.match(/{{(?:template\:)?(done|not done|nd|already done)}}/i) || section.match(/:{{comment|Automated comment}}.*MusikBot/)
           info("#{userName}'s request already responded to or MusikBot has already commented")
           newWikitext << SPLIT_KEY + section
         else
@@ -171,6 +183,24 @@ module PermClerk
     end
 
     return editPage(CGI.unescapeHTML(newWikitext.join))
+  end
+
+  def self.removeHeaders(oldWikitext)
+    return false unless oldWikitext
+
+    headersMatch = oldWikitext.scan(/(^\=\=[^\=]*\=\=[^\=]*(\=\=\=\=[^\=]*\=\=\=\=\n\*.*rfplinks.*\}\}\n))/)
+    if headersMatch.length > 0
+      warn("Extraneous headers detected")
+
+      for match in headersMatch
+        comment = ":<small>{{comment|Automated comment}} - An extraneous header was removed from this request. ~~~~</small>\n"
+        oldWikitext.sub!(match[0], match[1] + comment)
+      end
+
+      @headersRemoved = true
+    end
+
+    oldWikitext
   end
 
   def self.setPageProps

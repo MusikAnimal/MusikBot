@@ -5,7 +5,7 @@ require 'auth.rb'
 require 'perm_clerk.rb'
 
 MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (http://en.wikipedia.org/MusikBot/)'
-mw = MediaWiki::Gateway.new('http://test.wikipedia.org/w/api.php', ignorewarnings: true)
+mw = MediaWiki::Gateway.new('http://en.wikipedia.org/w/api.php', ignorewarnings: true)
 Auth.login(mw)
 
 # TODO: fetch duration from User:MusikBot/PermClerk/Offset and run values for each permission in same API call
