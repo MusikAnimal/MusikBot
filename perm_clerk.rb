@@ -156,7 +156,7 @@ module PermClerk
       if userNameMatch = section.match(/{{(?:template\:)?rfplinks\|1=(.*)}}/i)
         userName = userNameMatch.captures[0]
 
-        if section.match(/{{(?:template\:)?(done|not done|nd|already done)}}/i) || section.match(/:{{comment|Automated comment}}.*MusikBot/)
+        if section.match(/{{(?:template\:)?(done|not\s*done|nd|already\s*done)}}/i) || section.match(/:{{comment|Automated comment}}.*MusikBot/)
           info("#{userName}'s request already responded to or MusikBot has already commented")
           newWikitext << SPLIT_KEY + section
         else
