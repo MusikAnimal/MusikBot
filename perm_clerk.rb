@@ -46,7 +46,7 @@ module PermClerk
 
   def self.editPage(newWikitext)
     unless @usersCount > 0 || @headersRemoved
-      info("No links found for any of the current requests")
+      info("No links or extraneous headers found for any of the current requests")
       return true
     end
 
