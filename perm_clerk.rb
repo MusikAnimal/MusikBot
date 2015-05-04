@@ -7,7 +7,6 @@ module PermClerk
   @logger.level = Logger::INFO
 
   EDIT_THROTTLE = 3
-  SEARCH_DAYS = 90
   SPLIT_KEY = "====[[User:"
   PERMISSIONS = [
     "Account creator",
@@ -15,7 +14,6 @@ module PermClerk
     "Confirmed",
     "File mover",
     "Pending changes reviewer",
-    # "Reviewer",
     "Rollback",
     "Template editor"
   ]
@@ -23,16 +21,17 @@ module PermClerk
   @usersCache = {}
   @deniedCache = {}
 
-  def self.init(mw)
+  def self.init(mw, config)
     @mw = mw
+    @config = config
 
     for @permission in PERMISSIONS
       # TODO: check if task is set to run for this permission
       @baseTimestamp = nil
       @editThrottle = 0
-      @headersRemoved = false
-      @usersCount = 0
+      @headersRemoved = []
       @pageName = "Wikipedia:Requests for permissions/#{@permission}"
+      @usersCount = 0
       unless process(@permission)
         error("Failed to process")
       else
@@ -45,7 +44,7 @@ module PermClerk
   end
 
   def self.editPage(newWikitext)
-    unless @usersCount > 0 || @headersRemoved
+    unless @usersCount > 0 || headersRemoved?
       info("No links or extraneous headers found for any of the current requests")
       return true
     end
@@ -58,7 +57,7 @@ module PermClerk
 
       fixes = []
       fixes << "#{@usersCount} user#{'s' if @usersCount > 1} with previously declined requests" if @usersCount > 0
-      fixes << "extraneous headers removed" if @headersRemoved
+      fixes << "extraneous headers removed" if headersRemoved?
 
       # attempt to save
       begin
@@ -94,7 +93,7 @@ module PermClerk
     end
 
     currentDate = Date.today
-    targetDate = currentDate - SEARCH_DAYS
+    targetDate = currentDate - @config["fetchdeclined_offset"]
     links = []
 
     for date in (targetDate..currentDate)
@@ -127,10 +126,22 @@ module PermClerk
     return dayWikitext[0]
   end
 
-  def self.newSectionWikitext(section, links)
-    linksMessage = links.map{|l| "[#{l}]"}.join
-    comment = "\n:{{comment|Automated comment}} This user has had #{links.length} request#{'s' if links.length > 1} for #{@permission.downcase} declined in the past #{SEARCH_DAYS} days (#{linksMessage}). ~~~~\n"
-    return SPLIT_KEY + section.gsub(/\n+$/,"") + comment
+  def self.headersRemoved?
+    @headersRemoved.length > 0
+  end
+
+  def self.newSectionWikitext(section, links, userName)
+    wikitext = SPLIT_KEY + section.gsub(/\n+$/,"")
+
+    if headersRemoved? && @headersRemoved.include?(userName)
+      wikitext = wikitext.gsub(/\n+$/, "\n") + "\n::<small>{{comment|Automated comment}} - An extraneous header was removed from this request. ~~~~</small>\n"
+    end
+    if links && links.length > 0
+      linksMessage = links.map{|l| "[#{l}]"}.join
+      wikitext = wikitext.gsub(/\n+$/, "\n") + "\n::{{comment|Automated comment}} This user has had #{links.length} request#{'s' if links.length > 1} for #{@permission.downcase} declined in the past #{@config["fetchdeclined_offset"]} days (#{linksMessage}). ~~~~\n"
+    end
+
+    wikitext
   end
 
   def self.process(permission)
@@ -138,11 +149,15 @@ module PermClerk
     newWikitext = []
     @fetchThrotte = 0
 
-    oldWikitext = removeHeaders(setPageProps)
+    oldWikitext = setPageProps
     return false unless oldWikitext
 
+    if @config["autoformat"]
+      oldWikitext = removeHeaders(oldWikitext)
+    end
+
     if permission == "Confirmed"
-      if @headersRemoved
+      if headersRemoved?
         editPage(CGI.unescapeHTML(oldWikitext))
       end
       return true
@@ -156,24 +171,27 @@ module PermClerk
       if userNameMatch = section.match(/{{(?:template\:)?rfplinks\|1=(.*)}}/i)
         userName = userNameMatch.captures[0]
 
-        if section.match(/{{(?:template\:)?(done|not\s*done|nd|already\s*done)}}/i) || section.match(/:{{comment|Automated comment}}.*MusikBot/)
+        if section.match(/{{(?:template\:)?(done|not\s*done|nd|already\s*done)}}/i) || section.match(/::{{comment|Automated comment}}.*MusikBot/)
           info("#{userName}'s request already responded to or MusikBot has already commented")
           newWikitext << SPLIT_KEY + section
         else
-          info("Searching #{userName}")
+          if @config["fetchdeclined"]
+            info("Searching #{userName}")
 
-          begin
-            links += findLinks(userName)
-          rescue => e
-            links += []
-            error("Unknown exception when finding links: #{e.message}") and return false
+            begin
+              links += findLinks(userName)
+            rescue => e
+              links += []
+              error("Unknown exception when finding links: #{e.message}") and return false
+            end
           end
-          if links.length > 0
-            warn("#{links.length} links found for #{userName}")
-            newWikitext << newSectionWikitext(section, links)
+
+          if links.length > 0 || (headersRemoved? && @headersRemoved.include?(userName))
+            info("#{links.length} links found for #{userName} or an extraneous header was removed")
+            newWikitext << newSectionWikitext(section, links, userName)
             @usersCount += 1
           else
-            info("No links found for #{userName}")
+            info("No links or extraneous headers found for #{userName}")
             newWikitext << SPLIT_KEY + section
           end
         end
@@ -188,16 +206,17 @@ module PermClerk
   def self.removeHeaders(oldWikitext)
     return false unless oldWikitext
 
-    headersMatch = oldWikitext.scan(/(^\=\=[^\=]*\=\=[^\=]*(\=\=\=\=[^\=]*\=\=\=\=\n\*.*rfplinks.*\}\}\n))/)
+    headersMatch = oldWikitext.scan(/(^\=\=[^\=]*\=\=[^\=]*(\=\=\=\=[^\=]*\=\=\=\=\n\*.*rfplinks\|1=(.*)\}\}\n))/)
+
     if headersMatch.length > 0
-      warn("Extraneous headers detected")
+      info("Extraneous headers detected")
 
       for match in headersMatch
-        comment = ":<small>{{comment|Automated comment}} - An extraneous header was removed from this request. ~~~~</small>\n"
-        oldWikitext.sub!(match[0], match[1] + comment)
+        if match[2]
+          oldWikitext.sub!(match[0], match[1])
+          @headersRemoved << match[2]
+        end
       end
-
-      @headersRemoved = true
     end
 
     oldWikitext
