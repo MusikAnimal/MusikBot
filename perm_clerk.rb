@@ -6,6 +6,7 @@ module PermClerk
   @logger = Logger.new("perm_clerk.log")
   @logger.level = Logger::INFO
 
+  COMMENT_PREFIX = "\n::{{comment|Automated comment}} "
   EDIT_THROTTLE = 3
   SPLIT_KEY = "====[[User:"
   PERMISSIONS = [
@@ -17,8 +18,18 @@ module PermClerk
     "Rollback",
     "Template editor"
   ]
+  PERMISSION_KEYS = {
+    "Account creator" => "accountcreator",
+    "Autopatrolled" => "autopatrolled",
+    "Confirmed" => "(?=>auto)?confirmed",
+    "File mover" => "filemover",
+    "Pending changes reviewer" => "reviewer",
+    "Rollback" => "rollbacker",
+    "Template editor" => "templateeditor"
+  }
 
-  @usersCache = {}
+  @userLinksCache = {}
+  @userInfoCache = {}
   @deniedCache = {}
 
   def self.init(mw, config)
@@ -26,7 +37,6 @@ module PermClerk
     @config = config
 
     for @permission in PERMISSIONS
-      # TODO: check if task is set to run for this permission
       @baseTimestamp = nil
       @editThrottle = 0
       @headersRemoved = []
@@ -43,9 +53,142 @@ module PermClerk
     @logger.info("Task complete\n#{'~' * 100}")
   end
 
+  def self.process(permission)
+    info("Processing #{permission}...")
+    newWikitext = []
+    @fetchThrotte = 0
+
+    oldWikitext = setPageProps
+    return false unless oldWikitext
+
+    if @config["autoformat"]
+      debug("Checking for extraneous headers")
+      oldWikitext = removeHeaders(oldWikitext)
+    end
+
+    sections = oldWikitext.split(SPLIT_KEY)
+
+    sections.each do |section|
+
+      requestChanges = []
+
+      if userNameMatch = section.match(/{{(?:template\:)?rfplinks\|1=(.*)}}/i)
+        userName = userNameMatch.captures[0]
+
+        info("Checking section for User:#{userName}...")
+
+        if section.match(/{{(?:template\:)?(done|not\s*done|nd|already\s*done)}}/i) || section.match(/::{{comment|Automated comment}}.*MusikBot/)
+          info("  #{userName}'s request already responded to or MusikBot has already commented")
+          newWikitext << SPLIT_KEY + section
+        else
+          alreadyResponded = false
+
+          # AUTORESPOND
+          if @config["autorespond"]
+            debug("Checking if #{userName} already has permission #{@permission}...")
+
+            userInfo = getUserInfo(userName)
+            if userInfo
+              if userInfo[:userGroups].include?(PERMISSION_KEYS[@permission])
+                info("  Found matching user group")
+                requestChanges << {
+                  type: :autorespond,
+                  permission: @permission.downcase,
+                  resolution: "{{already done}}"
+                }
+                alreadyResponded = true
+              end
+            end
+          end
+
+          # AUTOFORMAT
+          if @config["autoformat"]
+            debug("Checking if request is fragmented...")
+            fragmentedMatch = section.scan(/{{rfplinks.*}}\n:(Reason for requesting [a-zA-Z ]*) .*\(UTC\)\n(.*)/)
+
+            if fragmentedMatch.length > 0
+              info("  Found improperly formatted request, repairing")
+              actualReason = fragmentedMatch.flatten[1]
+              section.gsub!(actualReason, "").gsub!(fragmentedMatch.flatten[0], actualReason)
+
+              requestChanges << { type: :autoformat }
+            elsif @headersRemoved.include?(userName)
+              requestChanges << { type: :autoformat }
+            end
+          end
+
+          if !alreadyResponded && @permission != "Confirmed"
+            # CHECK PREREQUISTES
+            if @config["prerequisites"]
+              debug("Checking if #{userName} meets configured prerequisites...")
+
+              sleep 1
+              userInfo = getUserInfo(userName)
+
+              prereqs = @config["prerequisites_config"][@permission.downcase.gsub(/ /,"_")]
+
+              prereqs.each do |key, value|
+                pass = case key
+                  when "accountAge"
+                    Date.today - value.to_i >= Date.parse(userInfo[:accountAge])
+                  when "articleCount"
+                    userInfo[:articleCount].to_i >= value
+                  when "editCount"
+                    userInfo[:editCount].to_i >= value
+                  when "mainspaceCount"
+                    userInfo[:mainspaceCount].to_i >= value
+                end
+
+                unless pass
+                  info("  Found unmet prerequisites")
+                  requestChanges << { type: key }.merge(userInfo)
+                end
+              end
+            end
+
+            # FETCH DECLINED
+            if @config["fetchdeclined"]
+              debug("Searching for declined #{@permission} requests by #{userName}...")
+
+              begin
+                links = findLinks(userName)
+
+                if links.length > 0
+                  info("  Found previously declined requests")
+                  linksMessage = links.map{|l| "[#{l}]"}.join
+
+                  requestChanges << {
+                    type: :fetchdeclined,
+                    numDeclined: links.length,
+                    declinedLinks: linksMessage
+                  }
+                end
+              rescue => e
+                warn("Unknown exception when finding links: #{e.message}")
+              end
+            end
+          end
+
+          if requestChanges.length > 0
+            info("***** Commentable data found for #{userName} *****")
+            @usersCount += 1
+            newWikitext << SPLIT_KEY + section.gsub(/\n+$/,"") + messageCompiler(requestChanges)
+          else
+            info("  No commentable data or extraneous headers found for #{userName}")
+            newWikitext << SPLIT_KEY + section
+          end
+        end
+      else
+        newWikitext << section
+      end
+    end
+
+    return editPage(CGI.unescapeHTML(newWikitext.join))
+  end
+
   def self.editPage(newWikitext)
     unless @usersCount > 0 || headersRemoved?
-      info("No links or extraneous headers found for any of the current requests")
+      info("No commentable data or extraneous headers found for any of the current requests")
       return true
     end
 
@@ -55,15 +198,16 @@ module PermClerk
 
       info("Attempting to write to page [[#{@pageName}]]")
 
+      # FIXME: cover all bases here, or write "commented on X requests, repaired malformed requests"
       fixes = []
-      fixes << "#{@usersCount} user#{'s' if @usersCount > 1} with previously declined requests" if @usersCount > 0
-      fixes << "extraneous headers removed" if headersRemoved?
+      fixes << "commented on #{@usersCount} request#{'s' if @usersCount > 1}" if @usersCount > 0
+      fixes << "repaired #{@headersRemoved.length} malformed request#{'s' if @headersRemoved.length > 1}" if headersRemoved?
 
       # attempt to save
       begin
         @mw.edit(@pageName, newWikitext, {
           basetimestamp: @baseTimestamp,
-          contentformat: 'text/x-wiki',
+          contentformat: "text/x-wiki",
           starttimestamp: @startTimestamp,
           summary: "Bot clerking, #{fixes.join(', ')}",
           text: newWikitext
@@ -87,9 +231,9 @@ module PermClerk
   end
 
   def self.findLinks(userName)
-    if @usersCache[userName]
-      debug("Cache hit for #{userName}")
-      return @usersCache[userName]
+    if @userLinksCache[userName]
+      # debug("Cache hit for #{userName}")
+      return @userLinksCache[userName]
     end
 
     currentDate = Date.today
@@ -105,13 +249,13 @@ module PermClerk
       end
     end
 
-    return @usersCache[userName] = links
+    return @userLinksCache[userName] = links
   end
 
   def self.getDeniedForDate(date)
     key = "#{Date::MONTHNAMES[date.month]} #{date.year}"
     if @deniedCache[key]
-      debug("Cache hit for #{key}")
+      # debug("Cache hit for #{key}")
       page = @deniedCache[key]
     else
       page = @mw.get("Wikipedia:Requests for permissions/Denied/#{key}")
@@ -126,81 +270,84 @@ module PermClerk
     return dayWikitext[0]
   end
 
+  def self.getUserInfo(userName)
+    return @userInfoCache[userName] if @userInfoCache[userName]
+
+    begin
+      if @config["prerequisites"] && @config["prerequisites_config"].to_s.include?("editCount")
+        query = @mw.custom_query(
+          list: "users|usercontribs",
+          ususers: userName,
+          ucuser: userName,
+          usprop: "groups|editcount|registration",
+          ucprop: "ids",
+          uclimit: 200,
+          ucnamespace: "0"
+        )
+      else
+        query = @mw.custom_query(
+          list: "users",
+          ususers: userName,
+          usprop: "groups|editcount|registration"
+        )
+      end
+
+      user = query[0][0].attributes
+
+      userInfo = {
+        editCount: user['editcount'],
+        mainspaceCount: query[1] ? query[1].length : nil,
+        registration: user['registration'],
+        userGroups: query[0][0][0].to_a.collect{|g| g[0]}
+      }
+
+      return @userInfoCache[userName] = userInfo
+    rescue => e
+      error("Unable to fetch user info for #{userName}") and return false
+    end
+  end
+
   def self.headersRemoved?
     @headersRemoved.length > 0
   end
 
-  def self.newSectionWikitext(section, links, userName)
-    wikitext = SPLIT_KEY + section.gsub(/\n+$/,"")
-
-    if headersRemoved? && @headersRemoved.include?(userName)
-      wikitext = wikitext.gsub(/\n+$/, "\n") + "\n::<small>{{comment|Automated comment}} - An extraneous header was removed from this request. ~~~~</small>\n"
+  def self.getMessage(type, params = {})
+    return case type.to_sym
+      when :autoformat
+        "An extraneous header or other inappropriate text was removed from this request"
+      when :autorespond
+        "already has the \"#{params[:permission]}\" user right"
+      when :editCount
+        "has #{params[:editCount]} total edits"
+      when :mainspaceCount
+        "has #{params[:mainspaceCount].to_i == 0 ? 'no' : params[:mainspaceCount]} edit#{'s' if params[:mainspaceCount].to_i != 1} in the [[WP:MAINSPACE|mainspace]]"
+      when :fetchdeclined
+        "has had #{params[:numDeclined]} request#{'s' if params[:numDeclined].to_i > 1} for #{@permission.downcase} declined in the past #{@config["fetchdeclined_offset"]} days (#{params[:declinedLinks]})"
     end
-    if links && links.length > 0
-      linksMessage = links.map{|l| "[#{l}]"}.join
-      wikitext = wikitext.gsub(/\n+$/, "\n") + "\n::{{comment|Automated comment}} This user has had #{links.length} request#{'s' if links.length > 1} for #{@permission.downcase} declined in the past #{@config["fetchdeclined_offset"]} days (#{linksMessage}). ~~~~\n"
-    end
-
-    wikitext
   end
 
-  def self.process(permission)
-    info("Processing #{permission}...")
-    newWikitext = []
-    @fetchThrotte = 0
+  def self.messageCompiler(requestData)
+    str = ""
 
-    oldWikitext = setPageProps
-    return false unless oldWikitext
-
-    if @config["autoformat"]
-      oldWikitext = removeHeaders(oldWikitext)
+    if index = requestData.index{|obj| obj[:type] == :autoformat}
+      requestData.delete_at(index)
+      str = "<small>#{COMMENT_PREFIX}#{getMessage(:autoformat)} ~~~~</small>\n"
+      return str if requestData.length == 0
     end
 
-    if permission == "Confirmed"
-      if headersRemoved?
-        editPage(CGI.unescapeHTML(oldWikitext))
-      end
-      return true
+    if index = requestData.index{|obj| obj[:type] == :autorespond}
+      str += "\n::#{requestData[index][:resolution]} (automated response): This user "
+    else
+      str += COMMENT_PREFIX + "This user "
     end
 
-    sections = oldWikitext.split(SPLIT_KEY)
-
-    sections.each do |section|
-      debug("Checking section: #{section}")
-      links = []
-      if userNameMatch = section.match(/{{(?:template\:)?rfplinks\|1=(.*)}}/i)
-        userName = userNameMatch.captures[0]
-
-        if section.match(/{{(?:template\:)?(done|not\s*done|nd|already\s*done)}}/i) || section.match(/::{{comment|Automated comment}}.*MusikBot/)
-          info("#{userName}'s request already responded to or MusikBot has already commented")
-          newWikitext << SPLIT_KEY + section
-        else
-          if @config["fetchdeclined"]
-            info("Searching #{userName}")
-
-            begin
-              links += findLinks(userName)
-            rescue => e
-              links += []
-              error("Unknown exception when finding links: #{e.message}") and return false
-            end
-          end
-
-          if links.length > 0 || (headersRemoved? && @headersRemoved.include?(userName))
-            info("#{links.length} links found for #{userName} or an extraneous header was removed")
-            newWikitext << newSectionWikitext(section, links, userName)
-            @usersCount += 1
-          else
-            info("No links or extraneous headers found for #{userName}")
-            newWikitext << SPLIT_KEY + section
-          end
-        end
-      else
-        newWikitext << section
-      end
+    requestData.each_with_index do |data, index|
+      type = data.delete(:type)
+      str = str.chomp(", ") + " and " if index == requestData.length - 1 && requestData.length > 1
+      str += getMessage(type, data) + ", "
     end
 
-    return editPage(CGI.unescapeHTML(newWikitext.join))
+    str.chomp(", ") + ". ~~~~\n"
   end
 
   def self.removeHeaders(oldWikitext)
