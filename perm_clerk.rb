@@ -18,6 +18,7 @@ module PermClerk
     "Rollback",
     "Template editor"
   ]
+  # PERMISSIONS = ["Rollback"]
   PERMISSION_KEYS = {
     "Account creator" => "accountcreator",
     "Autopatrolled" => "autopatrolled",
@@ -110,6 +111,12 @@ module PermClerk
               info("  Found improperly formatted request, repairing")
               actualReason = fragmentedMatch.flatten[1]
               section.gsub!(actualReason, "").gsub!(fragmentedMatch.flatten[0], actualReason)
+
+              if duplicateSig = section.scan(/.*\(UTC\)(.*\(UTC\))/)
+                info("  Duplicate signature found, repairing")
+                sig = duplicateSig.flatten[0]
+                section = section.sub(sig, "")
+              end
 
               requestChanges << { type: :autoformat }
             elsif @headersRemoved.include?(userName)
