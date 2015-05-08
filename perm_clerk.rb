@@ -40,7 +40,7 @@ module PermClerk
     for @permission in PERMISSIONS
       @baseTimestamp = nil
       @editThrottle = 0
-      @headersRemoved = []
+      @headersRemoved = {}
       @pageName = "Wikipedia:Requests for permissions/#{@permission}"
       @usersCount = 0
       unless process(@permission)
@@ -106,12 +106,19 @@ module PermClerk
           # AUTOFORMAT
           if @config["autoformat"]
             debug("Checking if request is fragmented...")
-            fragmentedMatch = section.scan(/{{rfplinks.*}}\n:(Reason for requesting [a-zA-Z ]*) .*\(UTC\)\n+(.*)/)
+            fragmentedMatch = section.scan(/{{rfplinks.*}}\n:(Reason for requesting [a-zA-Z ]*) .*\(UTC\)\n*(.*)/)
 
             if fragmentedMatch.length > 0
               info("  Found improperly formatted request, repairing")
               actualReason = fragmentedMatch.flatten[1]
-              section.gsub!(actualReason, "").gsub!(fragmentedMatch.flatten[0], actualReason)
+
+              if actualReason.length == 0 && @headersRemoved[userName]
+                actualReason = @headersRemoved[userName]
+              else
+                section.gsub!(actualReason, "")
+              end
+
+              section.gsub!(fragmentedMatch.flatten[0], actualReason)
 
               duplicateSig = section.scan(/.*\(UTC\)(.*\(UTC\))/)
               if duplicateSig.length > 0
@@ -121,7 +128,7 @@ module PermClerk
               end
 
               requestChanges << { type: :autoformat }
-            elsif @headersRemoved.include?(userName)
+            elsif @headersRemoved[userName] && @headersRemoved[userName].length > 0
               requestChanges << { type: :autoformat }
             end
           end
@@ -370,7 +377,7 @@ module PermClerk
       for match in headersMatch
         if match[2]
           oldWikitext.sub!(match[0], match[1])
-          @headersRemoved << match[2]
+          @headersRemoved[match[2]] = match[0].scan(/\=\= (.*) \=\=/)[0][0]
         end
       end
     end
