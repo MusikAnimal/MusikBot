@@ -68,6 +68,7 @@ module PermClerk
     end
 
     sections = oldWikitext.split(SPLIT_KEY)
+    newWikitext << sections.shift
 
     sections.each do |section|
 
@@ -105,14 +106,15 @@ module PermClerk
           # AUTOFORMAT
           if @config["autoformat"]
             debug("Checking if request is fragmented...")
-            fragmentedMatch = section.scan(/{{rfplinks.*}}\n:(Reason for requesting [a-zA-Z ]*) .*\(UTC\)\n(.*)/)
+            fragmentedMatch = section.scan(/{{rfplinks.*}}\n:(Reason for requesting [a-zA-Z ]*) .*\(UTC\)\n+(.*)/)
 
             if fragmentedMatch.length > 0
               info("  Found improperly formatted request, repairing")
               actualReason = fragmentedMatch.flatten[1]
               section.gsub!(actualReason, "").gsub!(fragmentedMatch.flatten[0], actualReason)
 
-              if duplicateSig = section.scan(/.*\(UTC\)(.*\(UTC\))/)
+              duplicateSig = section.scan(/.*\(UTC\)(.*\(UTC\))/)
+              if duplicateSig.length > 0
                 info("  Duplicate signature found, repairing")
                 sig = duplicateSig.flatten[0]
                 section = section.sub(sig, "")
@@ -186,7 +188,7 @@ module PermClerk
           end
         end
       else
-        newWikitext << section
+        newWikitext << SPLIT_KEY + section
       end
     end
 
