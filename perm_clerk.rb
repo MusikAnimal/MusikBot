@@ -6,7 +6,8 @@ module PermClerk
   @logger = Logger.new("perm_clerk.log")
   @logger.level = Logger::INFO
 
-  COMMENT_PREFIX = "\n::{{comment|Automated comment}} "
+  COMMENT_INDENT = "\n::"
+  COMMENT_PREFIX = "{{comment|Automated comment}} "
   EDIT_THROTTLE = 3
   SPLIT_KEY = "====[[User:"
   PERMISSIONS = [
@@ -106,7 +107,7 @@ module PermClerk
           # AUTOFORMAT
           if @config["autoformat"]
             debug("Checking if request is fragmented...")
-            fragmentedMatch = section.scan(/{{rfplinks.*}}\n:(Reason for requesting [a-zA-Z ]*) .*\(UTC\)\n*(.*)/)
+            fragmentedMatch = section.scan(/{{rfplinks.*}}\n:(Reason for requesting (?:#{PERMISSIONS.join("|").downcase}) rights) .*\(UTC\)\n*(.*)/)
 
             if fragmentedMatch.length > 0
               info("  Found improperly formatted request, repairing")
@@ -347,14 +348,14 @@ module PermClerk
 
     if index = requestData.index{|obj| obj[:type] == :autoformat}
       requestData.delete_at(index)
-      str = "<small>#{COMMENT_PREFIX}#{getMessage(:autoformat)} ~~~~</small>\n"
+      str = "#{COMMENT_INDENT}<small>#{COMMENT_PREFIX}#{getMessage(:autoformat)} ~~~~</small>\n"
       return str if requestData.length == 0
     end
 
     if index = requestData.index{|obj| obj[:type] == :autorespond}
       str += "\n::#{requestData[index][:resolution]} (automated response): This user "
     else
-      str += COMMENT_PREFIX + "This user "
+      str += COMMENT_INDENT + COMMENT_PREFIX + "This user "
     end
 
     requestData.each_with_index do |data, index|
