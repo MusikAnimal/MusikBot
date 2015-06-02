@@ -80,20 +80,25 @@ module PermClerk
 
         info("Checking section for User:#{userName}...")
 
+        timestamps = section.scan(/\d\d:\d\d.*\d{4} \(UTC\)/)
+
         if section.match(/{{(?:template\:)?(done|not\s*done|nd|already\s*done)}}/i) || section.match(/::{{comment|Automated comment}}.*MusikBot/)
           info("  #{userName}'s request already responded to or MusikBot has already commented")
+          newWikitext << SPLIT_KEY + section
+        elsif timestamps[0] && DateTime.now + Rational(20, 1440) > DateTime.parse(timestamps[0])
+          info("  #{userName}'s request is over 20 minutes old")
           newWikitext << SPLIT_KEY + section
         else
           alreadyResponded = false
 
           # AUTORESPOND
           if @config["autorespond"]
-            debug("Checking if #{userName} already has permission #{@permission}...")
+            debug("  Checking if #{userName} already has permission #{@permission}...")
 
             userInfo = getUserInfo(userName)
             if userInfo
               if userInfo[:userGroups].include?(PERMISSION_KEYS[@permission])
-                info("  Found matching user group")
+                info("    Found matching user group")
                 requestChanges << {
                   type: :autorespond,
                   permission: @permission.downcase,
@@ -106,24 +111,37 @@ module PermClerk
 
           # AUTOFORMAT
           if @config["autoformat"]
-            debug("Checking if request is fragmented...")
-            fragmentedMatch = section.scan(/{{rfplinks.*}}\n:(Reason for requesting (?:#{PERMISSIONS.join("|").downcase}) rights) .*\(UTC\)\n*(.*)/)
+            debug("  Checking if request is fragmented...")
+
+            fragmentedRegex = /{{rfplinks.*}}\n:(Reason for requesting (?:#{PERMISSIONS.join("|").downcase}) rights) .*\(UTC\)\n*(.*)/
+            fragmentedMatch = section.scan(fragmentedRegex)
 
             if fragmentedMatch.length > 0
-              info("  Found improperly formatted request, repairing")
+              info("    Found improperly formatted request for #{userName}, repairing")
+
               actualReason = fragmentedMatch.flatten[1]
 
               if actualReason.length == 0 && @headersRemoved[userName]
                 actualReason = @headersRemoved[userName]
               else
                 section.gsub!(actualReason, "")
+                loop do
+                  fragMatch = section.match(fragmentedRegex)
+                  if fragMatch && fragMatch[2] != "" && !(fragMatch[2].include?("UTC") && !fragMatch[2].include?(userName))
+                    reasonPart = fragMatch[2]
+                    actualReason += "\n:#{reasonPart}"
+                    section.gsub!(reasonPart, "")
+                  else
+                    break
+                  end
+                end
               end
 
               section.gsub!(fragmentedMatch.flatten[0], actualReason)
 
               duplicateSig = section.scan(/.*\(UTC\)(.*\(UTC\))/)
               if duplicateSig.length > 0
-                info("  Duplicate signature found, repairing")
+                info("    Duplicate signature found, repairing")
                 sig = duplicateSig.flatten[0]
                 section = section.sub(sig, "")
               end
@@ -137,7 +155,7 @@ module PermClerk
           if !alreadyResponded && @permission != "Confirmed"
             # CHECK PREREQUISTES
             if @config["prerequisites"]
-              debug("Checking if #{userName} meets configured prerequisites...")
+              debug("  Checking if #{userName} meets configured prerequisites...")
 
               sleep 1
               userInfo = getUserInfo(userName)
@@ -157,7 +175,7 @@ module PermClerk
                 end
 
                 unless pass
-                  info("  Found unmet prerequisites")
+                  info("    Found unmet prerequisites")
                   requestChanges << { type: key }.merge(userInfo)
                 end
               end
@@ -165,13 +183,13 @@ module PermClerk
 
             # FETCH DECLINED
             if @config["fetchdeclined"]
-              debug("Searching for declined #{@permission} requests by #{userName}...")
+              debug("  Searching for declined #{@permission} requests by #{userName}...")
 
               begin
                 links = findLinks(userName)
 
                 if links.length > 0
-                  info("  Found previously declined requests")
+                  info("    Found previously declined requests")
                   linksMessage = links.map{|l| "[#{l}]"}.join
 
                   requestChanges << {
@@ -181,7 +199,7 @@ module PermClerk
                   }
                 end
               rescue => e
-                warn("Unknown exception when finding links: #{e.message}")
+                warn("    Unknown exception when finding links: #{e.message}")
               end
             end
           end
@@ -378,7 +396,7 @@ module PermClerk
       for match in headersMatch
         if match[2]
           oldWikitext.sub!(match[0], match[1])
-          @headersRemoved[match[2]] = match[0].scan(/\=\= (.*) \=\=/)[0][0]
+          @headersRemoved[match[2]] = match[0].scan(/\=\=\s*(.*)\s*\=\=/)[0][0]
         end
       end
     end
