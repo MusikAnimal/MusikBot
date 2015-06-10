@@ -85,8 +85,8 @@ module PermClerk
         if section.match(/{{(?:template\:)?(done|not\s*done|nd|already\s*done)}}/i) || section.match(/::{{comment|Automated comment}}.*MusikBot/)
           info("  #{userName}'s request already responded to or MusikBot has already commented")
           newWikitext << SPLIT_KEY + section
-        elsif timestamps[0] && DateTime.now + Rational(20, 1440) > DateTime.parse(timestamps[0])
-          info("  #{userName}'s request is over 20 minutes old")
+        elsif timestamps[0] && DateTime.parse(timestamps[0]).new_offset(0) + Rational(900, 1440) < DateTime.now.new_offset(0)
+          info("  #{userName}'s request is over 90 minutes old")
           newWikitext << SPLIT_KEY + section
         else
           alreadyResponded = false
