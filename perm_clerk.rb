@@ -85,7 +85,7 @@ module PermClerk
         if section.match(/{{(?:template\:)?(done|not\s*done|nd|already\s*done)}}/i) || section.match(/::{{comment|Automated comment}}.*MusikBot/)
           info("  #{userName}'s request already responded to or MusikBot has already commented")
           newWikitext << SPLIT_KEY + section
-        elsif timestamps[0] && DateTime.parse(timestamps[0]).new_offset(0) + Rational(900, 1440) < DateTime.now.new_offset(0)
+        elsif timestamps[0] && DateTime.parse(timestamps[0]).new_offset(0) + Rational(90, 1440) < DateTime.now.new_offset(0)
           info("  #{userName}'s request is over 90 minutes old")
           newWikitext << SPLIT_KEY + section
         else
@@ -171,7 +171,7 @@ module PermClerk
                   when "editCount"
                     userInfo[:editCount].to_i >= value
                   when "mainspaceCount"
-                    userInfo[:mainspaceCount].to_i >= value
+                    !userInfo[:mainspaceCount].nil? && userInfo[:mainspaceCount].to_i >= value
                 end
 
                 unless pass
@@ -306,10 +306,9 @@ module PermClerk
   end
 
   def self.getUserInfo(userName)
-    return @userInfoCache[userName] if @userInfoCache[userName]
-
     begin
-      if @config["prerequisites"] && @config["prerequisites_config"].to_s.include?("editCount")
+      if @config["prerequisites"] && @config["prerequisites_config"].to_s.include?("mainspaceCount")
+        return @userInfoCache[userName] if @userInfoCache[userName] && @userInfoCache[userName][:mainspaceCount]
         query = @mw.custom_query(
           list: "users|usercontribs",
           ususers: userName,
@@ -317,13 +316,16 @@ module PermClerk
           usprop: "groups|editcount|registration",
           ucprop: "ids",
           uclimit: 200,
-          ucnamespace: "0"
+          ucnamespace: "0",
+          continue: ""
         )
       else
+        return @userInfoCache[userName] if @userInfoCache[userName]
         query = @mw.custom_query(
           list: "users",
           ususers: userName,
-          usprop: "groups|editcount|registration"
+          usprop: "groups|editcount|registration",
+          continue: ""
         )
       end
 
