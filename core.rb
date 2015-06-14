@@ -4,8 +4,8 @@ require 'mediawiki-gateway'
 require 'auth.rb'
 require 'perm_clerk.rb'
 
-MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (http://en.wikipedia.org/wiki/User:MusikBot/)'
-mw = MediaWiki::Gateway.new('http://en.wikipedia.org/w/api.php', ignorewarnings: true)
+MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
+mw = MediaWiki::Gateway.new('https://en.wikipedia.org/w/api.php')
 Auth.login(mw)
 
 pagesToFetch = [
