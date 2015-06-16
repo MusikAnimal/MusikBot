@@ -97,7 +97,7 @@ module PermClerk
         if section.match(/{{(?:template\:)?(done|not\s*done|nd|already\s*done)}}/i) || section.match(/::{{comment|Automated comment}}.*MusikBot/) && !prereqUpdateNeeded
           info("  #{userName}'s request already responded to or MusikBot has already commented")
           newWikitext << SPLIT_KEY + section
-        elsif timestamps[0] && DateTime.parse(timestamps[0]).new_offset(0) + Rational(90000000, 1440) < DateTime.now.new_offset(0) && !prereqUpdateNeeded
+        elsif timestamps[0] && DateTime.parse(timestamps[0]).new_offset(0) + Rational(90, 1440) < DateTime.now.new_offset(0) && !prereqUpdateNeeded
           info("  #{userName}'s request is over 90 minutes old and has no prerequisite data to update")
           newWikitext << SPLIT_KEY + section
         else
