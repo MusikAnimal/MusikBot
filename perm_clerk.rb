@@ -87,7 +87,7 @@ module PermClerk
           prereqSigRegex = section.scan(/(&lt;!-- mbsig --&gt;.*&lt;!-- mbdate --&gt; (\d\d:\d\d.*\d{4} \(UTC\)))/)
           prereqSignature = prereqSigRegex.flatten[0]
           prereqTimestamp = prereqSigRegex.flatten[1]
-          if prereqUpdateNeeded = DateTime.now.new_offset(0) > DateTime.parse(prereqTimestamp).new_offset(0) + Rational(60, 1440) rescue false
+          if prereqUpdateNeeded = DateTime.now.new_offset(0) > DateTime.parse(prereqTimestamp).new_offset(0) + Rational(90, 1440) rescue false
             debug("  Found expired prerequisite data")
           else
             debug("  Prerequisite data under an hour old")
@@ -201,7 +201,7 @@ module PermClerk
 
                     if !userInfo[key.to_sym].nil? && userInfo[key.to_sym].to_i > prereqCount && prereqCount > 0
                       section.gsub!(prereqText, "&lt;!-- mb-#{key} --&gt;#{userInfo[key.to_sym].to_i}&lt;!-- mb-#{key}-end --&gt;")
-                      section.gsub!(prereqSignature, "~~~~")
+                      section.gsub!(prereqSignature, "~~~~\n")
 
                       info("  Prerequisite data updated")
                       requestChanges << { type: :prerequisitesUpdated }
