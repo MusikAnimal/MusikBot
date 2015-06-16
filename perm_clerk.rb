@@ -4,7 +4,7 @@ module PermClerk
   require 'logger'
 
   @logger = Logger.new("perm_clerk.log")
-  @logger.level = Logger::INFO
+  @logger.level = Logger::DEBUG
 
   COMMENT_INDENT = "\n::"
   COMMENT_PREFIX = "{{comment|Automated comment}} "
@@ -41,6 +41,7 @@ module PermClerk
     for @permission in PERMISSIONS
       @baseTimestamp = nil
       @editThrottle = 0
+      @editSummaries = []
       @headersRemoved = {}
       @pageName = "Wikipedia:Requests for permissions/#{@permission}"
       @usersCount = 0
@@ -82,17 +83,28 @@ module PermClerk
 
         timestamps = section.scan(/\d\d:\d\d.*\d{4} \(UTC\)/)
 
-        if section.match(/{{(?:template\:)?(done|not\s*done|nd|already\s*done)}}/i) || section.match(/::{{comment|Automated comment}}.*MusikBot/)
+        if hasPrereqData = section.match(/&lt;!-- mb-\w*(?:Count|Age) --&gt;/)
+          prereqSigRegex = section.scan(/(&lt;!-- mbsig --&gt;.*&lt;!-- mbdate --&gt; (\d\d:\d\d.*\d{4} \(UTC\)))/)
+          prereqSignature = prereqSigRegex.flatten[0]
+          prereqTimestamp = prereqSigRegex.flatten[1]
+          if prereqUpdateNeeded = DateTime.now.new_offset(0) > DateTime.parse(prereqTimestamp).new_offset(0) + Rational(60, 1440) rescue false
+            debug("  Found expired prerequisite data")
+          else
+            debug("  Prerequisite data under an hour old")
+          end
+        end
+
+        if section.match(/{{(?:template\:)?(done|not\s*done|nd|already\s*done)}}/i) || section.match(/::{{comment|Automated comment}}.*MusikBot/) && !prereqUpdateNeeded
           info("  #{userName}'s request already responded to or MusikBot has already commented")
           newWikitext << SPLIT_KEY + section
-        elsif timestamps[0] && DateTime.parse(timestamps[0]).new_offset(0) + Rational(90, 1440) < DateTime.now.new_offset(0)
-          info("  #{userName}'s request is over 90 minutes old")
+        elsif timestamps[0] && DateTime.parse(timestamps[0]).new_offset(0) + Rational(90000000, 1440) < DateTime.now.new_offset(0) && !prereqUpdateNeeded
+          info("  #{userName}'s request is over 90 minutes old and has no prerequisite data to update")
           newWikitext << SPLIT_KEY + section
         else
           alreadyResponded = false
 
           # AUTORESPOND
-          if @config["autorespond"]
+          if @config["autorespond"] && !prereqUpdateNeeded
             debug("  Checking if #{userName} already has permission #{@permission}...")
 
             userInfo = getUserInfo(userName)
@@ -105,12 +117,13 @@ module PermClerk
                   resolution: "{{already done}}"
                 }
                 alreadyResponded = true
+                @editSummaries << :autorespond
               end
             end
           end
 
           # AUTOFORMAT
-          if @config["autoformat"]
+          if @config["autoformat"] && !prereqUpdateNeeded
             debug("  Checking if request is fragmented...")
 
             fragmentedRegex = /{{rfplinks.*}}\n:(Reason for requesting (?:#{PERMISSIONS.join("|").downcase}) rights) .*\(UTC\)\n*(.*)/
@@ -147,42 +160,64 @@ module PermClerk
               end
 
               requestChanges << { type: :autoformat }
+              @editSummaries << :autoformat
             elsif @headersRemoved[userName] && @headersRemoved[userName].length > 0
               requestChanges << { type: :autoformat }
+              @editSummaries << :autoformat
             end
           end
 
           if !alreadyResponded && @permission != "Confirmed"
             # CHECK PREREQUISTES
             if @config["prerequisites"]
-              debug("  Checking if #{userName} meets configured prerequisites...")
-
-              sleep 1
-              userInfo = getUserInfo(userName)
-
               prereqs = @config["prerequisites_config"][@permission.downcase.gsub(/ /,"_")]
 
-              prereqs.each do |key, value|
-                pass = case key
-                  when "accountAge"
-                    Date.today - value.to_i >= Date.parse(userInfo[:accountAge])
-                  when "articleCount"
-                    userInfo[:articleCount].to_i >= value
-                  when "editCount"
-                    userInfo[:editCount].to_i >= value
-                  when "mainspaceCount"
-                    !userInfo[:mainspaceCount].nil? && userInfo[:mainspaceCount].to_i >= value
+              if prereqs && !prereqs.empty?
+                if hasPrereqData
+                  debug("  Checking if prerequisite update is needed...")
+                else
+                  debug("  Checking if #{userName} meets configured prerequisites...")
                 end
 
-                unless pass
-                  info("    Found unmet prerequisites")
-                  requestChanges << { type: key }.merge(userInfo)
+                sleep 1
+                userInfo = getUserInfo(userName)
+
+                prereqs.each do |key, value|
+                  pass = case key
+                    when "accountAge"
+                      Date.today - value.to_i >= Date.parse(userInfo[:accountAge])
+                    when "articleCount"
+                      userInfo[:articleCount].to_i >= value
+                    when "editCount"
+                      userInfo[:editCount].to_i >= value
+                    when "mainspaceCount"
+                      !userInfo[:mainspaceCount].nil? && userInfo[:mainspaceCount].to_i >= value
+                  end
+
+                  if prereqUpdateNeeded
+                    prereqCountRegex = section.scan(/(&lt;!-- mb-#{key} --&gt;(.*)&lt;!-- mb-#{key}-end --&gt;)/)
+                    prereqText = prereqCountRegex.flatten[0]
+                    prereqCount = prereqCountRegex.flatten[1].to_i rescue 0
+
+                    if !userInfo[key.to_sym].nil? && userInfo[key.to_sym].to_i > prereqCount && prereqCount > 0
+                      section.gsub!(prereqText, "&lt;!-- mb-#{key} --&gt;#{userInfo[key.to_sym].to_i}&lt;!-- mb-#{key}-end --&gt;")
+                      section.gsub!(prereqSignature, "~~~~")
+
+                      info("  Prerequisite data updated")
+                      requestChanges << { type: :prerequisitesUpdated }
+                      @editSummaries << :prerequisitesUpdated
+                    end
+                  elsif !pass
+                    info("    Found unmet prerequisites")
+                    requestChanges << { type: key }.merge(userInfo)
+                    @editSummaries << :prerequisites
+                  end
                 end
               end
             end
 
             # FETCH DECLINED
-            if @config["fetchdeclined"]
+            if @config["fetchdeclined"] && !prereqUpdateNeeded
               debug("  Searching for declined #{@permission} requests by #{userName}...")
 
               begin
@@ -197,6 +232,7 @@ module PermClerk
                     numDeclined: links.length,
                     declinedLinks: linksMessage
                   }
+                  @editSummaries << :fetchdeclined
                 end
               rescue => e
                 warn("    Unknown exception when finding links: #{e.message}")
@@ -207,7 +243,10 @@ module PermClerk
           if requestChanges.length > 0
             info("***** Commentable data found for #{userName} *****")
             @usersCount += 1
-            newWikitext << SPLIT_KEY + section.gsub(/\n+$/,"") + messageCompiler(requestChanges)
+
+            newSection = SPLIT_KEY + section.gsub(/\n+$/,"")
+            newSection += messageCompiler(requestChanges) unless requestChanges.index{|obj| obj[:type] == :prerequisitesUpdated}
+            newWikitext << newSection
           else
             info("  No commentable data or extraneous headers found for #{userName}")
             newWikitext << SPLIT_KEY + section
@@ -233,10 +272,15 @@ module PermClerk
 
       info("Attempting to write to page [[#{@pageName}]]")
 
+      plural = @usersCount > 1
+
       # FIXME: cover all bases here, or write "commented on X requests, repaired malformed requests"
       fixes = []
-      fixes << "commented on #{@usersCount} request#{'s' if @usersCount > 1}" if @usersCount > 0
-      fixes << "repaired #{@headersRemoved.length} malformed request#{'s' if @headersRemoved.length > 1}" if headersRemoved?
+      fixes << "marked request as already done" if @editSummaries.include?(:autorespond)
+      fixes << "repaired malformed request#{'s' if plural}" if @editSummaries.include?(:autoformat)
+      fixes << "prerequisite data updated" if @editSummaries.include?(:prerequisitesUpdated)
+      fixes << "unmet prerequisites" if @editSummaries.include?(:prerequisites)
+      fixes << "found previously declined requests" if @editSummaries.include?(:fetchdeclined)
 
       # attempt to save
       begin
@@ -244,7 +288,7 @@ module PermClerk
           basetimestamp: @baseTimestamp,
           contentformat: "text/x-wiki",
           starttimestamp: @startTimestamp,
-          summary: "Bot clerking, #{fixes.join(', ')}",
+          summary: "Bot clerking#{" on #{@usersCount} requests" if plural}: #{fixes.join(', ')}",
           text: newWikitext
         })
       rescue MediaWiki::APIError => e
@@ -355,9 +399,9 @@ module PermClerk
       when :autorespond
         "already has the \"#{params[:permission]}\" user right"
       when :editCount
-        "has #{params[:editCount]} total edits"
+        "has <!-- mb-editCount -->#{params[:editCount]}<!-- mb-editCount-end --> total edits"
       when :mainspaceCount
-        "has #{params[:mainspaceCount].to_i == 0 ? 'no' : params[:mainspaceCount]} edit#{'s' if params[:mainspaceCount].to_i != 1} in the [[WP:MAINSPACE|mainspace]]"
+        "has <!-- mb-mainspaceCount -->#{params[:mainspaceCount].to_i == 0 ? 0 : params[:mainspaceCount]}<!-- mb-mainspaceCount-end --> edit#{'s' if params[:mainspaceCount].to_i != 1} in the [[WP:MAINSPACE|mainspace]]"
       when :fetchdeclined
         "has had #{params[:numDeclined]} request#{'s' if params[:numDeclined].to_i > 1} for #{@permission.downcase} declined in the past #{@config["fetchdeclined_offset"]} days (#{params[:declinedLinks]})"
     end
