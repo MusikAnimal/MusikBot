@@ -201,7 +201,7 @@ module PermClerk
 
                     if !userInfo[key.to_sym].nil? && userInfo[key.to_sym].to_i > prereqCount && prereqCount > 0
                       section.gsub!(prereqText, "&lt;!-- mb-#{key} --&gt;#{userInfo[key.to_sym].to_i}&lt;!-- mb-#{key}-end --&gt;")
-                      section.gsub!(prereqSignature, "~~~~\n")
+                      section.gsub!(prereqSignature, "~~~~")
 
                       info("  Prerequisite data updated")
                       requestChanges << { type: :prerequisitesUpdated }
@@ -245,7 +245,12 @@ module PermClerk
             @usersCount += 1
 
             newSection = SPLIT_KEY + section.gsub(/\n+$/,"")
-            newSection += messageCompiler(requestChanges) unless requestChanges.index{|obj| obj[:type] == :prerequisitesUpdated}
+
+            if requestChanges.index{|obj| obj[:type] == :prerequisitesUpdated}
+              newSection += "\n"
+            else
+              newSection += messageCompiler(requestChanges)
+            end
             newWikitext << newSection
           else
             info("  No commentable data or extraneous headers found for #{userName}")
