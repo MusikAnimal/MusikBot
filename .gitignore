@@ -2,3 +2,5 @@ auth.rb
 *.swp
 *.log
 TODO
+env
+lastrun

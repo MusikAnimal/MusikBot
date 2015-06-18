@@ -10,16 +10,7 @@ module PermClerk
   COMMENT_PREFIX = "{{comment|Automated comment}} "
   EDIT_THROTTLE = 3
   SPLIT_KEY = "====[[User:"
-  PERMISSIONS = [
-    "Account creator",
-    "Autopatrolled",
-    "Confirmed",
-    "File mover",
-    "Pending changes reviewer",
-    "Rollback",
-    "Template editor"
-  ]
-  # PERMISSIONS = ["Rollback"]
+
   PERMISSION_KEYS = {
     "Account creator" => "accountcreator",
     "Autopatrolled" => "autopatrolled",
@@ -38,7 +29,33 @@ module PermClerk
     @mw = mw
     @config = config
 
-    for @permission in PERMISSIONS
+    if config[:env] == :production
+      @REQ_EXPIRY = 90
+      @PREREQ_EXPIRY = 90
+    else
+      @REQ_EXPIRY = 100000000
+      @PREREQ_EXPIRY = 0
+    end
+
+    if config[:env] == :production
+      @PERMISSIONS = [
+        "Account creator",
+        "Autopatrolled",
+        "Confirmed",
+        "File mover",
+        "Pending changes reviewer",
+        "Rollback",
+        "Template editor"
+      ]
+    else
+      @PERMISSIONS = ["Rollback"]
+    end
+
+    start
+  end
+
+  def self.start
+    for @permission in @PERMISSIONS
       @baseTimestamp = nil
       @editThrottle = 0
       @editSummaries = []
@@ -77,38 +94,42 @@ module PermClerk
       requestChanges = []
 
       if userNameMatch = section.match(/{{(?:template\:)?rfplinks\|1=(.*)}}/i)
-        userName = userNameMatch.captures[0]
+        userName = userNameMatch.captures[0].gsub("_", " ")
 
         info("Checking section for User:#{userName}...")
 
         timestamps = section.scan(/\d\d:\d\d.*\d{4} \(UTC\)/)
+        newestTimestamp = timestamps.min {|a,b| DateTime.parse(b).new_offset(0) <=> DateTime.parse(a).new_offset(0)}
+        resolution = section.match(/#{@config["regex_done"]}/i) ? "done" : section.match(/#{@config["regex_notdone"]}/i) ? "notdone" : false
 
         if hasPrereqData = section.match(/&lt;!-- mb-\w*(?:Count|Age) --&gt;/)
           prereqSigRegex = section.scan(/(&lt;!-- mbsig --&gt;.*&lt;!-- mbdate --&gt; (\d\d:\d\d.*\d{4} \(UTC\)))/)
           prereqSignature = prereqSigRegex.flatten[0]
           prereqTimestamp = prereqSigRegex.flatten[1]
-          if prereqUpdateNeeded = DateTime.now.new_offset(0) > DateTime.parse(prereqTimestamp).new_offset(0) + Rational(90, 1440) rescue false
+          if prereqUpdateNeeded = DateTime.now.new_offset(0) > DateTime.parse(prereqTimestamp).new_offset(0) + Rational(@PREREQ_EXPIRY, 1440) rescue false
             debug("  Found expired prerequisite data")
           else
             debug("  Prerequisite data under an hour old")
           end
         end
 
-        if section.match(/{{(?:template\:)?(done|not\s*done|nd|already\s*done)}}/i) || section.match(/::{{comment|Automated comment}}.*MusikBot/) && !prereqUpdateNeeded
-          info("  #{userName}'s request already responded to or MusikBot has already commented")
+        if resolution
+          info("  #{userName}'s request already responded to")
           newWikitext << SPLIT_KEY + section
-        elsif timestamps[0] && DateTime.parse(timestamps[0]).new_offset(0) + Rational(90, 1440) < DateTime.now.new_offset(0) && !prereqUpdateNeeded
-          info("  #{userName}'s request is over 90 minutes old and has no prerequisite data to update")
+        elsif section.match(/::{{comment|Automated comment}}.*MusikBot/) && !prereqUpdateNeeded
+          info("  MusikBot has already commented on #{userName}'s request and no prerequisite data to update")
+          newWikitext << SPLIT_KEY + section
+        elsif timestamps[0] && DateTime.parse(timestamps[0]).new_offset(0) + Rational(@REQ_EXPIRY, 1440) < DateTime.now.new_offset(0) && !prereqUpdateNeeded
+          info("  #{userName}'s request is over #{@REQ_EXPIRY} minutes old and has no prerequisite data to update")
           newWikitext << SPLIT_KEY + section
         else
-          alreadyResponded = false
+          haveResponded = false
 
           # AUTORESPOND
           if @config["autorespond"] && !prereqUpdateNeeded
             debug("  Checking if #{userName} already has permission #{@permission}...")
 
-            userInfo = getUserInfo(userName)
-            if userInfo
+            if userInfo = getUserInfo(userName)
               if userInfo[:userGroups].include?(PERMISSION_KEYS[@permission])
                 info("    Found matching user group")
                 requestChanges << {
@@ -116,7 +137,7 @@ module PermClerk
                   permission: @permission.downcase,
                   resolution: "{{already done}}"
                 }
-                alreadyResponded = true
+                haveResponded = true
                 @editSummaries << :autorespond
               end
             end
@@ -126,7 +147,7 @@ module PermClerk
           if @config["autoformat"] && !prereqUpdateNeeded
             debug("  Checking if request is fragmented...")
 
-            fragmentedRegex = /{{rfplinks.*}}\n:(Reason for requesting (?:#{PERMISSIONS.join("|").downcase}) rights) .*\(UTC\)\n*(.*)/
+            fragmentedRegex = /{{rfplinks.*}}\n:(Reason for requesting (?:#{@PERMISSIONS.join("|").downcase}) rights) .*\(UTC\)\n*(.*)/
             fragmentedMatch = section.scan(fragmentedRegex)
 
             if fragmentedMatch.length > 0
@@ -167,7 +188,7 @@ module PermClerk
             end
           end
 
-          if !alreadyResponded && @permission != "Confirmed"
+          if !haveResponded && @permission != "Confirmed"
             # CHECK PREREQUISTES
             if @config["prerequisites"]
               prereqs = @config["prerequisites_config"][@permission.downcase.gsub(/ /,"_")]
@@ -253,7 +274,7 @@ module PermClerk
             end
             newWikitext << newSection
           else
-            info("  No commentable data or extraneous headers found for #{userName}")
+            info("  ~~ No commentable data found for #{userName} ~~")
             newWikitext << SPLIT_KEY + section
           end
         end
@@ -439,15 +460,25 @@ module PermClerk
   def self.removeHeaders(oldWikitext)
     return false unless oldWikitext
 
-    headersMatch = oldWikitext.scan(/(^\=\=[^\=]*\=\=[^\=]*(\=\=\=\=[^\=]*\=\=\=\=\n\*.*rfplinks\|1=(.*)\}\}\n))/)
+    headersMatch = oldWikitext.scan(/(^\=\=[^\=]*\=\=([^\=]*)(\=\=\=\=[^\=]*\=\=\=\=\n\*.*rfplinks\|1=(.*)\}\}\n))/)
 
     if headersMatch.length > 0
       info("Extraneous headers detected")
 
       for match in headersMatch
-        if match[2]
-          oldWikitext.sub!(match[0], match[1])
-          @headersRemoved[match[2]] = match[0].scan(/\=\=\s*(.*)\s*\=\=/)[0][0]
+        originalMarkup = match[0]
+        levelTwoText = match[1].gsub("\n","")
+        rfplinksPart = match[2]
+        name = match[3]
+
+        if name
+          oldWikitext.sub!(originalMarkup, rfplinksPart)
+          headerText = originalMarkup.scan(/\=\=\s*([^\=]*)\s*\=\=/)[0][0]
+          if levelTwoText.length > headerText.length
+            @headersRemoved[name] = levelTwoText.gsub(/^\n*/,"").gsub(/\n$/,"")
+          else
+            @headersRemoved[name] = headerText
+          end
         end
       end
     end
