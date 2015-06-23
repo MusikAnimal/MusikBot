@@ -6,6 +6,9 @@ module PermClerk
   @logger = Logger.new("perm_clerk.log")
   @logger.level = Logger::DEBUG
 
+  @runStatus = eval(File.open("lastrun", "r").read) rescue {}
+  @runFile = File.open("lastrun", "r+")
+
   COMMENT_INDENT = "\n::"
   COMMENT_PREFIX = "{{comment|Automated comment}} "
   EDIT_THROTTLE = 3
@@ -30,10 +33,8 @@ module PermClerk
     @config = config
 
     if config[:env] == :production
-      @REQ_EXPIRY = 90
       @PREREQ_EXPIRY = 90
     else
-      @REQ_EXPIRY = 100000000
       @PREREQ_EXPIRY = 0
     end
 
@@ -48,7 +49,7 @@ module PermClerk
         "Template editor"
       ]
     else
-      @PERMISSIONS = ["Rollback"]
+      @PERMISSIONS = ["Rollback", "Pending changes reviewer"]
     end
 
     start
@@ -66,20 +67,35 @@ module PermClerk
         error("Failed to process")
       else
         info("Processing of #{@permission} complete")
+        @runStatus[@permission] = DateTime.now.new_offset(0).to_s
       end
       @logger.info("\n#{'=' * 100}")
       sleep 2
     end
     @logger.info("Task complete\n#{'~' * 100}")
+
+    @runFile.write(@runStatus.inspect)
+    @runFile.close
   end
 
   def self.process(permission)
     info("Processing #{permission}...")
-    newWikitext = []
-    @fetchThrotte = 0
 
+    @fetchThrotte = 0
     oldWikitext = setPageProps
     return false unless oldWikitext
+
+    lastRun = DateTime.parse(@runStatus[permission]).new_offset(0) rescue DateTime.new
+    lastEdit = DateTime.parse(@baseTimestamp).new_offset(0)
+    hasPrereqData = oldWikitext.match(/&lt;!-- mb-\w*(?:Count|Age) --&gt;/)
+    shouldCheckPrereqData = @config["prerequisites"] ? !!hasPrereqData : false
+
+    if lastRun > lastEdit && !shouldCheckPrereqData
+      info("  No changes since last run and no prerequisites to update")
+      return false
+    end
+
+    newWikitext = []
 
     if @config["autoformat"]
       debug("Checking for extraneous headers")
@@ -92,194 +108,193 @@ module PermClerk
     sections.each do |section|
 
       requestChanges = []
+      userNameMatch = section.match(/{{(?:template\:)?rfplinks\|1=(.*)}}/i)
 
-      if userNameMatch = section.match(/{{(?:template\:)?rfplinks\|1=(.*)}}/i)
-        userName = userNameMatch.captures[0].gsub("_", " ")
-
-        info("Checking section for User:#{userName}...")
-
-        timestamps = section.scan(/\d\d:\d\d.*\d{4} \(UTC\)/)
-        newestTimestamp = timestamps.min {|a,b| DateTime.parse(b).new_offset(0) <=> DateTime.parse(a).new_offset(0)}
-        resolution = section.match(/#{@config["regex_done"]}/i) ? "done" : section.match(/#{@config["regex_notdone"]}/i) ? "notdone" : false
-
-        if hasPrereqData = section.match(/&lt;!-- mb-\w*(?:Count|Age) --&gt;/)
-          prereqSigRegex = section.scan(/(&lt;!-- mbsig --&gt;.*&lt;!-- mbdate --&gt; (\d\d:\d\d.*\d{4} \(UTC\)))/)
-          prereqSignature = prereqSigRegex.flatten[0]
-          prereqTimestamp = prereqSigRegex.flatten[1]
-          if prereqUpdateNeeded = DateTime.now.new_offset(0) > DateTime.parse(prereqTimestamp).new_offset(0) + Rational(@PREREQ_EXPIRY, 1440) rescue false
-            debug("  Found expired prerequisite data")
-          else
-            debug("  Prerequisite data under an hour old")
-          end
-        end
-
-        if resolution
-          info("  #{userName}'s request already responded to")
-          newWikitext << SPLIT_KEY + section
-        elsif section.match(/::{{comment|Automated comment}}.*MusikBot/) && !prereqUpdateNeeded
-          info("  MusikBot has already commented on #{userName}'s request and no prerequisite data to update")
-          newWikitext << SPLIT_KEY + section
-        elsif timestamps[0] && DateTime.parse(timestamps[0]).new_offset(0) + Rational(@REQ_EXPIRY, 1440) < DateTime.now.new_offset(0) && !prereqUpdateNeeded
-          info("  #{userName}'s request is over #{@REQ_EXPIRY} minutes old and has no prerequisite data to update")
-          newWikitext << SPLIT_KEY + section
-        else
-          haveResponded = false
-
-          # AUTORESPOND
-          if @config["autorespond"] && !prereqUpdateNeeded
-            debug("  Checking if #{userName} already has permission #{@permission}...")
-
-            if userInfo = getUserInfo(userName)
-              if userInfo[:userGroups].include?(PERMISSION_KEYS[@permission])
-                info("    Found matching user group")
-                requestChanges << {
-                  type: :autorespond,
-                  permission: @permission.downcase,
-                  resolution: "{{already done}}"
-                }
-                haveResponded = true
-                @editSummaries << :autorespond
-              end
-            end
-          end
-
-          # AUTOFORMAT
-          if @config["autoformat"] && !prereqUpdateNeeded
-            debug("  Checking if request is fragmented...")
-
-            fragmentedRegex = /{{rfplinks.*}}\n:(Reason for requesting (?:#{@PERMISSIONS.join("|").downcase}) rights) .*\(UTC\)\n*(.*)/
-            fragmentedMatch = section.scan(fragmentedRegex)
-
-            if fragmentedMatch.length > 0
-              info("    Found improperly formatted request for #{userName}, repairing")
-
-              actualReason = fragmentedMatch.flatten[1]
-
-              if actualReason.length == 0 && @headersRemoved[userName]
-                actualReason = @headersRemoved[userName]
-              else
-                section.gsub!(actualReason, "")
-                loop do
-                  fragMatch = section.match(fragmentedRegex)
-                  if fragMatch && fragMatch[2] != "" && !(fragMatch[2].include?("UTC") && !fragMatch[2].include?(userName))
-                    reasonPart = fragMatch[2]
-                    actualReason += "\n:#{reasonPart}"
-                    section.gsub!(reasonPart, "")
-                  else
-                    break
-                  end
-                end
-              end
-
-              section.gsub!(fragmentedMatch.flatten[0], actualReason)
-
-              duplicateSig = section.scan(/.*\(UTC\)(.*\(UTC\))/)
-              if duplicateSig.length > 0
-                info("    Duplicate signature found, repairing")
-                sig = duplicateSig.flatten[0]
-                section = section.sub(sig, "")
-              end
-
-              requestChanges << { type: :autoformat }
-              @editSummaries << :autoformat
-            elsif @headersRemoved[userName] && @headersRemoved[userName].length > 0
-              requestChanges << { type: :autoformat }
-              @editSummaries << :autoformat
-            end
-          end
-
-          if !haveResponded && @permission != "Confirmed"
-            # CHECK PREREQUISTES
-            if @config["prerequisites"]
-              prereqs = @config["prerequisites_config"][@permission.downcase.gsub(/ /,"_")]
-
-              if prereqs && !prereqs.empty?
-                if hasPrereqData
-                  debug("  Checking if prerequisite update is needed...")
-                else
-                  debug("  Checking if #{userName} meets configured prerequisites...")
-                end
-
-                sleep 1
-                userInfo = getUserInfo(userName)
-
-                prereqs.each do |key, value|
-                  pass = case key
-                    when "accountAge"
-                      Date.today - value.to_i >= Date.parse(userInfo[:accountAge])
-                    when "articleCount"
-                      userInfo[:articleCount].to_i >= value
-                    when "editCount"
-                      userInfo[:editCount].to_i >= value
-                    when "mainspaceCount"
-                      !userInfo[:mainspaceCount].nil? && userInfo[:mainspaceCount].to_i >= value
-                  end
-
-                  if prereqUpdateNeeded
-                    prereqCountRegex = section.scan(/(&lt;!-- mb-#{key} --&gt;(.*)&lt;!-- mb-#{key}-end --&gt;)/)
-                    prereqText = prereqCountRegex.flatten[0]
-                    prereqCount = prereqCountRegex.flatten[1].to_i rescue 0
-
-                    if !userInfo[key.to_sym].nil? && userInfo[key.to_sym].to_i > prereqCount && prereqCount > 0
-                      section.gsub!(prereqText, "&lt;!-- mb-#{key} --&gt;#{userInfo[key.to_sym].to_i}&lt;!-- mb-#{key}-end --&gt;")
-                      section.gsub!(prereqSignature, "~~~~")
-
-                      info("  Prerequisite data updated")
-                      requestChanges << { type: :prerequisitesUpdated }
-                      @editSummaries << :prerequisitesUpdated
-                    end
-                  elsif !pass
-                    info("    Found unmet prerequisites")
-                    requestChanges << { type: key }.merge(userInfo)
-                    @editSummaries << :prerequisites
-                  end
-                end
-              end
-            end
-
-            # FETCH DECLINED
-            if @config["fetchdeclined"] && !prereqUpdateNeeded
-              debug("  Searching for declined #{@permission} requests by #{userName}...")
-
-              begin
-                links = findLinks(userName)
-
-                if links.length > 0
-                  info("    Found previously declined requests")
-                  linksMessage = links.map{|l| "[#{l}]"}.join
-
-                  requestChanges << {
-                    type: :fetchdeclined,
-                    numDeclined: links.length,
-                    declinedLinks: linksMessage
-                  }
-                  @editSummaries << :fetchdeclined
-                end
-              rescue => e
-                warn("    Unknown exception when finding links: #{e.message}")
-              end
-            end
-          end
-
-          if requestChanges.length > 0
-            info("***** Commentable data found for #{userName} *****")
-            @usersCount += 1
-
-            newSection = SPLIT_KEY + section.gsub(/\n+$/,"")
-
-            if requestChanges.index{|obj| obj[:type] == :prerequisitesUpdated}
-              newSection += "\n"
-            else
-              newSection += messageCompiler(requestChanges)
-            end
-            newWikitext << newSection
-          else
-            info("  ~~ No commentable data found for #{userName} ~~")
-            newWikitext << SPLIT_KEY + section
-          end
-        end
-      else
+      unless userNameMatch
         newWikitext << SPLIT_KEY + section
+        next
+      end
+
+      userName = userNameMatch.captures[0].gsub("_", " ")
+
+      info("Checking section for User:#{userName}...")
+
+      timestamps = section.scan(/\d\d:\d\d.*\d{4} \(UTC\)/)
+      newestTimestamp = timestamps.min {|a,b| DateTime.parse(b).new_offset(0) <=> DateTime.parse(a).new_offset(0)}
+      resolution = section.match(/#{@config["regex_done"]}/i) ? "done" : section.match(/#{@config["regex_notdone"]}/i) ? "notdone" : false
+
+      if @config["prerequisites"]
+        prereqSigRegex = section.scan(/(&lt;!-- mbsig --&gt;.*&lt;!-- mbdate --&gt; (\d\d:\d\d.*\d{4} \(UTC\)))/)
+        prereqSignature = prereqSigRegex.flatten[0]
+        prereqTimestamp = prereqSigRegex.flatten[1]
+        if prereqUpdateNeeded = DateTime.now.new_offset(0) > DateTime.parse(prereqTimestamp).new_offset(0) + Rational(@PREREQ_EXPIRY, 1440) rescue false
+          debug("  Found expired prerequisite data")
+        else
+          debug("  Prerequisite data under an hour old")
+        end
+      end
+
+      if resolution
+        info("  #{userName}'s request already responded to")
+        newWikitext << SPLIT_KEY + section
+      elsif section.match(/::{{comment|Automated comment}}.*MusikBot/) && !prereqUpdateNeeded
+        info("  MusikBot has already commented on #{userName}'s request and no prerequisite data to update")
+        newWikitext << SPLIT_KEY + section
+      else
+        haveResponded = false
+
+        # AUTORESPOND
+        if @config["autorespond"] && !prereqUpdateNeeded
+          debug("  Checking if #{userName} already has permission #{@permission}...")
+
+          if userInfo = getUserInfo(userName)
+            if userInfo[:userGroups].include?(PERMISSION_KEYS[@permission])
+              info("    Found matching user group")
+              requestChanges << {
+                type: :autorespond,
+                permission: @permission.downcase,
+                resolution: "{{already done}}"
+              }
+              haveResponded = true
+              @editSummaries << :autorespond
+            end
+          end
+        end
+
+        # AUTOFORMAT
+        if @config["autoformat"] && !prereqUpdateNeeded
+          debug("  Checking if request is fragmented...")
+
+          fragmentedRegex = /{{rfplinks.*}}\n:(Reason for requesting (?:#{@PERMISSIONS.join("|").downcase}) rights) .*\(UTC\)\n*(.*)/
+          fragmentedMatch = section.scan(fragmentedRegex)
+
+          if fragmentedMatch.length > 0
+            info("    Found improperly formatted request for #{userName}, repairing")
+
+            actualReason = fragmentedMatch.flatten[1]
+
+            if actualReason.length == 0 && @headersRemoved[userName]
+              actualReason = @headersRemoved[userName]
+            else
+              section.gsub!(actualReason, "")
+              loop do
+                fragMatch = section.match(fragmentedRegex)
+                if fragMatch && fragMatch[2] != "" && !(fragMatch[2].include?("UTC") && !fragMatch[2].include?(userName))
+                  reasonPart = fragMatch[2]
+                  actualReason += "\n:#{reasonPart}"
+                  section.gsub!(reasonPart, "")
+                else
+                  break
+                end
+              end
+            end
+
+            section.gsub!(fragmentedMatch.flatten[0], actualReason)
+
+            duplicateSig = section.scan(/.*\(UTC\)(.*\(UTC\))/)
+            if duplicateSig.length > 0
+              info("    Duplicate signature found, repairing")
+              sig = duplicateSig.flatten[0]
+              section = section.sub(sig, "")
+            end
+
+            requestChanges << { type: :autoformat }
+            @editSummaries << :autoformat
+          elsif @headersRemoved[userName] && @headersRemoved[userName].length > 0
+            requestChanges << { type: :autoformat }
+            @editSummaries << :autoformat
+          end
+        end
+
+        if !haveResponded && @permission != "Confirmed"
+          # CHECK PREREQUISTES
+          if @config["prerequisites"]
+            prereqs = @config["prerequisites_config"][@permission.downcase.gsub(/ /,"_")]
+
+            if prereqs && !prereqs.empty?
+              if hasPrereqData
+                debug("  Checking if prerequisite update is needed...")
+              else
+                debug("  Checking if #{userName} meets configured prerequisites...")
+              end
+
+              sleep 1
+              userInfo = getUserInfo(userName)
+
+              prereqs.each do |key, value|
+                pass = case key
+                  when "accountAge"
+                    Date.today - value.to_i >= Date.parse(userInfo[:accountAge])
+                  when "articleCount"
+                    userInfo[:articleCount].to_i >= value
+                  when "editCount"
+                    userInfo[:editCount].to_i >= value
+                  when "mainspaceCount"
+                    !userInfo[:mainspaceCount].nil? && userInfo[:mainspaceCount].to_i >= value
+                end
+
+                if prereqUpdateNeeded
+                  prereqCountRegex = section.scan(/(&lt;!-- mb-#{key} --&gt;(.*)&lt;!-- mb-#{key}-end --&gt;)/)
+                  prereqText = prereqCountRegex.flatten[0]
+                  prereqCount = prereqCountRegex.flatten[1].to_i rescue 0
+
+                  if !userInfo[key.to_sym].nil? && userInfo[key.to_sym].to_i > prereqCount && prereqCount > 0
+                    section.gsub!(prereqText, "&lt;!-- mb-#{key} --&gt;#{userInfo[key.to_sym].to_i}&lt;!-- mb-#{key}-end --&gt;")
+                    section.gsub!(prereqSignature, "~~~~")
+
+                    info("  Prerequisite data updated")
+                    requestChanges << { type: :prerequisitesUpdated }
+                    @editSummaries << :prerequisitesUpdated
+                  end
+                elsif !pass
+                  info("    Found unmet prerequisites")
+                  requestChanges << { type: key }.merge(userInfo)
+                  @editSummaries << :prerequisites
+                end
+              end
+            end
+          end
+
+          # FETCH DECLINED
+          if @config["fetchdeclined"] && !prereqUpdateNeeded
+            debug("  Searching for declined #{@permission} requests by #{userName}...")
+
+            begin
+              links = findLinks(userName)
+
+              if links.length > 0
+                info("    Found previously declined requests")
+                linksMessage = links.map{|l| "[#{l}]"}.join
+
+                requestChanges << {
+                  type: :fetchdeclined,
+                  numDeclined: links.length,
+                  declinedLinks: linksMessage
+                }
+                @editSummaries << :fetchdeclined
+              end
+            rescue => e
+              warn("    Unknown exception when finding links: #{e.message}")
+            end
+          end
+        end
+
+        if requestChanges.length > 0
+          info("***** Commentable data found for #{userName} *****")
+          @usersCount += 1
+
+          newSection = SPLIT_KEY + section.gsub(/\n+$/,"")
+
+          if requestChanges.index{|obj| obj[:type] == :prerequisitesUpdated}
+            newSection += "\n"
+          else
+            newSection += messageCompiler(requestChanges)
+          end
+          newWikitext << newSection
+        else
+          info("  ~~ No commentable data found for #{userName} ~~")
+          newWikitext << SPLIT_KEY + section
+        end
       end
     end
 

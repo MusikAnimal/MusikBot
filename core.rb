@@ -46,11 +46,11 @@ for configPage in configPages
     config[configName] = configPage.elements['revisions'][0][0].to_s == "true"
   end
 
-  if $ENV == :test
+  if $ENV != :production
     config["archive"] = false
     config["autorespond"] = true
     config["autoformat"] = true
-    config["fetchdeclined"] = false
+    config["fetchdeclined"] = true
     config["prerequisites"] = false
   end
 end
