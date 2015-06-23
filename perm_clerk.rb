@@ -10,9 +10,11 @@ module PermClerk
   @runFile = File.open("lastrun", "r+")
 
   COMMENT_INDENT = "\n::"
+  AWB_COMMENT_INDENT = "\n*:"
   COMMENT_PREFIX = "{{comment|Automated comment}} "
   EDIT_THROTTLE = 3
   SPLIT_KEY = "====[[User:"
+  AWB_SPLIT_KEY = "*{{AWBUser|"
 
   PERMISSION_KEYS = {
     "Account creator" => "accountcreator",
@@ -21,7 +23,8 @@ module PermClerk
     "File mover" => "filemover",
     "Pending changes reviewer" => "reviewer",
     "Rollback" => "rollbacker",
-    "Template editor" => "templateeditor"
+    "Template editor" => "templateeditor",
+    "AWB" => "awb"
   }
 
   @userLinksCache = {}
@@ -42,6 +45,7 @@ module PermClerk
       @PERMISSIONS = [
         "Account creator",
         "Autopatrolled",
+        "AWB",
         "Confirmed",
         "File mover",
         "Pending changes reviewer",
@@ -49,7 +53,7 @@ module PermClerk
         "Template editor"
       ]
     else
-      @PERMISSIONS = ["Rollback", "Pending changes reviewer"]
+      @PERMISSIONS = ["AWB", "Rollback"]
     end
 
     start
@@ -61,61 +65,81 @@ module PermClerk
       @editThrottle = 0
       @editSummaries = []
       @headersRemoved = {}
-      @pageName = "Wikipedia:Requests for permissions/#{@permission}"
       @usersCount = 0
-      unless process(@permission)
+      unless process
         error("Failed to process")
       else
         info("Processing of #{@permission} complete")
         @runStatus[@permission] = DateTime.now.new_offset(0).to_s
       end
-      @logger.info("\n#{'=' * 100}")
+      @logger.info("#{'=' * 50}")
       sleep 2
     end
-    @logger.info("Task complete\n#{'~' * 100}")
+    @logger.info("Task complete")
+    @logger.info("#{'~' * 50}")
 
     @runFile.write(@runStatus.inspect)
     @runFile.close
   end
 
-  def self.process(permission)
-    info("Processing #{permission}...")
+  def self.process
+    info("Processing #{@permission}...")
+
+    if @permission == "AWB"
+      @pageName = "Wikipedia talk:AutoWikiBrowser/CheckPage"
+    else
+      @pageName = "Wikipedia:Requests for permissions/#{@permission}"
+    end
 
     @fetchThrotte = 0
     oldWikitext = setPageProps
     return false unless oldWikitext
 
-    lastRun = DateTime.parse(@runStatus[permission]).new_offset(0) rescue DateTime.new
-    lastEdit = DateTime.parse(@baseTimestamp).new_offset(0)
-    hasPrereqData = oldWikitext.match(/&lt;!-- mb-\w*(?:Count|Age) --&gt;/)
-    shouldCheckPrereqData = @config["prerequisites"] ? !!hasPrereqData : false
+    @lastEdit = DateTime.parse(@baseTimestamp).new_offset(0)
+    @lastRun = DateTime.parse(@runStatus[@permission]).new_offset(0) rescue DateTime.new
 
-    if lastRun > lastEdit && !shouldCheckPrereqData
+    # TODO: check if we do prereq checks for this permission here
+    if @config["prerequisites"]
+      hasPrereqData = oldWikitext.match(/&lt;!-- mb-\w*(?:Count|Age) --&gt;/)
+      shouldCheckPrereqData = @config["prerequisites"] ? !!hasPrereqData : false
+      prereqs = @config["prerequisites_config"][@permission.downcase.gsub(/ /,"_")]
+    else
+      shouldCheckPrereqData = false
+    end
+
+    if @lastRun > @lastEdit && !shouldCheckPrereqData
       info("  No changes since last run and no prerequisites to update")
       return false
     end
 
     newWikitext = []
 
-    if @config["autoformat"]
+    if @config["autoformat"] && @permission != "AWB"
       debug("Checking for extraneous headers")
       oldWikitext = removeHeaders(oldWikitext)
     end
 
-    sections = oldWikitext.split(SPLIT_KEY)
+    @splitKey = @permission == "AWB" ? AWB_SPLIT_KEY : SPLIT_KEY
+
+    sections = oldWikitext.split(@splitKey)
     newWikitext << sections.shift
 
     sections.each do |section|
 
       requestChanges = []
-      userNameMatch = section.match(/{{(?:template\:)?rfplinks\|1=(.*)}}/i)
 
-      unless userNameMatch
-        newWikitext << SPLIT_KEY + section
+      if @permission == "AWB"
+        userName = section.scan(/^(.*)}}/).flatten[0]
+      else
+        userName = section.scan(/{{(?:template\:)?rfplinks\|1=(.*)}}/i).flatten[0]
+      end
+
+      if !userName || userName == "username" || userName == "bot username"
+        newWikitext << @splitKey + section
         next
       end
 
-      userName = userNameMatch.captures[0].gsub("_", " ")
+      userName.gsub!("_", " ")
 
       info("Checking section for User:#{userName}...")
 
@@ -123,11 +147,11 @@ module PermClerk
       newestTimestamp = timestamps.min {|a,b| DateTime.parse(b).new_offset(0) <=> DateTime.parse(a).new_offset(0)}
       resolution = section.match(/#{@config["regex_done"]}/i) ? "done" : section.match(/#{@config["regex_notdone"]}/i) ? "notdone" : false
 
-      if @config["prerequisites"]
+      if shouldCheckPrereqData
         prereqSigRegex = section.scan(/(&lt;!-- mbsig --&gt;.*&lt;!-- mbdate --&gt; (\d\d:\d\d.*\d{4} \(UTC\)))/)
         prereqSignature = prereqSigRegex.flatten[0]
         prereqTimestamp = prereqSigRegex.flatten[1]
-        if prereqUpdateNeeded = DateTime.now.new_offset(0) > DateTime.parse(prereqTimestamp).new_offset(0) + Rational(@PREREQ_EXPIRY, 1440) rescue false
+        if shouldCheckPrereqData = DateTime.now.new_offset(0) > DateTime.parse(prereqTimestamp).new_offset(0) + Rational(@PREREQ_EXPIRY, 1440) rescue false
           debug("  Found expired prerequisite data")
         else
           debug("  Prerequisite data under an hour old")
@@ -136,15 +160,15 @@ module PermClerk
 
       if resolution
         info("  #{userName}'s request already responded to")
-        newWikitext << SPLIT_KEY + section
-      elsif section.match(/::{{comment|Automated comment}}.*MusikBot/) && !prereqUpdateNeeded
+        newWikitext << @splitKey + section
+      elsif section.match(/{{comment|Automated comment}}.*MusikBot/) && !shouldCheckPrereqData
         info("  MusikBot has already commented on #{userName}'s request and no prerequisite data to update")
-        newWikitext << SPLIT_KEY + section
+        newWikitext << @splitKey + section
       else
         haveResponded = false
 
         # AUTORESPOND
-        if @config["autorespond"] && !prereqUpdateNeeded
+        if @config["autorespond"] && !shouldCheckPrereqData
           debug("  Checking if #{userName} already has permission #{@permission}...")
 
           if userInfo = getUserInfo(userName)
@@ -162,7 +186,7 @@ module PermClerk
         end
 
         # AUTOFORMAT
-        if @config["autoformat"] && !prereqUpdateNeeded
+        if @config["autoformat"] && !shouldCheckPrereqData && @permission != "AWB"
           debug("  Checking if request is fragmented...")
 
           fragmentedRegex = /{{rfplinks.*}}\n:(Reason for requesting (?:#{@PERMISSIONS.join("|").downcase}) rights) .*\(UTC\)\n*(.*)/
@@ -222,6 +246,7 @@ module PermClerk
               userInfo = getUserInfo(userName)
 
               prereqs.each do |key, value|
+                puts "!!!!!!!!!!!! #{@permission} #{key} = #{value}"
                 pass = case key
                   when "accountAge"
                     Date.today - value.to_i >= Date.parse(userInfo[:accountAge])
@@ -233,7 +258,7 @@ module PermClerk
                     !userInfo[:mainspaceCount].nil? && userInfo[:mainspaceCount].to_i >= value
                 end
 
-                if prereqUpdateNeeded
+                if shouldCheckPrereqData
                   prereqCountRegex = section.scan(/(&lt;!-- mb-#{key} --&gt;(.*)&lt;!-- mb-#{key}-end --&gt;)/)
                   prereqText = prereqCountRegex.flatten[0]
                   prereqCount = prereqCountRegex.flatten[1].to_i rescue 0
@@ -256,7 +281,7 @@ module PermClerk
           end
 
           # FETCH DECLINED
-          if @config["fetchdeclined"] && !prereqUpdateNeeded
+          if @config["fetchdeclined"] && !shouldCheckPrereqData
             debug("  Searching for declined #{@permission} requests by #{userName}...")
 
             begin
@@ -283,7 +308,7 @@ module PermClerk
           info("***** Commentable data found for #{userName} *****")
           @usersCount += 1
 
-          newSection = SPLIT_KEY + section.gsub(/\n+$/,"")
+          newSection = @splitKey + section.gsub(/\n+$/,"")
 
           if requestChanges.index{|obj| obj[:type] == :prerequisitesUpdated}
             newSection += "\n"
@@ -293,7 +318,7 @@ module PermClerk
           newWikitext << newSection
         else
           info("  ~~ No commentable data found for #{userName} ~~")
-          newWikitext << SPLIT_KEY + section
+          newWikitext << @splitKey + section
         end
       end
     end
@@ -356,13 +381,15 @@ module PermClerk
       return @userLinksCache[userName]
     end
 
+    permissionName = @permission == "AWB" ? "AutoWikiBrowser/CheckPage" : @permission
+
     currentDate = Date.today
     targetDate = currentDate - @config["fetchdeclined_offset"]
     links = []
 
     for date in (targetDate..currentDate)
       if dayWikitext = getDeniedForDate(date)
-        if match = dayWikitext.scan(/{{Usercheck.*\|#{userName}}}.*\/#{@permission}\]\].*(http:\/\/.*)\s+link\]/i)[0]
+        if match = dayWikitext.scan(/{{Usercheck.*\|#{userName}}}.*#{permissionName}\]\].*(https?:\/\/.*)\s+link\]/i)[0]
           # TODO: fetch declining admin's username and ping them
           links << match.flatten[0]
         end
@@ -400,7 +427,7 @@ module PermClerk
           ucuser: userName,
           usprop: "groups|editcount|registration",
           ucprop: "ids",
-          uclimit: 200,
+          uclimit: 500,
           ucnamespace: "0",
           continue: ""
         )
@@ -429,11 +456,8 @@ module PermClerk
     end
   end
 
-  def self.headersRemoved?
-    @headersRemoved.length > 0
-  end
-
   def self.getMessage(type, params = {})
+    permissionName = @permission == "AWB" ? "AWB access" : @permission.downcase
     return case type.to_sym
       when :autoformat
         "An extraneous header or other inappropriate text was removed from this request"
@@ -444,23 +468,25 @@ module PermClerk
       when :mainspaceCount
         "has <!-- mb-mainspaceCount -->#{params[:mainspaceCount].to_i == 0 ? 0 : params[:mainspaceCount]}<!-- mb-mainspaceCount-end --> edit#{'s' if params[:mainspaceCount].to_i != 1} in the [[WP:MAINSPACE|mainspace]]"
       when :fetchdeclined
-        "has had #{params[:numDeclined]} request#{'s' if params[:numDeclined].to_i > 1} for #{@permission.downcase} declined in the past #{@config["fetchdeclined_offset"]} days (#{params[:declinedLinks]})"
+        "has had #{params[:numDeclined]} request#{'s' if params[:numDeclined].to_i > 1} for #{permissionName} declined in the past #{@config["fetchdeclined_offset"]} days (#{params[:declinedLinks]})"
     end
   end
 
   def self.messageCompiler(requestData)
     str = ""
 
+    commentIndent = @permission == "AWB" ? AWB_COMMENT_INDENT : COMMENT_INDENT
+
     if index = requestData.index{|obj| obj[:type] == :autoformat}
       requestData.delete_at(index)
-      str = "#{COMMENT_INDENT}<small>#{COMMENT_PREFIX}#{getMessage(:autoformat)} ~~~~</small>\n"
+      str = "#{commentIndent}<small>#{COMMENT_PREFIX}#{getMessage(:autoformat)} ~~~~</small>\n"
       return str if requestData.length == 0
     end
 
     if index = requestData.index{|obj| obj[:type] == :autorespond}
       str += "\n::#{requestData[index][:resolution]} (automated response): This user "
     else
-      str += COMMENT_INDENT + COMMENT_PREFIX + "This user "
+      str += commentIndent + COMMENT_PREFIX + "This user "
     end
 
     requestData.each_with_index do |data, index|
@@ -499,6 +525,10 @@ module PermClerk
     end
 
     oldWikitext
+  end
+
+  def self.headersRemoved?
+    @headersRemoved.length > 0
   end
 
   def self.setPageProps
