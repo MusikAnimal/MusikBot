@@ -46,7 +46,7 @@ for configPage in configPages
     config[configName] = configPage.elements['revisions'][0][0].to_s == "true"
   end
 
-  if $ENV != :production
+  if config[:env] != :production
     config["archive"] = false
     config["autorespond"] = true
     config["autoformat"] = true
