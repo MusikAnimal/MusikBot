@@ -98,16 +98,15 @@ module PermClerk
     @lastEdit = DateTime.parse(@baseTimestamp).new_offset(0)
     @lastRun = DateTime.parse(@runStatus[@permission]).new_offset(0) rescue DateTime.new
 
-    # TODO: check if we do prereq checks for this permission here
-    if @config["prerequisites"]
+    prereqs = @config["prerequisites_config"][@permission.downcase.gsub(/ /,"_")]
+    if @config["prerequisites"] && prereqs # if prereqs enabled for this permission
       hasPrereqData = oldWikitext.match(/&lt;!-- mb-\w*(?:Count|Age) --&gt;/)
-      shouldCheckPrereqData = @config["prerequisites"] ? !!hasPrereqData : false
-      prereqs = @config["prerequisites_config"][@permission.downcase.gsub(/ /,"_")]
+      shouldUpdatePrereqData = @config["prerequisites"] ? !!hasPrereqData : false
     else
-      shouldCheckPrereqData = false
+      shouldUpdatePrereqData = false
     end
 
-    if @lastRun > @lastEdit && !shouldCheckPrereqData
+    if @lastRun > @lastEdit && !shouldUpdatePrereqData
       info("  No changes since last run and no prerequisites to update")
       return false
     end
@@ -125,7 +124,6 @@ module PermClerk
     newWikitext << sections.shift
 
     sections.each do |section|
-
       requestChanges = []
 
       if @permission == "AWB"
@@ -139,19 +137,19 @@ module PermClerk
         next
       end
 
-      userName.gsub!("_", " ")
-
       info("Checking section for User:#{userName}...")
+
+      userName.gsub!("_", " ")
 
       timestamps = section.scan(/\d\d:\d\d.*\d{4} \(UTC\)/)
       newestTimestamp = timestamps.min {|a,b| DateTime.parse(b).new_offset(0) <=> DateTime.parse(a).new_offset(0)}
       resolution = section.match(/#{@config["regex_done"]}/i) ? "done" : section.match(/#{@config["regex_notdone"]}/i) ? "notdone" : false
 
-      if shouldCheckPrereqData
+      if shouldUpdatePrereqData
         prereqSigRegex = section.scan(/(&lt;!-- mbsig --&gt;.*&lt;!-- mbdate --&gt; (\d\d:\d\d.*\d{4} \(UTC\)))/)
         prereqSignature = prereqSigRegex.flatten[0]
         prereqTimestamp = prereqSigRegex.flatten[1]
-        if shouldCheckPrereqData = DateTime.now.new_offset(0) > DateTime.parse(prereqTimestamp).new_offset(0) + Rational(@PREREQ_EXPIRY, 1440) rescue false
+        if shouldUpdatePrereqData = DateTime.now.new_offset(0) > DateTime.parse(prereqTimestamp).new_offset(0) + Rational(@PREREQ_EXPIRY, 1440) rescue false
           debug("  Found expired prerequisite data")
         else
           debug("  Prerequisite data under an hour old")
@@ -161,14 +159,17 @@ module PermClerk
       if resolution
         info("  #{userName}'s request already responded to")
         newWikitext << @splitKey + section
-      elsif section.match(/{{comment|Automated comment}}.*MusikBot/) && !shouldCheckPrereqData
+      elsif section.match(/{{comment|Automated comment}}.*MusikBot/) && !shouldUpdatePrereqData
         info("  MusikBot has already commented on #{userName}'s request and no prerequisite data to update")
         newWikitext << @splitKey + section
       else
         haveResponded = false
 
-        # AUTORESPOND
-        if @config["autorespond"] && !shouldCheckPrereqData
+        # NOTE: the && !shouldUpdatePrereqData is just a way to see if the request has already been assessed by MusikBot.
+        #       We still need this check individually as during the first pass it will be false so that all tasks run, including prereqs
+
+        # <AUTORESPOND>
+        if @config["autorespond"] && !shouldUpdatePrereqData
           debug("  Checking if #{userName} already has permission #{@permission}...")
 
           if userInfo = getUserInfo(userName)
@@ -184,9 +185,10 @@ module PermClerk
             end
           end
         end
+        # </AUTORESPOND>
 
-        # AUTOFORMAT
-        if @config["autoformat"] && !shouldCheckPrereqData && @permission != "AWB"
+        # <AUTOFORMAT>
+        if @config["autoformat"] && !shouldUpdatePrereqData && @permission != "AWB"
           debug("  Checking if request is fragmented...")
 
           fragmentedRegex = /{{rfplinks.*}}\n:(Reason for requesting (?:#{@PERMISSIONS.join("|").downcase}) rights) .*\(UTC\)\n*(.*)/
@@ -229,59 +231,56 @@ module PermClerk
             @editSummaries << :autoformat
           end
         end
+        # </AUTOFORMAT>
 
         if !haveResponded && @permission != "Confirmed"
-          # CHECK PREREQUISTES
-          if @config["prerequisites"]
-            prereqs = @config["prerequisites_config"][@permission.downcase.gsub(/ /,"_")]
+          # <CHECK PREREQUISTES>
+          if @config["prerequisites"] && !prereqs.empty?
+            if updatingPrereq = section.match(/&lt;!-- mb-\w*(?:Count|Age) --&gt;/)
+              debug("  Checking if prerequisite update is needed...")
+            else
+              debug("  Checking if #{userName} meets configured prerequisites...")
+            end
 
-            if prereqs && !prereqs.empty?
-              if hasPrereqData
-                debug("  Checking if prerequisite update is needed...")
-              else
-                debug("  Checking if #{userName} meets configured prerequisites...")
+            sleep 1
+            userInfo = getUserInfo(userName)
+
+            prereqs.each do |key, value|
+              pass = case key
+                when "accountAge"
+                  userInfo[:accountAge] >= value.to_i
+                when "articleCount"
+                  userInfo[:articleCount] >= value
+                when "editCount"
+                  userInfo[:editCount] >= value.to_i
+                when "mainspaceCount"
+                  userInfo[:mainspaceCount] >= value.to_i
               end
 
-              sleep 1
-              userInfo = getUserInfo(userName)
+              if updatingPrereq
+                prereqCountRegex = section.scan(/(&lt;!-- mb-#{key} --&gt;(.*)&lt;!-- mb-#{key}-end --&gt;)/)
+                prereqText = prereqCountRegex.flatten[0]
+                prereqCount = prereqCountRegex.flatten[1].to_i rescue 0
 
-              prereqs.each do |key, value|
-                puts "!!!!!!!!!!!! #{@permission} #{key} = #{value}"
-                pass = case key
-                  when "accountAge"
-                    Date.today - value.to_i >= Date.parse(userInfo[:accountAge])
-                  when "articleCount"
-                    userInfo[:articleCount].to_i >= value
-                  when "editCount"
-                    userInfo[:editCount].to_i >= value
-                  when "mainspaceCount"
-                    !userInfo[:mainspaceCount].nil? && userInfo[:mainspaceCount].to_i >= value
+                if !userInfo[key.to_sym].nil? && userInfo[key.to_sym].to_i > prereqCount && prereqCount > 0
+                  section.gsub!(prereqText, "&lt;!-- mb-#{key} --&gt;#{userInfo[key.to_sym].to_i}&lt;!-- mb-#{key}-end --&gt;")
+                  section.gsub!(prereqSignature, "~~~~")
+
+                  info("  Prerequisite data updated")
+                  requestChanges << { type: :prerequisitesUpdated }
+                  @editSummaries << :prerequisitesUpdated
                 end
-
-                if shouldCheckPrereqData
-                  prereqCountRegex = section.scan(/(&lt;!-- mb-#{key} --&gt;(.*)&lt;!-- mb-#{key}-end --&gt;)/)
-                  prereqText = prereqCountRegex.flatten[0]
-                  prereqCount = prereqCountRegex.flatten[1].to_i rescue 0
-
-                  if !userInfo[key.to_sym].nil? && userInfo[key.to_sym].to_i > prereqCount && prereqCount > 0
-                    section.gsub!(prereqText, "&lt;!-- mb-#{key} --&gt;#{userInfo[key.to_sym].to_i}&lt;!-- mb-#{key}-end --&gt;")
-                    section.gsub!(prereqSignature, "~~~~")
-
-                    info("  Prerequisite data updated")
-                    requestChanges << { type: :prerequisitesUpdated }
-                    @editSummaries << :prerequisitesUpdated
-                  end
-                elsif !pass
-                  info("    Found unmet prerequisites")
-                  requestChanges << { type: key }.merge(userInfo)
-                  @editSummaries << :prerequisites
-                end
+              elsif !pass
+                info("    Found unmet prerequisites")
+                requestChanges << { type: key }.merge(userInfo)
+                @editSummaries << :prerequisites
               end
             end
           end
+          # </CHECK PREREQUISTES>
 
-          # FETCH DECLINED
-          if @config["fetchdeclined"] && !shouldCheckPrereqData
+          # <FETCH DECLINED>
+          if @config["fetchdeclined"] && !shouldUpdatePrereqData
             debug("  Searching for declined #{@permission} requests by #{userName}...")
 
             begin
@@ -302,6 +301,7 @@ module PermClerk
               warn("    Unknown exception when finding links: #{e.message}")
             end
           end
+          # </FETCH DECLINED>
         end
 
         if requestChanges.length > 0
@@ -377,7 +377,7 @@ module PermClerk
 
   def self.findLinks(userName)
     if @userLinksCache[userName]
-      # debug("Cache hit for #{userName}")
+      debug("Cache hit for #{userName}")
       return @userLinksCache[userName]
     end
 
@@ -421,6 +421,7 @@ module PermClerk
     begin
       if @config["prerequisites"] && @config["prerequisites_config"].to_s.include?("mainspaceCount")
         return @userInfoCache[userName] if @userInfoCache[userName] && @userInfoCache[userName][:mainspaceCount]
+        debug("  no cache hit for #{userName}")
         query = @mw.custom_query(
           list: "users|usercontribs",
           ususers: userName,
@@ -442,11 +443,13 @@ module PermClerk
       end
 
       user = query[0][0].attributes
+      registrationDate = user['registration'] ? Date.parse(user['registration']) : nil
 
       userInfo = {
-        editCount: user['editcount'],
-        mainspaceCount: query[1] ? query[1].length : nil,
-        registration: user['registration'],
+        accountAge: registrationDate ? (Date.today - registrationDate).to_i : 0,
+        editCount: user['editcount'].to_i,
+        mainspaceCount: query[1] ? query[1].length : 0,
+        registration: registrationDate,
         userGroups: query[0][0][0].to_a.collect{|g| g[0]}
       }
 
@@ -458,7 +461,9 @@ module PermClerk
 
   def self.getMessage(type, params = {})
     permissionName = @permission == "AWB" ? "AWB access" : @permission.downcase
-    return case type.to_sym
+    return case type
+      when :accountAge
+        "has had an account for <!-- mb-accountAge -->#{params[:accountAge]}<!-- mb-accountAge-end --> days"
       when :autoformat
         "An extraneous header or other inappropriate text was removed from this request"
       when :autorespond
@@ -466,7 +471,7 @@ module PermClerk
       when :editCount
         "has <!-- mb-editCount -->#{params[:editCount]}<!-- mb-editCount-end --> total edits"
       when :mainspaceCount
-        "has <!-- mb-mainspaceCount -->#{params[:mainspaceCount].to_i == 0 ? 0 : params[:mainspaceCount]}<!-- mb-mainspaceCount-end --> edit#{'s' if params[:mainspaceCount].to_i != 1} in the [[WP:MAINSPACE|mainspace]]"
+        "has <!-- mb-mainspaceCount -->#{params[:mainspaceCount] == 0 ? 0 : params[:mainspaceCount]}<!-- mb-mainspaceCount-end --> edit#{'s' if params[:mainspaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
       when :fetchdeclined
         "has had #{params[:numDeclined]} request#{'s' if params[:numDeclined].to_i > 1} for #{permissionName} declined in the past #{@config["fetchdeclined_offset"]} days (#{params[:declinedLinks]})"
     end
@@ -490,7 +495,7 @@ module PermClerk
     end
 
     requestData.each_with_index do |data, index|
-      type = data.delete(:type)
+      type = data.delete(:type).to_sym
       str = str.chomp(", ") + " and " if index == requestData.length - 1 && requestData.length > 1
       str += getMessage(type, data) + ", "
     end
