@@ -351,13 +351,16 @@ module PermClerk
 
       # attempt to save
       begin
-        @mw.edit(@pageName, newWikitext, {
+        opts = {
           basetimestamp: @baseTimestamp,
           contentformat: "text/x-wiki",
           starttimestamp: @startTimestamp,
           summary: "Bot clerking#{" on #{@usersCount} requests" if plural}: #{fixes.join(', ')}",
           text: newWikitext
-        })
+        }
+        opts.merge!({section: 2}) if @permission == "AWB"
+
+        @mw.edit(@pageName, newWikitext, opts)
       rescue MediaWiki::APIError => e
         if e.code.to_s == "editconflict"
           warn("Edit conflict, trying again")
@@ -544,8 +547,17 @@ module PermClerk
       info("Fetching page properties of [[#{@pageName}]]")
       begin
         @startTimestamp = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-        pageObj = @mw.custom_query(prop: 'info|revisions', titles: @pageName, rvprop: 'timestamp|content')[0][0]
+
+        opts = {
+          prop: 'info|revisions',
+          rvprop: 'timestamp|content',
+          titles: @pageName
+        }
+        opts.merge!({rvsection: 2}) if @permission == "AWB"
+
+        pageObj = @mw.custom_query(opts)[0][0]
         @baseTimestamp = pageObj.elements['revisions'][0].attributes['timestamp']
+
         return pageObj.elements['revisions'][0][0].to_s
       rescue => e
         warn("Unable to fetch page properties, reattmpt ##{@fetchThrotte}. Error: #{e.message}")
