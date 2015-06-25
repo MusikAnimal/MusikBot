@@ -172,6 +172,7 @@ module PermClerk
         if @config["autorespond"] && !shouldUpdatePrereqData
           debug("  Checking if #{userName} already has permission #{@permission}...")
 
+          sleep 1
           if userInfo = getUserInfo(userName)
             if userInfo[:userGroups].include?(PERMISSION_KEYS[@permission])
               info("    Found matching user group")
