@@ -53,7 +53,7 @@ module PermClerk
         "Template editor"
       ]
     else
-      @PERMISSIONS = ["AWB", "Rollback"]
+      @PERMISSIONS = ["AWB"]
     end
 
     start
@@ -145,7 +145,7 @@ module PermClerk
       newestTimestamp = timestamps.min {|a,b| DateTime.parse(b).new_offset(0) <=> DateTime.parse(a).new_offset(0)}
       resolution = section.match(/#{@config["regex_done"]}/i) ? "done" : section.match(/#{@config["regex_notdone"]}/i) ? "notdone" : false
 
-      if shouldUpdatePrereqData
+      if shouldUpdatePrereqData = section.scan(/&lt;!-- mb-/).length > 0
         prereqSigRegex = section.scan(/(&lt;!-- mbsig --&gt;.*&lt;!-- mbdate --&gt; (\d\d:\d\d.*\d{4} \(UTC\)))/)
         prereqSignature = prereqSigRegex.flatten[0]
         prereqTimestamp = prereqSigRegex.flatten[1]
