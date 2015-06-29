@@ -53,7 +53,7 @@ module PermClerk
         "Template editor"
       ]
     else
-      @PERMISSIONS = ["AWB"]
+      @PERMISSIONS = ["Rollback"]
     end
 
     start
@@ -78,7 +78,7 @@ module PermClerk
     @logger.info("Task complete")
     @logger.info("#{'~' * 50}")
 
-    @runFile.write(@runStatus.inspect)
+    @runFile.write(@runStatus.inspect) if @config[:env] == :production
     @runFile.close
   end
 
@@ -152,9 +152,34 @@ module PermClerk
         if shouldUpdatePrereqData = DateTime.now.new_offset(0) > DateTime.parse(prereqTimestamp).new_offset(0) + Rational(@PREREQ_EXPIRY, 1440) rescue false
           debug("  Found expired prerequisite data")
         else
-          debug("  Prerequisite data under an hour old")
+          debug("  Prerequisite data under #{@PREREQ_EXPIRY} minutes old")
         end
       end
+
+      # <ARCHIVING>
+      if resolution && @config["archive"] && DateTime.parse(newestTimestamp).new_offset(0) + Rational(@config["archive_offset"], 24)
+        info("  Time to archive!")
+        if resolution == "done"
+          # make sure they have the permission
+          userInfo = getUserInfo(userName)
+          if @permission == "Confirmed"
+            hasPermission = userInfo[:userGroups].include?("confirmed") || userInfo[:userGroups].include?("autoconfirmed")
+          else
+            hasPermission = userInfo[:userGroups].include?(PERMISSION_KEYS[@permission])
+          end
+
+          unless hasPermission
+            warn("  #{userName} does not have the permission #{@permission}")
+            requestChanges << {
+              type: :noSaidPermission,
+              permission: @permission.downcase
+            }
+            @editSummaries << :noSaidPermission
+          end
+        else
+        end
+      end
+      # </ARCHIVING>
 
       if resolution
         info("  #{userName}'s request already responded to")
@@ -305,26 +330,30 @@ module PermClerk
           # </FETCH DECLINED>
         end
 
-        if requestChanges.length > 0
-          info("***** Commentable data found for #{userName} *****")
-          @usersCount += 1
-
-          newSection = @splitKey + section.gsub(/\n+$/,"")
-
-          if requestChanges.index{|obj| obj[:type] == :prerequisitesUpdated}
-            newSection += "\n"
-          else
-            newSection += messageCompiler(requestChanges)
-          end
-          newWikitext << newSection
-        else
-          info("  ~~ No commentable data found for #{userName} ~~")
-          newWikitext << @splitKey + section
-        end
+        newWikitext = queueChanges(requestChanges, section, newWikitext)
       end
     end
 
     return editPage(CGI.unescapeHTML(newWikitext.join))
+  end
+
+  def self.queueChanges(requestChanges, section, newWikitext)
+    if requestChanges.length > 0
+      info("***** Commentable data found *****")
+      @usersCount += 1
+
+      newSection = @splitKey + section.gsub(/\n+$/,"")
+
+      if requestChanges.index{|obj| obj[:type] == :prerequisitesUpdated}
+        newSection += "\n"
+      else
+        newSection += messageCompiler(requestChanges)
+      end
+      newWikitext << newSection
+    else
+      info("  ~~ No commentable data found ~~")
+      return newWikitext << @splitKey + section
+    end
   end
 
   def self.editPage(newWikitext)
@@ -390,35 +419,32 @@ module PermClerk
     currentDate = Date.today
     targetDate = currentDate - @config["fetchdeclined_offset"]
     links = []
+    datesToFetch = (targetDate..currentDate).select {|d| d.day == targetDate.day || d.day == currentDate.day}.uniq{|m| m.month}
 
-    for date in (targetDate..currentDate)
-      if dayWikitext = getDeniedForDate(date)
-        if match = dayWikitext.scan(/{{Usercheck.*\|#{userName}}}.*#{permissionName}\]\].*(https?:\/\/.*)\s+link\]/i)[0]
-          # TODO: fetch declining admin's username and ping them
+    for date in datesToFetch
+      key = "#{Date::MONTHNAMES[date.month]} #{date.year}"
+      if @deniedCache[key]
+        debug("    Cache hit for #{key}")
+        page = @deniedCache[key]
+      else
+        page = @mw.get("Wikipedia:Requests for permissions/Denied/#{key}")
+        @deniedCache[key] = page
+      end
+
+      next unless page
+
+      declineDays = page.split(/==\s*\w+\s+/i)
+      declineDays.each do |declineDay|
+        dayNumber = declineDay.scan(/^(\d+)\s*==/).flatten[0].to_i
+        next if dayNumber == 0
+        declineDayDate = Date.parse("#{date.year}-#{date.month}-#{dayNumber}")
+        if declineDayDate >= targetDate && match = declineDay.scan(/{{Usercheck.*\|#{userName}}}.*#{permissionName}\]\].*(https?:\/\/.*)\s+link\]/i)[0]
           links << match.flatten[0]
         end
       end
     end
 
     return @userLinksCache[userName] = links
-  end
-
-  def self.getDeniedForDate(date)
-    key = "#{Date::MONTHNAMES[date.month]} #{date.year}"
-    if @deniedCache[key]
-      # debug("Cache hit for #{key}")
-      page = @deniedCache[key]
-    else
-      page = @mw.get("Wikipedia:Requests for permissions/Denied/#{key}")
-      @deniedCache[key] = page
-    end
-
-    return nil unless page
-
-    reduced = page.split(/==\s*\w+\s+/i)
-    dayWikitext = reduced.select{|entry| entry.scan(/^(\d+)\s*==/).flatten[0].to_i == date.day.to_i}
-
-    return dayWikitext[0]
   end
 
   def self.getUserInfo(userName)
