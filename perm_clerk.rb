@@ -64,13 +64,14 @@ module PermClerk
       @baseTimestamp = nil
       @editThrottle = 0
       @editSummaries = []
+      @errors = []
       @headersRemoved = {}
       @usersCount = 0
-      unless process
-        error("Failed to process")
-      else
+      if process
         info("Processing of #{@permission} complete")
         @runStatus[@permission] = DateTime.now.new_offset(0).to_s
+      else
+        error("Failed to process")
       end
       @logger.info("#{'=' * 50}")
       sleep 2
@@ -78,7 +79,7 @@ module PermClerk
     @logger.info("Task complete")
     @logger.info("#{'~' * 50}")
 
-    @runFile.write(@runStatus.inspect) if @config[:env] == :production
+    @runFile.write(@runStatus.inspect)
     @runFile.close
   end
 
@@ -106,7 +107,7 @@ module PermClerk
       shouldUpdatePrereqData = false
     end
 
-    if @lastRun > @lastEdit && !shouldUpdatePrereqData
+    if @lastRun > @lastEdit && !shouldUpdatePrereqData && @config[:env] != :production
       info("  No changes since last run and no prerequisites to update")
       return false
     end
@@ -120,6 +121,7 @@ module PermClerk
 
     @splitKey = @permission == "AWB" ? AWB_SPLIT_KEY : SPLIT_KEY
 
+    archiveChanges = {}
     sections = oldWikitext.split(@splitKey)
     newWikitext << sections.shift
 
@@ -159,25 +161,66 @@ module PermClerk
       # <ARCHIVING>
       if resolution && @config["archive"] && DateTime.parse(newestTimestamp).new_offset(0) + Rational(@config["archive_offset"], 24)
         info("  Time to archive!")
+
+        permissionName = @permission == "AWB" ? "AutoWikiBrowser/CheckPage" : @permission
+        resolutionRegex = @config["regex_#{resolution}"]
+
+        unless resolutionDate = Date.parse(section.scan(/#{resolutionRegex}.*?(\d\d:\d\d.*\d{4} \(UTC\))/i).flatten[1]) rescue nil
+          error("    User:#{userName}: Resolution template not dated")
+          @errors << {
+            group: "archive",
+            message: "User:#{userName}: Resolution template not dated"
+          }
+          next
+        end
+
         if resolution == "done"
-          # make sure they have the permission
           userInfo = getUserInfo(userName)
+
+          # make sure they have the permission
           if @permission == "Confirmed"
             hasPermission = userInfo[:userGroups].include?("confirmed") || userInfo[:userGroups].include?("autoconfirmed")
-          else
+          elsif @permission != "AWB"
             hasPermission = userInfo[:userGroups].include?(PERMISSION_KEYS[@permission])
           end
 
-          unless hasPermission
-            warn("  #{userName} does not have the permission #{@permission}")
+          unless hasPermission || @permission == "AWB"
+            error("    #{userName} does not have the permission #{@permission}")
             requestChanges << {
               type: :noSaidPermission,
               permission: @permission.downcase
             }
             @editSummaries << :noSaidPermission
+
+            @errors << {
+              group: "archive",
+              message: "User:#{userName} does not have the permission #{@permission}. " +
+                "Use <code><nowiki>{{User:MusikBot/override|d}}</nowiki></code> to archive as done or " +
+                "<code><nowiki>{{User:MusikBot/override|nd}}</nowiki></code> to archive as declined"
+            }
+
+            newWikitext = queueChanges(requestChanges, section, newWikitext)
+            next
           end
+
+          debug("    archiving as APPROVED")
         else
+          debug("    archiving as DENIED")
         end
+
+        resolutionPageName = resolution == "done" ? "Approved" : "Denied"
+        archiveKey = "#{resolutionPageName}/#{Date::MONTHNAMES[resolutionDate.month]} #{resolutionDate.year}"
+        archiveSet = archiveChanges[archiveKey].to_a << {
+          userName: userName,
+          permission: @permission,
+          revisionId: @revisionId,
+          date: resolutionDate
+        }
+        archiveChanges[archiveKey] = archiveSet
+
+        @editSummaries << "archive#{resolutionPageName}".to_sym
+        # absence of newWikitext << @split + section == remove entry from page
+        next
       end
       # </ARCHIVING>
 
@@ -334,7 +377,12 @@ module PermClerk
       end
     end
 
-    return editPage(CGI.unescapeHTML(newWikitext.join))
+    if archiveRequests(archiveChanges)
+      return editPage(CGI.unescapeHTML(newWikitext.join))
+    else
+      error("Archiving failed!")
+      return false
+    end
   end
 
   def self.queueChanges(requestChanges, section, newWikitext)
@@ -356,6 +404,97 @@ module PermClerk
     end
   end
 
+  def self.archiveRequests(archiveChanges)
+    return nil unless archiveChanges.length > 0
+
+    numRequests = archiveChanges.length
+
+    info("***** Archiving #{numRequests} requests *****")
+
+    archiveChanges.keys.each do |key|
+      pageToEdit = "Wikipedia:Requests for permissions/#{key}"
+
+      @archiveFetchThrotte = 0
+      unless pageWikitext = fetchArchivePage(pageToEdit)
+        error("  unable to fetch archive page for #{key}, aborting") and return false
+      end
+
+      editSummary = "Archiving #{archiveChanges[key].length} request#{'s' if archiveChanges[key].length > 1}:"
+
+      # ensure there's a newline at the end
+      pageWikitext = pageWikitext.chomp('') + "\n"
+
+      # convert sections as a hash of format {"Month day" => "content"}
+      sections = Hash[*pageWikitext.split(/\=\=\s*(\w+ \d+)\s*\=\=/).drop(1).flatten(1)]
+
+      archiveChanges[key].each do |request|
+        monthName = Date::MONTHNAMES[request[:date].month]
+        editSummary += " #{request[:userName]} (#{request[:permission].downcase});"
+        linkMarkup = "*{{Usercheck-short|#{request[:userName]}}} [[Wikipedia:Requests for permissions/#{request[:permission]}]] " +
+          "<sup>[http://en.wikipedia.org/wiki/Special:PermaLink/#{request[:revisionId]} link]</sup>"
+
+        # add linkMarkup to section
+        sectionKey = "#{monthName} #{request[:date].day}"
+        sections[sectionKey] = sections[sectionKey].to_s.gsub(/^\n|\n$/,"") + "\n" + linkMarkup + "\n"
+      end
+
+      # construct back to single wikitext string, sorted by day
+      content = "==" + sections.sort.flatten.sort_by{|k| k.scan(/\d+/)[0].to_i}.join("==") + "\n"
+
+      # we're done archiving for this month
+      @archiveEditThrottle = 0
+      info("  Attempting to write to page [[#{pageToEdit}]]")
+      return false unless editArchivePage(pageToEdit, content, editSummary)
+    end
+  end
+
+  def self.editArchivePage(pageName, content, editSummary)
+    if @archiveEditThrottle < 3
+      sleep @archiveEditThrottle
+      @archiveEditThrottle += 1
+
+      begin
+        opts = {
+          contentformat: "text/x-wiki",
+          summary: editSummary,
+          text: content
+        }
+        @mw.edit(pageName, CGI.unescapeHTML(content), opts)
+      rescue MediaWiki::APIError => e
+        warn("API error when writing to page: #{e.code.to_s}, trying again")
+        return editArchivePage(pageName, content, editSummary)
+      rescue => e
+        error("Unknown exception when writing to page: #{e.message}") and return false
+      end
+    else
+      error("Throttle hit for edit archive page operation, aborting") and return false
+    end
+  end
+
+  def self.fetchArchivePage(pageName)
+    if @archiveFetchThrotte < 3
+      sleep @archiveFetchThrotte
+      @archiveFetchThrotte += 1
+      info("Fetching page [[#{pageName}]]")
+      begin
+        opts = {
+          prop: 'revisions',
+          rvprop: 'content',
+          titles: pageName
+        }
+
+        pageObj = @mw.custom_query(opts)[0][0].elements['revisions']
+
+        return pageObj[0][0].to_s rescue ""
+      rescue => e
+        warn("Unable to fetch page properties, reattmpt ##{@archiveFetchThrotte}. Error: #{e.message}")
+        return fetchArchivePage(pageName)
+      end
+    else
+      error("Unable to fetch page properties, continuing to process next permission") and return false
+    end
+  end
+
   def self.editPage(newWikitext)
     unless @usersCount > 0 || headersRemoved?
       info("No commentable data or extraneous headers found for any of the current requests")
@@ -370,13 +509,20 @@ module PermClerk
 
       plural = @usersCount > 1
 
+      # get approved/denied counts
+      approved = @editSummaries.count(:archiveApproved)
+      denied = @editSummaries.count(:archiveDenied)
+      archiveMsg = "#{approved + ' approved, ' if approved > 0}#{denied + ' denied'}".chomp(", ")
+
       # FIXME: cover all bases here, or write "commented on X requests, repaired malformed requests"
       fixes = []
+      fixes << "archiving #{approved + denied} requests (#{archiveMsg})" if approved + denied > 0
       fixes << "marked request as already done" if @editSummaries.include?(:autorespond)
       fixes << "repaired malformed request#{'s' if plural}" if @editSummaries.include?(:autoformat)
       fixes << "prerequisite data updated" if @editSummaries.include?(:prerequisitesUpdated)
       fixes << "unmet prerequisites" if @editSummaries.include?(:prerequisites)
       fixes << "found previously declined requests" if @editSummaries.include?(:fetchdeclined)
+      fixes << "unable to archive one or more requests" if @editSummaries.include?(:noSaidPermission)
 
       # attempt to save
       begin
@@ -500,10 +646,12 @@ module PermClerk
         "already has the \"#{params[:permission]}\" user right"
       when :editCount
         "has <!-- mb-editCount -->#{params[:editCount]}<!-- mb-editCount-end --> total edits"
-      when :mainspaceCount
-        "has <!-- mb-mainspaceCount -->#{params[:mainspaceCount] == 0 ? 0 : params[:mainspaceCount]}<!-- mb-mainspaceCount-end --> edit#{'s' if params[:mainspaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
       when :fetchdeclined
         "has had #{params[:numDeclined]} request#{'s' if params[:numDeclined].to_i > 1} for #{permissionName} declined in the past #{@config["fetchdeclined_offset"]} days (#{params[:declinedLinks]})"
+      when :mainspaceCount
+        "has <!-- mb-mainspaceCount -->#{params[:mainspaceCount] == 0 ? 0 : params[:mainspaceCount]}<!-- mb-mainspaceCount-end --> edit#{'s' if params[:mainspaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
+      when :noSaidPermission
+        "does not appear to have the permission <tt>#{params[:permission]}</tt>"
     end
   end
 
@@ -583,6 +731,7 @@ module PermClerk
 
         pageObj = @mw.custom_query(opts)[0][0]
         @baseTimestamp = pageObj.elements['revisions'][0].attributes['timestamp']
+        @revisionId = pageObj.attributes["lastrevid"]
 
         return pageObj.elements['revisions'][0][0].to_s
       rescue => e

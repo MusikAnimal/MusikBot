@@ -11,10 +11,15 @@ MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/
 mw = MediaWiki::Gateway.new("https://#{config[:env] == :production ? "en" : "test"}.wikipedia.org/w/api.php")
 Auth.login(mw)
 
+# refresh randomized infobox image, just for fun :)
+if DateTime.now.hour == 20
+  mw.purge("User:MusikBot")
+end
+
 pagesToFetch = [
   "User:MusikBot/PermClerk/Run",
-  # "User:MusikBot/PermClerk/Archive/Run",
-  # "User:MusikBot/PermClerk/Archive/Offset",
+  "User:MusikBot/PermClerk/Archive/Run",
+  "User:MusikBot/PermClerk/Archive/Offset",
   "User:MusikBot/PermClerk/Autoformat/Run",
   "User:MusikBot/PermClerk/Autorespond/Run",
   "User:MusikBot/PermClerk/FetchDeclined/Run",
@@ -36,7 +41,7 @@ end
 for configPage in configPages
   configName = configPage.attributes["title"].gsub(/User\:MusikBot\/PermClerk\/?/,"").gsub("/","_").downcase.chomp("_run").chomp(".js")
 
-  if configName == "fetchdeclined_offset"
+  if ["fetchdeclined_offset", "archive_offset"].include?(configName)
     config[configName] = configPage.elements['revisions'][0][0].to_s.to_i
   elsif configName == "prerequisites_config"
     config[configName] = JSON.parse(CGI.unescapeHTML(configPage.elements['revisions'][0][0].to_s))
@@ -47,11 +52,11 @@ for configPage in configPages
   end
 
   if config[:env] != :production
-    config["archive"] = false
+    config["archive"] = true
     config["autorespond"] = false
-    config["autoformat"] = true
-    config["fetchdeclined"] = true
-    config["prerequisites"] = true
+    config["autoformat"] = false
+    config["fetchdeclined"] = false
+    config["prerequisites"] = false
   end
 end
 

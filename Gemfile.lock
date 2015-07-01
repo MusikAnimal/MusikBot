@@ -1,9 +1,9 @@
 GIT
   remote: git://github.com/MusikAnimal/mediawiki-gateway.git
-  revision: 97e79740e472947c81877c1797fea92039507aa9
+  revision: ed6950553811333f91769772e89791fda6840517
   branch: master
   specs:
-    mediawiki-gateway (1.0.3)
+    mediawiki-gateway (1.0.4)
       rest-client (~> 1.7)
 
 GEM
