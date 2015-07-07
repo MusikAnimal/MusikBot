@@ -53,7 +53,7 @@ module PermClerk
         "Template editor"
       ]
     else
-      @PERMISSIONS = ["Pending changes reviewer"]
+      @PERMISSIONS = ["AWB"]
     end
 
     start
@@ -62,22 +62,32 @@ module PermClerk
   def self.start
     @errors = {}
     for @permission in @PERMISSIONS
+      sleep 2
+
       @baseTimestamp = nil
-      @editThrottle = 0
+      @permEditThrottle = 0
       @editSummaries = []
       @headersRemoved = {}
       @usersCount = 0
       if process
         info("Processing of #{@permission} complete")
-        @runStatus[@permission] = DateTime.now.new_offset(0).to_s
+        @runStatus[@permission] = currentTime.to_s
       else
         error("Failed to process")
       end
-      @logger.info("#{'=' * 50}")
-      sleep 2
+      info("#{'=' * 50}")
     end
-    @logger.info("Task complete")
-    @logger.info("#{'~' * 50}")
+
+    errorsDigest = Digest::MD5.hexdigest(@errors.values.join)
+    if @runStatus["report_errors"] != errorsDigest || parseDateTime(@runStatus["report"]) < currentTime - Rational(120, 1440)
+      unless generateReport
+        @runStatus["report"] = currentTime.to_s
+        @runStatus["report_errors"] = errorsDigest
+      end
+    end
+
+    info("Task complete")
+    info("#{'~' * 50}")
 
     @runFile.write(@runStatus.inspect)
     @runFile.close
@@ -96,8 +106,8 @@ module PermClerk
     oldWikitext = setPageProps
     return false unless oldWikitext
 
-    @lastEdit = DateTime.parse(@baseTimestamp).new_offset(0)
-    @lastRun = DateTime.parse(@runStatus[@permission]).new_offset(0) rescue DateTime.new
+    @lastEdit = parseDateTime(@baseTimestamp)
+    @lastRun = parseDateTime(@runStatus[@permission]) rescue DateTime.new
 
     prereqs = @config["prerequisites_config"][@permission.downcase.gsub(/ /,"_")]
     if @config["prerequisites"] && prereqs # if prereqs enabled for this permission
@@ -120,10 +130,13 @@ module PermClerk
     end
 
     @splitKey = @permission == "AWB" ? AWB_SPLIT_KEY : SPLIT_KEY
+    @numOpenRequests = 0
 
     archiveChanges = {}
     sections = oldWikitext.split(@splitKey)
     newWikitext << sections.shift
+    # binding.pry
+    # newWikitext << sections.shift if @permission == "AWB"
 
     sections.each do |section|
       requestChanges = []
@@ -144,14 +157,17 @@ module PermClerk
       userName.gsub!("_", " ")
 
       timestamps = section.scan(/\d\d:\d\d.*\d{4} \(UTC\)/)
-      newestTimestamp = timestamps.min {|a,b| DateTime.parse(b).new_offset(0) <=> DateTime.parse(a).new_offset(0)}
+      newestTimestamp = timestamps.min {|a,b| parseDateTime(b) <=> parseDateTime(a)}
       resolution = section.match(/#{@config["regex_done"]}/i) ? "done" : section.match(/#{@config["regex_notdone"]}/i) ? "notdone" : false
+      resolutionDate = Date.parse(section.scan(/#{@config["regex_#{resolution}"]}.*?(\d\d:\d\d.*\d{4} \(UTC\))/i).flatten[1]) rescue nil
+
+      @numOpenRequests += 1 unless resolution
 
       if shouldUpdatePrereqData = section.scan(/&lt;!-- mb-/).length > 0
         prereqSigRegex = section.scan(/(&lt;!-- mbsig --&gt;.*&lt;!-- mbdate --&gt; (\d\d:\d\d.*\d{4} \(UTC\)))/)
         prereqSignature = prereqSigRegex.flatten[0]
         prereqTimestamp = prereqSigRegex.flatten[1]
-        if shouldUpdatePrereqData = DateTime.now.new_offset(0) > DateTime.parse(prereqTimestamp).new_offset(0) + Rational(@PREREQ_EXPIRY, 1440) rescue false
+        if shouldUpdatePrereqData = currentTime > parseDateTime(prereqTimestamp) + Rational(@PREREQ_EXPIRY, 1440) rescue false
           debug("  Found expired prerequisite data")
         else
           debug("  Prerequisite data under #{@PREREQ_EXPIRY} minutes old")
@@ -159,20 +175,17 @@ module PermClerk
       end
 
       # <ARCHIVING>
-      if resolution && @config["archive"] && DateTime.parse(newestTimestamp).new_offset(0) + Rational(@config["archive_offset"], 24)
+      if resolution && @config["archive"] && resolutionDate.nil?
+        error("    User:#{userName}: Resolution template not dated")
+        @errors[@permission] = @errors[@permission].to_a << {
+          group: "archive",
+          message: "User:#{userName} - Resolution template not dated"
+        }
+        next
+      elsif resolution && @config["archive"] && parseDateTime(newestTimestamp) + Rational(@config["archive_offset"], 24) < currentTime
         info("  Time to archive!")
 
         permissionName = @permission == "AWB" ? "AutoWikiBrowser/CheckPage" : @permission
-        resolutionRegex = @config["regex_#{resolution}"]
-
-        unless resolutionDate = Date.parse(section.scan(/#{resolutionRegex}.*?(\d\d:\d\d.*\d{4} \(UTC\))/i).flatten[1]) rescue nil
-          error("    User:#{userName}: Resolution template not dated")
-          @errors[@permission] << {
-            group: "archive",
-            message: "User:#{userName} - Resolution template not dated"
-          }
-          next
-        end
 
         if resolution == "done"
           userInfo = getUserInfo(userName)
@@ -192,10 +205,10 @@ module PermClerk
             }
             @editSummaries << :noSaidPermission
 
-            @errors[@permission] << {
+            @errors[@permission] = @errors[@permission].to_a << {
               group: "archive",
               message: "User:#{userName} does not have the permission #{@permission}. " +
-                "Use <code><nowiki>{{subst:User:MusikBot/override|d}}</nowiki></code> to archive as done or " +
+                "Use <code><nowiki>{{subst:User:MusikBot/override|d}}</nowiki></code> to archive as approved or " +
                 "<code><nowiki>{{subst:User:MusikBot/override|nd}}</nowiki></code> to archive as declined"
             }
 
@@ -379,13 +392,14 @@ module PermClerk
     end
 
     if archiveChanges
+      # FIXME: archiving is sorted by "Month YYYY" so changes to each page should queued and edited after all permissions are done processing
       if archiveRequests(archiveChanges)
-        return editPage(CGI.unescapeHTML(newWikitext.join))
+        return editPermissionPage(CGI.unescapeHTML(newWikitext.join))
       else
         error("Archiving failed!") and return false
       end
     else
-      return editPage(CGI.unescapeHTML(newWikitext.join))
+      return editPermissionPage(CGI.unescapeHTML(newWikitext.join))
     end
   end
 
@@ -474,22 +488,22 @@ module PermClerk
           logPageWikitext += "\n=== " + yearSectionKey + " ===\n" + yearSections[yearSectionKey].gsub(/^\n/,"")
         end
 
-        @archiveEditThrottle = 0
+        @editThrottle = 0
         info("    Attempting to write to page [[#{logPageName}]]")
         logPageWikitext = logPage.split("===")[0] + logPageWikitext
-        return false unless editArchivePage(logPageName, logPageWikitext, "Adding entry for [[#{pageToEdit}]]")
+        return false unless editPage(logPageName, logPageWikitext, "Adding entry for [[#{pageToEdit}]]")
       end
 
-      @archiveEditThrottle = 0
+      @editThrottle = 0
       info("  Attempting to write to page [[#{pageToEdit}]]")
-      return false unless editArchivePage(pageToEdit, newWikitext, editSummary)
+      return false unless editPage(pageToEdit, newWikitext, editSummary)
     end
   end
 
-  def self.editArchivePage(pageName, content, editSummary)
-    if @archiveEditThrottle < 3
-      sleep @archiveEditThrottle
-      @archiveEditThrottle += 1
+  def self.editPage(pageName, content, editSummary)
+    if @editThrottle < EDIT_THROTTLE
+      sleep @editThrottle
+      @editThrottle += 1
 
       begin
         opts = {
@@ -500,12 +514,12 @@ module PermClerk
         @mw.edit(pageName, CGI.unescapeHTML(content), opts)
       rescue MediaWiki::APIError => e
         warn("API error when writing to page: #{e.code.to_s}, trying again")
-        return editArchivePage(pageName, content, editSummary)
+        return editPage(pageName, content, editSummary)
       rescue => e
         error("Unknown exception when writing to page: #{e.message}") and return false
       end
     else
-      error("Throttle hit for edit archive page operation, aborting") and return false
+      error("Throttle hit for edit page operation, aborting") and return false
     end
   end
 
@@ -535,28 +549,36 @@ module PermClerk
 
   def self.generateReport
     if @errors.keys.length > 0
-      content = "{{hidden|headerstyle=background:transparent;color:red;font-weight:bold|header=#{@errors.values.flatten.length} errors as of ~~~~~|content="
+      numErrors = @errors.values.flatten.length
+      content = "{{hidden|style=float:left;background:transparent|headerstyle=padding-right:3.5em|header=" +
+        "<span style='color:red;font-weight:bold'>#{numErrors} error#{'s' if numErrors > 1} as of ~~~~~</span>|content="
       @errors.keys.each do |permissionGroup|
-        content += "\n;[[Wikipedia:Requests for permissions/#{permissionGroup}\n"
+        content += "\n;[[Wikipedia:Requests for permissions/#{permissionGroup}|#{permissionGroup}]]\n"
         @errors[permissionGroup].each do |error|
           content += "* '''#{error[:group].capitalize}''': #{error[:message]}\n"
         end
       end
-      content += "}}"
+      content += "}}{{-}}"
     else
       content = "<span style='color:green; font-weight:bold'>No errors! All systems operational.</span> Report generated at ~~~~~"
     end
+
+    @editThrottle = 0
+    info("Updating report...")
+    unless editPage("User:MusikBot/PermClerk/Report", content, "Updating [[User:MusikBot/PermClerk|PermClerk]] report")
+      error("  Unable to update report") and return false
+    end
   end
 
-  def self.editPage(newWikitext)
+  def self.editPermissionPage(newWikitext)
     unless @usersCount > 0 || headersRemoved?
       info("No commentable data or extraneous headers found for any of the current requests")
       return true
     end
 
-    if @editThrottle < 3
-      sleep @editThrottle
-      @editThrottle += 1
+    if @permEditThrottle < EDIT_THROTTLE
+      sleep @permEditThrottle
+      @permEditThrottle += 1
 
       info("Attempting to write to page [[#{@pageName}]]")
 
@@ -581,8 +603,14 @@ module PermClerk
       fixes << "found previously declined requests" if @editSummaries.include?(:fetchdeclined)
       fixes << "unable to archive one or more requests" if @editSummaries.include?(:noSaidPermission)
 
-      # TODO: have it state how many open requests are left, or "list is clear"
-      # TODO: if list is clear, change {{admin backlog}} to {{no admin backlog}}, or vice versa
+      binding.pry
+      if @numOpenRequests > 0
+        requestCountMsg = "(#{@numOpenRequests} open requests remaining)"
+        newWikitext.gsub!(/\{\{no\s*admin\s*backlog\}\}/, "{{admin backlog}}")
+      else
+        requestCountMsg = "(list is clear)"
+        newWikitext.gsub!(/\{\{admin\s*backlog\}\}/, "{{no admin backlog}}")
+      end
 
       # attempt to save
       begin
@@ -590,10 +618,10 @@ module PermClerk
           basetimestamp: @baseTimestamp,
           contentformat: "text/x-wiki",
           starttimestamp: @startTimestamp,
-          summary: "Bot clerking#{" on #{@usersCount} requests" if plural}: #{fixes.join(', ')}",
+          summary: "Bot clerking#{" on #{@usersCount} requests" if plural}: #{fixes.join(', ')} #{requestCountMsg}",
           text: newWikitext
         }
-        opts.merge!({section: 2}) if @permission == "AWB"
+        # opts.merge!({section: 2}) if @permission == "AWB"
 
         @mw.edit(@pageName, newWikitext, opts)
       rescue MediaWiki::APIError => e
@@ -787,7 +815,7 @@ module PermClerk
           rvprop: 'timestamp|content',
           titles: @pageName
         }
-        opts.merge!({rvsection: 2}) if @permission == "AWB"
+        # opts.merge!({rvsection: 2}) if @permission == "AWB"
 
         pageObj = @mw.custom_query(opts)[0][0]
         @baseTimestamp = pageObj.elements['revisions'][0].attributes['timestamp']
@@ -807,4 +835,6 @@ module PermClerk
   def self.info(msg); @logger.info("#{@permission.upcase} : #{msg}"); end
   def self.warn(msg); @logger.warn("#{@permission.upcase} : #{msg}"); end
   def self.error(msg); @logger.error("#{@permission.upcase} : #{msg}"); end
+  def self.parseDateTime(str); DateTime.parse(str).new_offset(0); end
+  def self.currentTime; DateTime.now.new_offset(0); end
 end
