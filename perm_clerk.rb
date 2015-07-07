@@ -53,18 +53,18 @@ module PermClerk
         "Template editor"
       ]
     else
-      @PERMISSIONS = ["Rollback"]
+      @PERMISSIONS = ["Pending changes reviewer"]
     end
 
     start
   end
 
   def self.start
+    @errors = {}
     for @permission in @PERMISSIONS
       @baseTimestamp = nil
       @editThrottle = 0
       @editSummaries = []
-      @errors = []
       @headersRemoved = {}
       @usersCount = 0
       if process
@@ -107,7 +107,7 @@ module PermClerk
       shouldUpdatePrereqData = false
     end
 
-    if @lastRun > @lastEdit && !shouldUpdatePrereqData && @config[:env] != :production
+    if @lastRun > @lastEdit && !shouldUpdatePrereqData && @config[:env] == :production
       info("  No changes since last run and no prerequisites to update")
       return false
     end
@@ -167,9 +167,9 @@ module PermClerk
 
         unless resolutionDate = Date.parse(section.scan(/#{resolutionRegex}.*?(\d\d:\d\d.*\d{4} \(UTC\))/i).flatten[1]) rescue nil
           error("    User:#{userName}: Resolution template not dated")
-          @errors << {
+          @errors[@permission] << {
             group: "archive",
-            message: "User:#{userName}: Resolution template not dated"
+            message: "User:#{userName} - Resolution template not dated"
           }
           next
         end
@@ -192,11 +192,11 @@ module PermClerk
             }
             @editSummaries << :noSaidPermission
 
-            @errors << {
+            @errors[@permission] << {
               group: "archive",
               message: "User:#{userName} does not have the permission #{@permission}. " +
-                "Use <code><nowiki>{{User:MusikBot/override|d}}</nowiki></code> to archive as done or " +
-                "<code><nowiki>{{User:MusikBot/override|nd}}</nowiki></code> to archive as declined"
+                "Use <code><nowiki>{{subst:User:MusikBot/override|d}}</nowiki></code> to archive as done or " +
+                "<code><nowiki>{{subst:User:MusikBot/override|nd}}</nowiki></code> to archive as declined"
             }
 
             newWikitext = queueChanges(requestChanges, section, newWikitext)
@@ -218,6 +218,7 @@ module PermClerk
         }
         archiveChanges[archiveKey] = archiveSet
 
+        @usersCount += 1
         @editSummaries << "archive#{resolutionPageName}".to_sym
         # absence of newWikitext << @split + section == remove entry from page
         next
@@ -377,11 +378,14 @@ module PermClerk
       end
     end
 
-    if archiveRequests(archiveChanges)
-      return editPage(CGI.unescapeHTML(newWikitext.join))
+    if archiveChanges
+      if archiveRequests(archiveChanges)
+        return editPage(CGI.unescapeHTML(newWikitext.join))
+      else
+        error("Archiving failed!") and return false
+      end
     else
-      error("Archiving failed!")
-      return false
+      return editPage(CGI.unescapeHTML(newWikitext.join))
     end
   end
 
@@ -413,11 +417,15 @@ module PermClerk
 
     archiveChanges.keys.each do |key|
       pageToEdit = "Wikipedia:Requests for permissions/#{key}"
+      monthName = key.scan(/\/(\w+)/).flatten[0]
+      year = key.scan(/\d{4}/).flatten[0]
 
       @archiveFetchThrotte = 0
       unless pageWikitext = fetchArchivePage(pageToEdit)
         error("  unable to fetch archive page for #{key}, aborting") and return false
       end
+
+      newPage = pageWikitext.empty?
 
       editSummary = "Archiving #{archiveChanges[key].length} request#{'s' if archiveChanges[key].length > 1}:"
 
@@ -428,7 +436,7 @@ module PermClerk
       sections = Hash[*pageWikitext.split(/\=\=\s*(\w+ \d+)\s*\=\=/).drop(1).flatten(1)]
 
       archiveChanges[key].each do |request|
-        monthName = Date::MONTHNAMES[request[:date].month]
+        # monthName = Date::MONTHNAMES[request[:date].month]
         editSummary += " #{request[:userName]} (#{request[:permission].downcase});"
         linkMarkup = "*{{Usercheck-short|#{request[:userName]}}} [[Wikipedia:Requests for permissions/#{request[:permission]}]] " +
           "<sup>[http://en.wikipedia.org/wiki/Special:PermaLink/#{request[:revisionId]} link]</sup>"
@@ -439,12 +447,42 @@ module PermClerk
       end
 
       # construct back to single wikitext string, sorted by day
-      content = "==" + sections.sort.flatten.sort_by{|k| k.scan(/\d+/)[0].to_i}.join("==") + "\n"
+      newWikitext = ""
+      sortedKeys = sections.keys.sort_by{|k| k.scan(/\d+/)[0].to_i}
+      sortedKeys.each do |sortKey|
+        newWikitext += "\n== " + sortKey + " ==\n" + sections[sortKey].gsub(/^\n/,"")
+      end
 
       # we're done archiving for this month
+
+      # first see if it's a new page and if so add it to the log page
+      if newPage
+        logPageName = "Wikipedia:Requests for permissions/#{key.scan(/(.*)\//).flatten[0]}"
+        info("  Adding new page [[#{pageToEdit}]] to log [[#{logPageName}]]")
+
+        @archiveFetchThrotte = 0
+        unless logPage = fetchArchivePage(logPageName)
+          error("  unable to fetch log page [[#{logPageName}]], aborting") and return false
+        end
+
+        # convert to {"year" => "requests"}
+        yearSections = Hash[*logPage.split(/\=\=\=\s*(\d{4})\s*\=\=\=/).drop(1)]
+        yearSections[year] = "\n*[[#{pageToEdit}]]" + yearSections[year].to_s
+
+        logPageWikitext = ""
+        yearSections.sort{|a,b| b <=> a}.to_h.keys.each do |yearSectionKey|
+          logPageWikitext += "\n=== " + yearSectionKey + " ===\n" + yearSections[yearSectionKey].gsub(/^\n/,"")
+        end
+
+        @archiveEditThrottle = 0
+        info("    Attempting to write to page [[#{logPageName}]]")
+        logPageWikitext = logPage.split("===")[0] + logPageWikitext
+        return false unless editArchivePage(logPageName, logPageWikitext, "Adding entry for [[#{pageToEdit}]]")
+      end
+
       @archiveEditThrottle = 0
       info("  Attempting to write to page [[#{pageToEdit}]]")
-      return false unless editArchivePage(pageToEdit, content, editSummary)
+      return false unless editArchivePage(pageToEdit, newWikitext, editSummary)
     end
   end
 
@@ -495,6 +533,21 @@ module PermClerk
     end
   end
 
+  def self.generateReport
+    if @errors.keys.length > 0
+      content = "{{hidden|headerstyle=background:transparent;color:red;font-weight:bold|header=#{@errors.values.flatten.length} errors as of ~~~~~|content="
+      @errors.keys.each do |permissionGroup|
+        content += "\n;[[Wikipedia:Requests for permissions/#{permissionGroup}\n"
+        @errors[permissionGroup].each do |error|
+          content += "* '''#{error[:group].capitalize}''': #{error[:message]}\n"
+        end
+      end
+      content += "}}"
+    else
+      content = "<span style='color:green; font-weight:bold'>No errors! All systems operational.</span> Report generated at ~~~~~"
+    end
+  end
+
   def self.editPage(newWikitext)
     unless @usersCount > 0 || headersRemoved?
       info("No commentable data or extraneous headers found for any of the current requests")
@@ -512,17 +565,24 @@ module PermClerk
       # get approved/denied counts
       approved = @editSummaries.count(:archiveApproved)
       denied = @editSummaries.count(:archiveDenied)
-      archiveMsg = "#{approved + ' approved, ' if approved > 0}#{denied + ' denied'}".chomp(", ")
+      if approved + denied > 0
+        archiveMsg = []
+        archiveMsg << "#{approved} approved" if approved > 0
+        archiveMsg << "#{denied} denied" if denied > 0
+        archiveMsg = archiveMsg.join(", ")
+      end
 
-      # FIXME: cover all bases here, or write "commented on X requests, repaired malformed requests"
       fixes = []
-      fixes << "archiving #{approved + denied} requests (#{archiveMsg})" if approved + denied > 0
+      fixes << "archived #{approved.to_i + denied.to_i} requests (#{archiveMsg})" if approved.to_i + denied.to_i > 0
       fixes << "marked request as already done" if @editSummaries.include?(:autorespond)
       fixes << "repaired malformed request#{'s' if plural}" if @editSummaries.include?(:autoformat)
       fixes << "prerequisite data updated" if @editSummaries.include?(:prerequisitesUpdated)
       fixes << "unmet prerequisites" if @editSummaries.include?(:prerequisites)
       fixes << "found previously declined requests" if @editSummaries.include?(:fetchdeclined)
       fixes << "unable to archive one or more requests" if @editSummaries.include?(:noSaidPermission)
+
+      # TODO: have it state how many open requests are left, or "list is clear"
+      # TODO: if list is clear, change {{admin backlog}} to {{no admin backlog}}, or vice versa
 
       # attempt to save
       begin
