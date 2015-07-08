@@ -76,7 +76,6 @@ module PermClerk
       else
         error("Failed to process")
       end
-      info("#{'=' * 50}")
     end
 
     archiveRequests if @archiveChanges.length
@@ -112,6 +111,8 @@ module PermClerk
     @lastEdit = parseDateTime(@baseTimestamp)
     @lastRun = parseDateTime(@runStatus[@permission]) rescue DateTime.new
 
+    # FIXME: in addition to the below, we need to check for basic formatting errors
+    #   such as section headings not on their own line, and report the error and skip to next permission
     prereqs = @config["prerequisites_config"][@permission.downcase.gsub(/ /,"_")]
     if @config["prerequisites"] && prereqs # if prereqs enabled for this permission
       hasPrereqData = oldWikitext.match(/&lt;!-- mb-\w*(?:Count|Age) --&gt;/)
@@ -417,6 +418,7 @@ module PermClerk
   end
 
   def self.archiveRequests
+    # FIXME: make sure this and the other tasks can operate on the Bots section
     return nil unless @archiveChanges.length > 0
 
     numRequests = @archiveChanges.values.flatten.length
@@ -624,7 +626,6 @@ module PermClerk
           summary: "Bot clerking#{" on #{@usersCount} requests" if plural}: #{fixes.join(', ')} (#{requestCountMsg})",
           text: newWikitext
         }
-        # opts.merge!({section: 2}) if @permission == "AWB"
 
         @mw.edit(@pageName, newWikitext, opts)
       rescue MediaWiki::APIError => e
