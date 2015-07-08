@@ -53,7 +53,7 @@ module PermClerk
         "Template editor"
       ]
     else
-      @PERMISSIONS = ["AWB"]
+      @PERMISSIONS = ["AWB", "Pending changes reviewer", "Rollback"]
     end
 
     start
@@ -61,6 +61,7 @@ module PermClerk
 
   def self.start
     @errors = {}
+    @archiveChanges = {}
     for @permission in @PERMISSIONS
       sleep 2
 
@@ -78,6 +79,8 @@ module PermClerk
       info("#{'=' * 50}")
     end
 
+    archiveRequests if @archiveChanges.length
+
     errorsDigest = Digest::MD5.hexdigest(@errors.values.join)
     if @runStatus["report_errors"] != errorsDigest || parseDateTime(@runStatus["report"]) < currentTime - Rational(120, 1440)
       unless generateReport
@@ -86,8 +89,8 @@ module PermClerk
       end
     end
 
-    info("Task complete")
-    info("#{'~' * 50}")
+    @permission = ""
+    info("#{'~' * 25} Task complete #{'~' * 25}")
 
     @runFile.write(@runStatus.inspect)
     @runFile.close
@@ -117,8 +120,9 @@ module PermClerk
       shouldUpdatePrereqData = false
     end
 
-    if @lastRun > @lastEdit && !shouldUpdatePrereqData && @config[:env] == :production
-      info("  No changes since last run and no prerequisites to update")
+    # only process if there's data to update, the page has changed since the last run or it's been 90 minutes since the last run
+    if @config[:env] == :production && !shouldUpdatePrereqData && @lastRun > @lastEdit && @lastRun + Rational(90, 1440) > currentTime
+      info("  Less than 90 minutes since last run without changes, and no prerequisites to update")
       return false
     end
 
@@ -132,11 +136,8 @@ module PermClerk
     @splitKey = @permission == "AWB" ? AWB_SPLIT_KEY : SPLIT_KEY
     @numOpenRequests = 0
 
-    archiveChanges = {}
     sections = oldWikitext.split(@splitKey)
     newWikitext << sections.shift
-    # binding.pry
-    # newWikitext << sections.shift if @permission == "AWB"
 
     sections.each do |section|
       requestChanges = []
@@ -193,6 +194,8 @@ module PermClerk
           # make sure they have the permission
           if @permission == "Confirmed"
             hasPermission = userInfo[:userGroups].include?("confirmed") || userInfo[:userGroups].include?("autoconfirmed")
+          elsif @permission == "Autopatrolled"
+            hasPermission = userInfo[:userGroups].include?("autoreviewer")
           elsif @permission != "AWB"
             hasPermission = userInfo[:userGroups].include?(PERMISSION_KEYS[@permission])
           end
@@ -223,13 +226,13 @@ module PermClerk
 
         resolutionPageName = resolution == "done" ? "Approved" : "Denied"
         archiveKey = "#{resolutionPageName}/#{Date::MONTHNAMES[resolutionDate.month]} #{resolutionDate.year}"
-        archiveSet = archiveChanges[archiveKey].to_a << {
+        archiveSet = @archiveChanges[archiveKey].to_a << {
           userName: userName,
           permission: @permission,
           revisionId: @revisionId,
           date: resolutionDate
         }
-        archiveChanges[archiveKey] = archiveSet
+        @archiveChanges[archiveKey] = archiveSet
 
         @usersCount += 1
         @editSummaries << "archive#{resolutionPageName}".to_sym
@@ -391,16 +394,7 @@ module PermClerk
       end
     end
 
-    if archiveChanges
-      # FIXME: archiving is sorted by "Month YYYY" so changes to each page should queued and edited after all permissions are done processing
-      if archiveRequests(archiveChanges)
-        return editPermissionPage(CGI.unescapeHTML(newWikitext.join))
-      else
-        error("Archiving failed!") and return false
-      end
-    else
-      return editPermissionPage(CGI.unescapeHTML(newWikitext.join))
-    end
+    return editPermissionPage(CGI.unescapeHTML(newWikitext.join))
   end
 
   def self.queueChanges(requestChanges, section, newWikitext)
@@ -422,14 +416,14 @@ module PermClerk
     end
   end
 
-  def self.archiveRequests(archiveChanges)
-    return nil unless archiveChanges.length > 0
+  def self.archiveRequests
+    return nil unless @archiveChanges.length > 0
 
-    numRequests = archiveChanges.length
+    numRequests = @archiveChanges.values.flatten.length
 
     info("***** Archiving #{numRequests} requests *****")
 
-    archiveChanges.keys.each do |key|
+    @archiveChanges.keys.each do |key|
       pageToEdit = "Wikipedia:Requests for permissions/#{key}"
       monthName = key.scan(/\/(\w+)/).flatten[0]
       year = key.scan(/\d{4}/).flatten[0]
@@ -441,7 +435,7 @@ module PermClerk
 
       newPage = pageWikitext.empty?
 
-      editSummary = "Archiving #{archiveChanges[key].length} request#{'s' if archiveChanges[key].length > 1}:"
+      editSummary = "Archiving #{@archiveChanges[key].length} request#{'s' if @archiveChanges[key].length > 1}:"
 
       # ensure there's a newline at the end
       pageWikitext = pageWikitext.chomp('') + "\n"
@@ -449,11 +443,12 @@ module PermClerk
       # convert sections as a hash of format {"Month day" => "content"}
       sections = Hash[*pageWikitext.split(/\=\=\s*(\w+ \d+)\s*\=\=/).drop(1).flatten(1)]
 
-      archiveChanges[key].each do |request|
+      @archiveChanges[key].each do |request|
         # monthName = Date::MONTHNAMES[request[:date].month]
         editSummary += " #{request[:userName]} (#{request[:permission].downcase});"
-        linkMarkup = "*{{Usercheck-short|#{request[:userName]}}} [[Wikipedia:Requests for permissions/#{request[:permission]}]] " +
-          "<sup>[http://en.wikipedia.org/wiki/Special:PermaLink/#{request[:revisionId]} link]</sup>"
+        archivePageName = @permission == "AWB" ? "Wikipedia talk:AutoWikiBrowser/CheckPage" : "Wikipedia:Requests for permissions/#{request[:permission]}"
+        linkMarkup = "*{{Usercheck-short|#{request[:userName]}}} [[#{archivePageName}]] " +
+          "<sup>[http://en.wikipedia.org/wiki/Special:PermaLink/#{request[:revisionId]}#User:#{request[:userName].gsub(" ","_")} link]</sup>"
 
         # add linkMarkup to section
         sectionKey = "#{monthName} #{request[:date].day}"
@@ -560,7 +555,7 @@ module PermClerk
       end
       content += "}}{{-}}"
     else
-      content = "<span style='color:green; font-weight:bold'>No errors! All systems operational.</span> Report generated at ~~~~~"
+      content = "<span style='color:green; font-weight:bold'>No errors!</span> Report generated at ~~~~~"
     end
 
     @editThrottle = 0
@@ -571,9 +566,45 @@ module PermClerk
   end
 
   def self.editPermissionPage(newWikitext)
-    unless @usersCount > 0 || headersRemoved?
-      info("No commentable data or extraneous headers found for any of the current requests")
-      return true
+    adminBacklog = !!(newWikitext =~ /\{\{admin\s*backlog(?:\|bot=MusikBot)?\}\}/)
+
+    fixes = []
+
+    if @numOpenRequests > 0
+      requestCountMsg = "#{@numOpenRequests} open request#{"s" if @numOpenRequests > 1} remaining"
+      newWikitext.gsub!(/\{\{no\s*admin\s*backlog(?:\|bot=MusikBot)?\}\}/, "{{admin backlog|bot=MusikBot}}")
+      @editSummaries << :adminBacklog if backlogChange = !adminBacklog
+    else
+      requestCountMsg = "list is clear"
+      newWikitext.gsub!(/\{\{admin\s*backlog(?:\|bot=MusikBot)?\}\}/, "{{no admin backlog|bot=MusikBot}}")
+      @editSummaries << :noAdminBacklog if backlogChange = adminBacklog
+    end
+
+    unless @usersCount > 0 || headersRemoved? || backlogChange
+      info("Nothing to do this time around") and return true
+    end
+
+    # get approved/denied counts
+    approved = @editSummaries.count(:archiveApproved)
+    denied = @editSummaries.count(:archiveDenied)
+    if approved + denied > 0
+      archiveMsg = []
+      archiveMsg << "#{approved} approved" if approved > 0
+      archiveMsg << "#{denied} denied" if denied > 0
+      archiveMsg = archiveMsg.join(", ")
+    end
+
+    fixes << "archived #{approved.to_i + denied.to_i} requests (#{archiveMsg})" if approved.to_i + denied.to_i > 0
+    fixes << "marked request as already done" if @editSummaries.include?(:autorespond)
+    fixes << "repaired malformed request#{'s' if plural}" if @editSummaries.include?(:autoformat)
+    fixes << "prerequisite data updated" if @editSummaries.include?(:prerequisitesUpdated)
+    fixes << "unmet prerequisites" if @editSummaries.include?(:prerequisites)
+    fixes << "found previously declined requests" if @editSummaries.include?(:fetchdeclined)
+    fixes << "unable to archive one or more requests" if @editSummaries.include?(:noSaidPermission)
+
+    if fixes.length == 0
+      fixes << "{{admin backlog}}" if @editSummaries.include?(:adminBacklog)
+      fixes << "{{no admin backlog}}" if @editSummaries.include?(:noAdminBacklog)
     end
 
     if @permEditThrottle < EDIT_THROTTLE
@@ -584,41 +615,13 @@ module PermClerk
 
       plural = @usersCount > 1
 
-      # get approved/denied counts
-      approved = @editSummaries.count(:archiveApproved)
-      denied = @editSummaries.count(:archiveDenied)
-      if approved + denied > 0
-        archiveMsg = []
-        archiveMsg << "#{approved} approved" if approved > 0
-        archiveMsg << "#{denied} denied" if denied > 0
-        archiveMsg = archiveMsg.join(", ")
-      end
-
-      fixes = []
-      fixes << "archived #{approved.to_i + denied.to_i} requests (#{archiveMsg})" if approved.to_i + denied.to_i > 0
-      fixes << "marked request as already done" if @editSummaries.include?(:autorespond)
-      fixes << "repaired malformed request#{'s' if plural}" if @editSummaries.include?(:autoformat)
-      fixes << "prerequisite data updated" if @editSummaries.include?(:prerequisitesUpdated)
-      fixes << "unmet prerequisites" if @editSummaries.include?(:prerequisites)
-      fixes << "found previously declined requests" if @editSummaries.include?(:fetchdeclined)
-      fixes << "unable to archive one or more requests" if @editSummaries.include?(:noSaidPermission)
-
-      binding.pry
-      if @numOpenRequests > 0
-        requestCountMsg = "(#{@numOpenRequests} open requests remaining)"
-        newWikitext.gsub!(/\{\{no\s*admin\s*backlog\}\}/, "{{admin backlog}}")
-      else
-        requestCountMsg = "(list is clear)"
-        newWikitext.gsub!(/\{\{admin\s*backlog\}\}/, "{{no admin backlog}}")
-      end
-
       # attempt to save
       begin
         opts = {
           basetimestamp: @baseTimestamp,
           contentformat: "text/x-wiki",
           starttimestamp: @startTimestamp,
-          summary: "Bot clerking#{" on #{@usersCount} requests" if plural}: #{fixes.join(', ')} #{requestCountMsg}",
+          summary: "Bot clerking#{" on #{@usersCount} requests" if plural}: #{fixes.join(', ')} (#{requestCountMsg})",
           text: newWikitext
         }
         # opts.merge!({section: 2}) if @permission == "AWB"
@@ -815,7 +818,6 @@ module PermClerk
           rvprop: 'timestamp|content',
           titles: @pageName
         }
-        # opts.merge!({rvsection: 2}) if @permission == "AWB"
 
         pageObj = @mw.custom_query(opts)[0][0]
         @baseTimestamp = pageObj.elements['revisions'][0].attributes['timestamp']
