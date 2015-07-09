@@ -81,7 +81,7 @@ module PermClerk
     archiveRequests if @archiveChanges.length
 
     errorsDigest = Digest::MD5.hexdigest(@errors.values.join)
-    if @runStatus["report_errors"] != errorsDigest || parseDateTime(@runStatus["report"]) < currentTime - Rational(120, 1440)
+    if @runStatus["report_errors"] != errorsDigest || parseDateTime(@runStatus["report"]) < currentTime - Rational(3, 24)
       unless generateReport
         @runStatus["report"] = currentTime.to_s
         @runStatus["report_errors"] = errorsDigest
@@ -176,6 +176,7 @@ module PermClerk
         end
       end
 
+      # FIXME: make "archivenow" and "override" work!! (override should not say "requesting immediate archiving", only archivenow should)
       # <ARCHIVING>
       if resolution && @config["archive"] && resolutionDate.nil?
         error("    User:#{userName}: Resolution template not dated")
