@@ -597,7 +597,7 @@ module PermClerk
       archiveMsg = archiveMsg.join(", ")
     end
 
-    fixes << "archived #{approved.to_i + denied.to_i} requests (#{archiveMsg})" if approved.to_i + denied.to_i > 0
+    fixes << "archiving (#{archiveMsg})" if approved.to_i + denied.to_i > 0
     fixes << "marked request as already done" if @editSummaries.include?(:autorespond)
     fixes << "repaired malformed request#{'s' if plural}" if @editSummaries.include?(:autoformat)
     fixes << "prerequisite data updated" if @editSummaries.include?(:prerequisitesUpdated)
