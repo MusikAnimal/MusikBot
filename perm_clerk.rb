@@ -561,6 +561,7 @@ module PermClerk
       content = "<span style='color:green; font-weight:bold'>No errors!</span> Report generated at ~~~~~"
     end
 
+    # FIXME: only generate report after other actions have been taken (and it's been X amount of time since last report)
     @editThrottle = 0
     info("Updating report...")
     unless editPage("User:MusikBot/PermClerk/Report", content, "Updating [[User:MusikBot/PermClerk|PermClerk]] report")
