@@ -12,19 +12,22 @@ mw = MediaWiki::Gateway.new("https://#{config[:env] == :production ? "en" : "tes
 Auth.login(mw)
 
 # refresh randomized infobox image, just for fun :)
-begin
-  runStatus = eval(File.open("lastrun", "r").read) rescue {}
+# FIXME: doesn't seem to work?? or doesn't update the lastrun properly...
+if config[:env] == :production
+  begin
+    runStatus = eval(File.open("lastrun", "r").read) rescue {}
 
-  if DateTime.parse(runStatus["purge"]).new_offset(0) + 1 < DateTime.now.new_offset(0)
-    mw.purge("User:MusikBot")
+    if DateTime.parse(runStatus["purge"]).new_offset(0) + 1 < DateTime.now.new_offset(0)
+      mw.purge("User:MusikBot")
 
-    runStatus["purge"] = DateTime.now.new_offset(0).to_s
-    runFile = File.open("lastrun", "r+")
-    runFile.write(runStatus.inspect)
-    runFile.close
+      runStatus["purge"] = DateTime.now.new_offset(0).to_s
+      runFile = File.open("lastrun", "r+")
+      runFile.write(runStatus.inspect)
+      runFile.close
+    end
+  rescue
+    puts "Unable to purge User:MusikBot"
   end
-rescue
-  puts "Unable to purge User:MusikBot"
 end
 
 pagesToFetch = [

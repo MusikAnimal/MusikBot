@@ -18,9 +18,10 @@ module PermClerk
 
   PERMISSION_KEYS = {
     "Account creator" => "accountcreator",
-    "Autopatrolled" => "autopatrolled",
+    "Autopatrolled" => "autoreviewer",
     "Confirmed" => "(?=>auto)?confirmed",
     "File mover" => "filemover",
+    "Mass message sender" => "massmessage-sender",
     "Pending changes reviewer" => "reviewer",
     "Rollback" => "rollbacker",
     "Template editor" => "templateeditor",
@@ -48,12 +49,13 @@ module PermClerk
         "AWB",
         "Confirmed",
         "File mover",
+        "Mass message sender",
         "Pending changes reviewer",
         "Rollback",
         "Template editor"
       ]
     else
-      @PERMISSIONS = ["AWB", "Pending changes reviewer", "Rollback"]
+      @PERMISSIONS = ["Rollback"]
     end
 
     start
@@ -62,6 +64,7 @@ module PermClerk
   def self.start
     @errors = {}
     @archiveChanges = {}
+    totalUserCount = 0
     for @permission in @PERMISSIONS
       sleep 2
 
@@ -73,6 +76,7 @@ module PermClerk
       if process
         info("Processing of #{@permission} complete")
         @runStatus[@permission] = currentTime.to_s
+        totalUserCount += @usersCount
       else
         error("Failed to process")
       end
@@ -81,7 +85,7 @@ module PermClerk
     archiveRequests if @archiveChanges.length
 
     errorsDigest = Digest::MD5.hexdigest(@errors.values.join)
-    if @runStatus["report_errors"] != errorsDigest || parseDateTime(@runStatus["report"]) < currentTime - Rational(3, 24)
+    if totalUserCount > 0 && (@runStatus["report_errors"] != errorsDigest || parseDateTime(@runStatus["report"]) < currentTime - Rational(3, 24))
       unless generateReport
         @runStatus["report"] = currentTime.to_s
         @runStatus["report_errors"] = errorsDigest
@@ -106,13 +110,12 @@ module PermClerk
 
     @fetchThrotte = 0
     oldWikitext = setPageProps
+
     return false unless oldWikitext
 
     @lastEdit = parseDateTime(@baseTimestamp)
     @lastRun = parseDateTime(@runStatus[@permission]) rescue DateTime.new
 
-    # FIXME: in addition to the below, we need to check for basic formatting errors
-    #   such as section headings not on their own line, and report the error and skip to next permission
     prereqs = @config["prerequisites_config"][@permission.downcase.gsub(/ /,"_")]
     if @config["prerequisites"] && prereqs # if prereqs enabled for this permission
       hasPrereqData = oldWikitext.match(/&lt;!-- mb-\w*(?:Count|Age) --&gt;/)
@@ -137,6 +140,8 @@ module PermClerk
     @splitKey = @permission == "AWB" ? AWB_SPLIT_KEY : SPLIT_KEY
     @numOpenRequests = 0
 
+    return false unless formattingCheck(oldWikitext)
+
     sections = oldWikitext.split(@splitKey)
     newWikitext << sections.shift
 
@@ -160,8 +165,16 @@ module PermClerk
 
       timestamps = section.scan(/\d\d:\d\d.*\d{4} \(UTC\)/)
       newestTimestamp = timestamps.min {|a,b| parseDateTime(b) <=> parseDateTime(a)}
-      resolution = section.match(/#{@config["regex_done"]}/i) ? "done" : section.match(/#{@config["regex_notdone"]}/i) ? "notdone" : false
+      if overridenResolution = section.match(/\{\{User:MusikBot\/override\|d\}\}/i) ? "done" : section.match(/\{\{User:MusikBot\/override\|nd\}\}/i) ? "notdone" : false
+        info("  Resolution override found")
+      end
+      resolution = overridenResolution || (section.match(/#{@config["regex_done"]}/i) ? "done" : section.match(/#{@config["regex_notdone"]}/i) ? "notdone" : false)
       resolutionDate = Date.parse(section.scan(/#{@config["regex_#{resolution}"]}.*?(\d\d:\d\d.*\d{4} \(UTC\))/i).flatten[1]) rescue nil
+
+      # use newest timestamp when forcing resolution and no resolution template exists
+      if resolutionDate.nil? && overridenResolution
+        resolutionDate = Date.parse(newestTimestamp)
+      end
 
       @numOpenRequests += 1 unless resolution
 
@@ -185,24 +198,29 @@ module PermClerk
           message: "User:#{userName} - Resolution template not dated"
         }
         next
-      elsif resolution && @config["archive"] && parseDateTime(newestTimestamp) + Rational(@config["archive_offset"], 24) < currentTime
+      elsif resolution && @config["archive"] && (section.match(/\{\{User:MusikBot\/archivenow\}\}/) || parseDateTime(newestTimestamp) + Rational(@config["archive_offset"], 24) < currentTime)
         info("  Time to archive!")
 
+        # XXX: is this used within this scope?
         permissionName = @permission == "AWB" ? "AutoWikiBrowser/CheckPage" : @permission
 
-        if resolution == "done"
+        # if we're archiving as done, check if they have the said permission and act accordingly (skip if overriding resolution)
+        if resolution == "done" && !overridenResolution
           userInfo = getUserInfo(userName)
 
           # make sure they have the permission
-          if @permission == "Confirmed"
-            hasPermission = userInfo[:userGroups].include?("confirmed") || userInfo[:userGroups].include?("autoconfirmed")
-          elsif @permission == "Autopatrolled"
-            hasPermission = userInfo[:userGroups].include?("autoreviewer")
-          elsif @permission != "AWB"
-            hasPermission = userInfo[:userGroups].include?(PERMISSION_KEYS[@permission])
+          # TODO: TEST THIS! make sure this works as expected when they have 'autoreviewer' representative of 'autopatrolled'
+          #   also for (auto)confirmed and massmessage-sender
+          # TODO: actually check the checkpage to see if they've been added
+          if @permission != "AWB"
+            hasPermission = userInfo[:userGroups].grep(/#{PERMISSION_KEYS[@permission]}/).length > 0
           end
 
-          unless hasPermission || @permission == "AWB"
+          if section.include?("&gt;&lt;!-- mbNoPerm --&gt;")
+            warn("    MusikBot already reported that #{userName} does not have the permission #{@permission}")
+            newWikitext << @splitKey + section
+            next
+          elsif !hasPermission && @permission != "AWB"
             error("    #{userName} does not have the permission #{@permission}")
             requestChanges << {
               type: :noSaidPermission,
@@ -220,13 +238,10 @@ module PermClerk
             newWikitext = queueChanges(requestChanges, section, newWikitext)
             next
           end
-
-          debug("    archiving as APPROVED")
-        else
-          debug("    archiving as DENIED")
         end
 
         resolutionPageName = resolution == "done" ? "Approved" : "Denied"
+        info("    archiving as #{resolutionPageName.upcase}")
         archiveKey = "#{resolutionPageName}/#{Date::MONTHNAMES[resolutionDate.month]} #{resolutionDate.year}"
         archiveSet = @archiveChanges[archiveKey].to_a << {
           userName: userName,
@@ -238,7 +253,11 @@ module PermClerk
 
         @usersCount += 1
         @editSummaries << "archive#{resolutionPageName}".to_sym
-        # absence of newWikitext << @split + section == remove entry from page
+        # Make sure we don't wipe out the Bots heading for AWB page
+        # Otherwise, the absence of `newWikitext << @split + section` will remove the request from the page
+        if @permission == "AWB"
+          newWikitext << section.scan(/(\n\=\=\=\=\s*Bots.*)/m).flatten[0].to_s
+        end
         next
       end
       # </ARCHIVING>
@@ -457,6 +476,7 @@ module PermClerk
         sectionKey = "#{monthName} #{request[:date].day}"
         sections[sectionKey] = sections[sectionKey].to_s.gsub(/^\n|\n$/,"") + "\n" + linkMarkup + "\n"
       end
+      editSummary.chomp!(";")
 
       # construct back to single wikitext string, sorted by day
       newWikitext = ""
@@ -745,7 +765,7 @@ module PermClerk
       when :mainspaceCount
         "has <!-- mb-mainspaceCount -->#{params[:mainspaceCount] == 0 ? 0 : params[:mainspaceCount]}<!-- mb-mainspaceCount-end --> edit#{'s' if params[:mainspaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
       when :noSaidPermission
-        "does not appear to have the permission <tt>#{params[:permission]}</tt>"
+        "does not appear to have the permission <tt>#{params[:permission]}</tt><!-- mbNoPerm -->"
     end
   end
 
@@ -773,6 +793,23 @@ module PermClerk
     end
 
     str.chomp(", ") + ". ~~~~\n"
+  end
+
+  def self.formattingCheck(oldWikitext)
+    ret = true
+
+    splitKeyMatch = oldWikitext.scan(/\n(.*)[^\n]#{Regexp.escape(@splitKey)}(.*)\n/).flatten
+    if splitKeyMatch.length > 0
+      error("A request heading is not on its own line: #{splitKeyMatch[0]}")
+      @errors[@permission] = @errors[@permission].to_a << {
+        group: "formatting",
+        message: "Unable to process page! A request heading is not on its own line:\n*:" +
+          "<code style='color:red'><nowiki>#{splitKeyMatch[0]}</nowiki></code><code><nowiki>#{@splitKey}#{splitKeyMatch[1]}</nowiki></code>"
+      }
+      ret = false
+    end
+
+    return ret
   end
 
   def self.removeHeaders(oldWikitext)
