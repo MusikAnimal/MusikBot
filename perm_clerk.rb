@@ -82,6 +82,7 @@ module PermClerk
       end
     end
 
+    @permission = ""
     archiveRequests if @archiveChanges.length
 
     errorsDigest = Digest::MD5.hexdigest(@errors.values.join)
@@ -92,7 +93,6 @@ module PermClerk
       end
     end
 
-    @permission = ""
     info("#{'~' * 25} Task complete #{'~' * 25}")
 
     @runFile.write(@runStatus.inspect)
