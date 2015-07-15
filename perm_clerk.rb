@@ -711,7 +711,7 @@ module PermClerk
         dayNumber = declineDay.scan(/^(\d+)\s*==/).flatten[0].to_i
         next if dayNumber == 0
         declineDayDate = Date.parse("#{date.year}-#{date.month}-#{dayNumber}")
-        if declineDayDate >= targetDate && match = declineDay.scan(/{{Usercheck.*\|#{userName}}}.*#{permissionName}\]\].*(https?:\/\/.*)\s+link\]/i)[0]
+        if declineDayDate >= targetDate && match = declineDay.scan(/{{Usercheck.*\|#{userName.gsub('_',' ')}}}.*#{permissionName}\]\].*(https?:\/\/.*)\s+link\]/i)[0]
           links << match.flatten[0]
         end
       end
@@ -753,7 +753,7 @@ module PermClerk
         editCount: user['editcount'].to_i,
         mainspaceCount: query[1] ? query[1].length : 0,
         registration: registrationDate,
-        userGroups: query[0][0][0].to_a.collect{|g| g[0]}
+        userGroups: query[0][0][0].to_a.collect{|g| g[0].to_s}
       }
 
       return @userInfoCache[userName] = userInfo
