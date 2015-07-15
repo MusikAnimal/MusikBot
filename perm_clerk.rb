@@ -55,7 +55,7 @@ module PermClerk
         "Template editor"
       ]
     else
-      @PERMISSIONS = ["Rollback"]
+      @PERMISSIONS = ["AWB"]
     end
 
     start
@@ -142,10 +142,21 @@ module PermClerk
 
     return false unless formattingCheck(oldWikitext)
 
+    # first make fixes to confirm to what splitKey looks for
+    oldWikitext.gsub!(/\*\s+{{AWBUser\|/, "*{{AWBUser|")
+    oldWikitext.gsub(/\=\=\=\=\s+\[\[User:/,"====[[User:")
+
     sections = oldWikitext.split(@splitKey)
     newWikitext << sections.shift
 
     sections.each do |section|
+      botSection = ""
+      if @permission == "AWB"
+        botSplit = section.split(/====\s*Bots/i)
+        section = botSplit[0]
+        botSection = "==== Bots"+botSplit[1] if botSplit[1]
+      end
+
       requestChanges = []
 
       if @permission == "AWB"
@@ -155,7 +166,7 @@ module PermClerk
       end
 
       if !userName || userName == "username" || userName == "bot username"
-        newWikitext << @splitKey + section
+        newWikitext << @splitKey + section + botSection
         next
       end
 
@@ -189,7 +200,9 @@ module PermClerk
         end
       end
 
-      # FIXME: make "archivenow" and "override" work!! (override should not say "requesting immediate archiving", only archivenow should)
+      shouldArchiveNow = section.match(/\{\{User:MusikBot\/archivenow\}\}/)
+
+      # FIXME: make "archivenow" work!! (override should not say "requesting immediate archiving", only archivenow should)
       # <ARCHIVING>
       if resolution && @config["archive"] && resolutionDate.nil?
         error("    User:#{userName}: Resolution template not dated")
@@ -198,8 +211,12 @@ module PermClerk
           message: "User:#{userName} - Resolution template not dated"
         }
         next
-      elsif resolution && @config["archive"] && (section.match(/\{\{User:MusikBot\/archivenow\}\}/) || parseDateTime(newestTimestamp) + Rational(@config["archive_offset"], 24) < currentTime)
-        info("  Time to archive!")
+      elsif resolution && @config["archive"] && (shouldArchiveNow || parseDateTime(newestTimestamp) + Rational(@config["archive_offset"], 24) < currentTime)
+        if shouldArchiveNow
+          info("  Found request for immediate archiving")
+        else
+          info("  Time to archive!")
+        end
 
         # XXX: is this used within this scope?
         permissionName = @permission == "AWB" ? "AutoWikiBrowser/CheckPage" : @permission
@@ -235,7 +252,7 @@ module PermClerk
                 "<code><nowiki>{{subst:User:MusikBot/override|nd}}</nowiki></code> to archive as declined"
             }
 
-            newWikitext = queueChanges(requestChanges, section, newWikitext)
+            newWikitext = queueChanges(requestChanges, section, newWikitext) + botSection
             next
           end
         end
@@ -253,21 +270,19 @@ module PermClerk
 
         @usersCount += 1
         @editSummaries << "archive#{resolutionPageName}".to_sym
-        # Make sure we don't wipe out the Bots heading for AWB page
-        # Otherwise, the absence of `newWikitext << @split + section` will remove the request from the page
-        if @permission == "AWB"
-          newWikitext << section.scan(/(\n\=\=\=\=\s*Bots.*)/m).flatten[0].to_s
-        end
+
+        newWikitext << botSection
+        # absence of newWikitext << @split + section == remove entry from page
         next
       end
       # </ARCHIVING>
 
       if resolution
         info("  #{userName}'s request already responded to")
-        newWikitext << @splitKey + section
+        newWikitext << @splitKey + section + botSection
       elsif section.match(/{{comment|Automated comment}}.*MusikBot/) && !shouldUpdatePrereqData
         info("  MusikBot has already commented on #{userName}'s request and no prerequisite data to update")
-        newWikitext << @splitKey + section
+        newWikitext << @splitKey + section + botSection
       else
         haveResponded = false
 
@@ -340,8 +355,8 @@ module PermClerk
         end
         # </AUTOFORMAT>
 
-        if !haveResponded && @permission != "Confirmed"
-          # <CHECK PREREQUISTES>
+        if !haveResponded && @permission != "Confirmed" && !userName.match(/bot$/)
+          # <PREREQUISTES>
           if @config["prerequisites"] && !prereqs.empty?
             if updatingPrereq = section.match(/&lt;!-- mb-\w*(?:Count|Age) --&gt;/)
               debug("  Checking if prerequisite update is needed...")
@@ -384,7 +399,7 @@ module PermClerk
               end
             end
           end
-          # </CHECK PREREQUISTES>
+          # </PREREQUISTES>
 
           # <FETCH DECLINED>
           if @config["fetchdeclined"] && !shouldUpdatePrereqData
@@ -411,14 +426,14 @@ module PermClerk
           # </FETCH DECLINED>
         end
 
-        newWikitext = queueChanges(requestChanges, section, newWikitext)
+        newWikitext = queueChanges(requestChanges, section, botSection, newWikitext)
       end
     end
 
     return editPermissionPage(CGI.unescapeHTML(newWikitext.join))
   end
 
-  def self.queueChanges(requestChanges, section, newWikitext)
+  def self.queueChanges(requestChanges, section, botSection, newWikitext)
     if requestChanges.length > 0
       info("***** Commentable data found *****")
       @usersCount += 1
@@ -430,15 +445,14 @@ module PermClerk
       else
         newSection += messageCompiler(requestChanges)
       end
-      newWikitext << newSection
+      newWikitext << newSection + botSection
     else
       info("  ~~ No commentable data found ~~")
-      return newWikitext << @splitKey + section
+      newWikitext << @splitKey + section + botSection
     end
   end
 
   def self.archiveRequests
-    # FIXME: make sure this and the other tasks can operate on the Bots section
     return nil unless @archiveChanges.length > 0
 
     numRequests = @archiveChanges.values.flatten.length
@@ -581,7 +595,6 @@ module PermClerk
       content = "<span style='color:green; font-weight:bold'>No errors!</span> Report generated at ~~~~~"
     end
 
-    # FIXME: only generate report after other actions have been taken (and it's been X amount of time since last report)
     @editThrottle = 0
     info("Updating report...")
     unless editPage("User:MusikBot/PermClerk/Report", content, "Updating [[User:MusikBot/PermClerk|PermClerk]] report")

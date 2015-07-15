@@ -70,7 +70,7 @@ for configPage in configPages
     config["autorespond"] = false
     config["autoformat"] = false
     config["fetchdeclined"] = false
-    config["prerequisites"] = false
+    config["prerequisites"] = true
   end
 end
 
