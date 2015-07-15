@@ -1,7 +1,11 @@
+$LOAD_PATH << '.'
+
 module PermClerk
+  require 'db_fetch.rb'
   require 'date'
   require 'pry'
   require 'logger'
+  require 'mysql'
 
   @logger = Logger.new("perm_clerk.log")
   @logger.level = Logger::DEBUG
