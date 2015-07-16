@@ -631,6 +631,8 @@ module PermClerk
       archiveMsg = archiveMsg.join(", ")
     end
 
+    plural = @usersCount > 1
+
     fixes << "archiving (#{archiveMsg})" if approved.to_i + denied.to_i > 0
     fixes << "marked request as already done" if @editSummaries.include?(:autorespond)
     fixes << "repaired malformed request#{'s' if plural}" if @editSummaries.include?(:autoformat)
@@ -649,8 +651,6 @@ module PermClerk
       @permEditThrottle += 1
 
       info("Attempting to write to page [[#{@pageName}]]")
-
-      plural = @usersCount > 1
 
       # attempt to save
       begin
