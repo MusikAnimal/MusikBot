@@ -8,7 +8,9 @@ config = {}
 config[:env] = eval(File.open("env").read)
 
 MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
-mw = MediaWiki::Gateway.new("https://#{config[:env] == :production ? "en" : "test"}.wikipedia.org/w/api.php")
+mw = MediaWiki::Gateway.new("https://#{config[:env] == :production ? "en" : "test"}.wikipedia.org/w/api.php", {
+  bot: true
+})
 Auth.login(mw)
 
 # refresh randomized infobox image, just for fun :)
