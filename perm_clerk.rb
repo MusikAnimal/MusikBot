@@ -218,9 +218,6 @@ module PermClerk
           info("  Time to archive!")
         end
 
-        # XXX: is this used within this scope?
-        permissionName = @permission == "AWB" ? "AutoWikiBrowser/CheckPage" : @permission
-
         # if we're archiving as done, check if they have the said permission and act accordingly (skip if overriding resolution)
         if resolution == "done" && !overridenResolution
           userInfo = getUserInfo(userName)
@@ -757,7 +754,7 @@ module PermClerk
       }
 
       return @userInfoCache[userName] = userInfo
-    rescue => e
+    rescue
       error("Unable to fetch user info for #{userName}") and return false
     end
   end
@@ -799,9 +796,9 @@ module PermClerk
       str += commentIndent + COMMENT_PREFIX + "This user "
     end
 
-    requestData.each_with_index do |data, index|
+    requestData.each_with_index do |data, i|
       type = data.delete(:type).to_sym
-      str = str.chomp(", ") + " and " if index == requestData.length - 1 && requestData.length > 1
+      str = str.chomp(", ") + " and " if i == requestData.length - 1 && requestData.length > 1
       str += getMessage(type, data) + ", "
     end
 
