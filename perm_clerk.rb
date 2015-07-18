@@ -609,7 +609,7 @@ module PermClerk
       newWikitext.gsub!(/\{\{no\s*admin\s*backlog(?:\|bot=MusikBot)?\}\}/, "{{admin backlog|bot=MusikBot}}")
       @editSummaries << :adminBacklog if backlogChange = !adminBacklog
     else
-      requestCountMsg = "list is clear"
+      requestCountMsg = "0 open requests remaining"
       newWikitext.gsub!(/\{\{admin\s*backlog(?:\|bot=MusikBot)?\}\}/, "{{no admin backlog|bot=MusikBot}}")
       @editSummaries << :noAdminBacklog if backlogChange = adminBacklog
     end
