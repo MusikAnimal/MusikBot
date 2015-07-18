@@ -18,7 +18,19 @@ module DbFetch
       "WP:REFILL"                                   # reFill
     ]
 
-    res = client.query("SELECT count(*) FROM enwiki_p.revision_userindex WHERE rev_user_text=\"#{userName}\" " +
-      "AND rev_comment rlike \"#{toolRegexes.join("|")}\"").fetch_row[0].to_i
+    client.query("SELECT count(*) FROM enwiki_p.revision_userindex WHERE rev_user_text=\"#{userName}\" " +
+      "AND rev_comment rlike \"#{toolRegexes.join("|")}\""
+    ).fetch_row[0].to_i
+  end
+
+  def self.countArticlesCreated(userName)
+    res = client.query("SELECT page_title, rev_timestamp as timestamp FROM enwiki_p.page JOIN revision_userindex on page_id = rev_page " +
+      "WHERE rev_user_text = \"#{userName}\" and rev_timestamp > 1 AND rev_parent_id = \"0\" AND page_namespace = \"0\" AND page_is_redirect = \"0\";")
+    articles = []
+    res.each_hash do |result|
+      result["timestamp"] = DateTime.parse(result["timestamp"])
+      articles << result
+    end
+    articles
   end
 end
