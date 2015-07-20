@@ -1,11 +1,7 @@
-$LOAD_PATH << '.'
-
 module PermClerk
-  require 'db_fetch.rb'
   require 'date'
   require 'pry'
   require 'logger'
-  require 'mysql'
 
   @logger = Logger.new("perm_clerk.log")
   @logger.level = Logger::DEBUG
@@ -59,7 +55,7 @@ module PermClerk
         "Template editor"
       ]
     else
-      @PERMISSIONS = ["AWB"]
+      @PERMISSIONS = ["AWB", "Rollback"]
     end
 
     start
@@ -206,7 +202,6 @@ module PermClerk
 
       shouldArchiveNow = section.match(/\{\{User:MusikBot\/archivenow\}\}/)
 
-      # FIXME: make "archivenow" work!! (override should not say "requesting immediate archiving", only archivenow should)
       # <ARCHIVING>
       if resolution && @config["archive"] && resolutionDate.nil?
         error("    User:#{userName}: Resolution template not dated")
@@ -227,8 +222,6 @@ module PermClerk
           userInfo = getUserInfo(userName)
 
           # make sure they have the permission
-          # TODO: TEST THIS! make sure this works as expected when they have 'autoreviewer' representative of 'autopatrolled'
-          #   also for (auto)confirmed and massmessage-sender
           # TODO: actually check the checkpage to see if they've been added
           if @permission != "AWB"
             hasPermission = userInfo[:userGroups].grep(/#{PERMISSION_KEYS[@permission]}/).length > 0
@@ -483,7 +476,7 @@ module PermClerk
       @archiveChanges[key].each do |request|
         # monthName = Date::MONTHNAMES[request[:date].month]
         editSummary += " #{request[:userName]} (#{request[:permission].downcase});"
-        archivePageName = @permission == "AWB" ? "Wikipedia talk:AutoWikiBrowser/CheckPage" : "Wikipedia:Requests for permissions/#{request[:permission]}"
+        archivePageName = request[:permission] == "AWB" ? "Wikipedia talk:AutoWikiBrowser/CheckPage" : "Wikipedia:Requests for permissions/#{request[:permission]}"
         linkMarkup = "*{{Usercheck-short|#{request[:userName]}}} [[#{archivePageName}]] " +
           "<sup>[http://en.wikipedia.org/wiki/Special:PermaLink/#{request[:revisionId]}#User:#{request[:userName].gsub(" ","_")} link]</sup>"
 
