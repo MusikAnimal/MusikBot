@@ -246,7 +246,7 @@ module PermClerk
                 "<code><nowiki>{{subst:User:MusikBot/override|nd}}</nowiki></code> to archive as declined"
             }
 
-            newWikitext = queueChanges(requestChanges, section, newWikitext) + botSection
+            newWikitext = queueChanges(requestChanges, section, botSection, newWikitext)
             next
           end
         end
