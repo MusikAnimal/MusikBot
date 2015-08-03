@@ -2,10 +2,15 @@ $LOAD_PATH << '.'
 
 require 'mediawiki-gateway'
 require 'auth.rb'
+require 'repl.rb'
 require 'perm_clerk.rb'
+require 'pry'
 
 config = {}
 config[:env] = eval(File.open("env").read)
+
+un,pw,db = Auth.dbCredentials(config[:env])
+replClient = Repl::Session.new(un,pw,db)
 
 MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
 mw = MediaWiki::Gateway.new("https://#{config[:env] == :production ? "en" : "test"}.wikipedia.org/w/api.php", {
@@ -14,7 +19,6 @@ mw = MediaWiki::Gateway.new("https://#{config[:env] == :production ? "en" : "tes
 Auth.login(mw)
 
 # refresh randomized infobox image, just for fun :)
-# FIXME: doesn't seem to work?? or doesn't update the lastrun properly...
 if config[:env] == :production
   begin
     runStatus = eval(File.open("lastrun", "r").read) rescue {}
@@ -68,7 +72,7 @@ for configPage in configPages
   end
 
   if config[:env] != :production
-    config["archive"] = true
+    config["archive"] = false
     config["autorespond"] = false
     config["autoformat"] = false
     config["fetchdeclined"] = false
@@ -77,7 +81,7 @@ for configPage in configPages
 end
 
 if config["run"]
-  PermClerk.init(mw, config)
+  PermClerk.init(mw, replClient, config)
 else
   logger.error("PermClerk disabled")
 end

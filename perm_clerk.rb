@@ -1,6 +1,5 @@
 module PermClerk
   require 'date'
-  require 'pry'
   require 'logger'
 
   @logger = Logger.new("perm_clerk.log")
@@ -32,9 +31,10 @@ module PermClerk
   @userInfoCache = {}
   @deniedCache = {}
 
-  def self.init(mw, config)
+  def self.init(mw, replClient, config)
     @mw = mw
     @config = config
+    @replClient = replClient
 
     if config[:env] == :production
       @PREREQ_EXPIRY = 90
@@ -55,7 +55,7 @@ module PermClerk
         "Template editor"
       ]
     else
-      @PERMISSIONS = ["AWB", "Rollback"]
+      @PERMISSIONS = ["Rollback"]
     end
 
     start
@@ -359,21 +359,17 @@ module PermClerk
             end
 
             sleep 1
-            userInfo = getUserInfo(userName)
+            userInfo = getUserInfo(userName, prereqs.keys)
 
             prereqs.each do |key, value|
-              pass = case key
-                when "accountAge"
-                  userInfo[:accountAge] >= value.to_i
-                when "articleCount"
-                  userInfo[:articleCount] >= value
-                when "editCount"
-                  userInfo[:editCount] >= value.to_i
-                when "mainspaceCount"
-                  userInfo[:mainspaceCount] >= value.to_i
-              end
+              pass = userInfo[key.to_sym] >= value rescue nil
 
-              if updatingPrereq
+              # TODO: special handling for template editor
+              # templateSpaceCount + moduleSpaceCount >= value
+
+              if pass.nil?
+                error("    failed to fetch prerequisite data: #{key}")
+              elsif updatingPrereq
                 prereqCountRegex = section.scan(/(&lt;!-- mb-#{key} --&gt;(.*)&lt;!-- mb-#{key}-end --&gt;)/)
                 prereqText = prereqCountRegex.flatten[0]
                 prereqCount = prereqCountRegex.flatten[1].to_i rescue 0
@@ -382,12 +378,12 @@ module PermClerk
                   section.gsub!(prereqText, "&lt;!-- mb-#{key} --&gt;#{userInfo[key.to_sym].to_i}&lt;!-- mb-#{key}-end --&gt;")
                   section.gsub!(prereqSignature, "~~~~")
 
-                  info("  Prerequisite data updated")
+                  info("    Prerequisite data updated")
                   requestChanges << { type: :prerequisitesUpdated }
                   @editSummaries << :prerequisitesUpdated
                 end
               elsif !pass
-                info("    Found unmet prerequisites")
+                info("    Found unmet prerequisite: #{key}")
                 requestChanges << { type: key }.merge(userInfo)
                 @editSummaries << :prerequisites
               end
@@ -615,6 +611,8 @@ module PermClerk
       info("Nothing to do this time around") and return true
     end
 
+    info("  updating {{adminbacklog}}") if backlogChange
+
     # get approved/denied counts
     approved = @editSummaries.count(:archiveApproved)
     denied = @editSummaries.count(:archiveDenied)
@@ -714,45 +712,61 @@ module PermClerk
     return @userLinksCache[userName] = links
   end
 
-  def self.getUserInfo(userName)
+  def self.getUserInfo(userName, *dataAttrs)
     begin
-      if @config["prerequisites"] && @config["prerequisites_config"].to_s.include?("mainspaceCount")
-        return @userInfoCache[userName] if @userInfoCache[userName] && @userInfoCache[userName][:mainspaceCount]
-        debug("  no cache hit for #{userName}")
-        query = @mw.custom_query(
-          list: "users|usercontribs",
-          ususers: userName,
-          ucuser: userName,
-          usprop: "groups|editcount|registration",
-          ucprop: "ids",
-          uclimit: 500,
-          ucnamespace: "0",
-          continue: ""
-        )
-      else
-        return @userInfoCache[userName] if @userInfoCache[userName]
-        query = @mw.custom_query(
+      prereqs = @config["prerequisites_config"]
+      dataAttrs = dataAttrs.flatten
+
+      # return cache if there's nothing new to fetch
+      if @userInfoCache[userName] && dataAttrs.select{|da| @userInfoCache[userName].keys.include?(da)}
+        debug("  cache hit for #{userName}")
+        return @userInfoCache[userName]
+      end
+
+      debug("  Fetching data for: #{dataAttrs.join(", ")}")
+
+      # get basic info if we haven't already and query the repl database as needed for other info
+      unless @userInfoCache[userName] && @userInfoCache[userName][:editCount]
+        apiQuery = @mw.custom_query(
           list: "users",
           ususers: userName,
           usprop: "groups|editcount|registration",
           continue: ""
         )
+        apiInfo = apiQuery[0][0].attributes
+        registrationDate = apiInfo["registration"] ? Date.parse(apiInfo["registration"]) : nil
+
+        @userInfoCache[userName] = {
+          accountAge: registrationDate ? (Date.today - registrationDate).to_i : 0,
+          editCount: apiInfo["editcount"].to_i,
+          registration: registrationDate,
+          userGroups: apiQuery[0][0][0].to_a.collect{|g| g[0].to_s}
+        }
       end
 
-      user = query[0][0].attributes
-      registrationDate = user['registration'] ? Date.parse(user['registration']) : nil
+      # don't start any queries gone wild
+      unless @userInfoCache[userName][:editCount] > 50000
+        dataAttrs.each do |dataAttr|
+          count = case dataAttr
+            when "articleCount"
+              @replClient.countArticlesCreated(userName)
+            when "moduleSpaceCount"
+              @replClient.countNamespaceEdits(userName, 828)
+            when "mainSpaceCount"
+              @replClient.countNamespaceEdits(userName, 0)
+            when "manualMainSpaceCount"
+              @replClient.countNonAutomatedNamespaceEdits(userName, 0)
+            when "templateSpaceCount"
+              @replClient.countNamespaceEdits(userName, 10)
+          end
+          @userInfoCache[userName].store(dataAttr.to_sym, count)
+        end
+        sleep 1
+      end
 
-      userInfo = {
-        accountAge: registrationDate ? (Date.today - registrationDate).to_i : 0,
-        editCount: user['editcount'].to_i,
-        mainspaceCount: query[1] ? query[1].length : 0,
-        registration: registrationDate,
-        userGroups: query[0][0][0].to_a.collect{|g| g[0].to_s}
-      }
-
-      return @userInfoCache[userName] = userInfo
+      return @userInfoCache[userName]
     rescue
-      error("Unable to fetch user info for #{userName}") and return false
+      error("  Unable to fetch user info for #{userName}") and return false
     end
   end
 
@@ -761,6 +775,8 @@ module PermClerk
     return case type
       when :accountAge
         "has had an account for <!-- mb-accountAge -->#{params[:accountAge]}<!-- mb-accountAge-end --> days"
+      when :articleCount
+        "has created roughly <!-- mb-articleCount -->#{params[:articleCount]}<!-- mb-articleCount-end --> [[WP:ARTICLE|article#{'s' if params[:articleCount] != 1}]]"
       when :autoformat
         "An extraneous header or other inappropriate text was removed from this request"
       when :autorespond
@@ -769,10 +785,16 @@ module PermClerk
         "has <!-- mb-editCount -->#{params[:editCount]}<!-- mb-editCount-end --> total edits"
       when :fetchdeclined
         "has had #{params[:numDeclined]} request#{'s' if params[:numDeclined].to_i > 1} for #{permissionName} declined in the past #{@config["fetchdeclined_offset"]} days (#{params[:declinedLinks]})"
-      when :mainspaceCount
-        "has <!-- mb-mainspaceCount -->#{params[:mainspaceCount] == 0 ? 0 : params[:mainspaceCount]}<!-- mb-mainspaceCount-end --> edit#{'s' if params[:mainspaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
+      when :mainSpaceCount
+        "has <!-- mb-mainSpaceCount -->#{params[:mainSpaceCount]}<!-- mb-mainSpaceCount-end --> edit#{'s' if params[:mainSpaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
+      when :manualMainSpaceCount
+        "has approximently <!-- mb-manualMainSpaceCount -->#{params[:manualMainSpaceCount]}<!-- mb-manualMainSpaceCount-end --> [[User:MusikBot/PermClerk/prerequisites/Nonautomated edits|non-automated]] edit#{'s' if params[:manualMainSpaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
+      when :moduleSpaceCount
+        "has <!-- mb-moduleSpaceCount -->#{params[:moduleSpaceCount]}<!-- mb-moduleSpaceCount-end --> edit#{'s' if params[:moduleSpaceCount] != 1} in the [[WP:LUA|module namespace]]"
       when :noSaidPermission
         "does not appear to have the permission <tt>#{params[:permission]}</tt><!-- mbNoPerm -->"
+      when :templateSpaceCount
+        "has <!-- mb-templateSpaceCount -->#{params[:templateSpaceCount]}<!-- mb-templateSpaceCount-end --> edit#{'s' if params[:templateSpaceCount] != 1} in the [[WP:TMP|template namespace]]"
     end
   end
 
