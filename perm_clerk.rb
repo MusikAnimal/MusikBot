@@ -368,7 +368,7 @@ module PermClerk
               # templateSpaceCount + moduleSpaceCount >= value
 
               if pass.nil?
-                error("    failed to fetch prerequisite data: #{key}")
+                error("      failed to fetch prerequisite data: #{key}")
               elsif updatingPrereq
                 prereqCountRegex = section.scan(/(&lt;!-- mb-#{key} --&gt;(.*)&lt;!-- mb-#{key}-end --&gt;)/)
                 prereqText = prereqCountRegex.flatten[0]
@@ -381,11 +381,15 @@ module PermClerk
                   info("    Prerequisite data updated")
                   requestChanges << { type: :prerequisitesUpdated }
                   @editSummaries << :prerequisitesUpdated
+                else
+                  debug("      Update not needed")
                 end
               elsif !pass
-                info("    Found unmet prerequisite: #{key}")
+                info("      Found unmet prerequisite: #{key}")
                 requestChanges << { type: key }.merge(userInfo)
                 @editSummaries << :prerequisites
+              else
+                info("      User meets criteria")
               end
             end
           end
@@ -723,7 +727,7 @@ module PermClerk
         return @userInfoCache[userName]
       end
 
-      debug("  Fetching data for: #{dataAttrs.join(", ")}")
+      debug("    Fetching data for: #{dataAttrs.join(", ")}")
 
       # get basic info if we haven't already and query the repl database as needed for other info
       unless @userInfoCache[userName] && @userInfoCache[userName][:editCount]
@@ -747,16 +751,16 @@ module PermClerk
       # don't start any queries gone wild
       unless @userInfoCache[userName][:editCount] > 50000
         dataAttrs.each do |dataAttr|
-          count = case dataAttr
-            when "articleCount"
+          count = case dataAttr.downcase
+            when "articlecount"
               @replClient.countArticlesCreated(userName)
-            when "moduleSpaceCount"
+            when "modulespacecount"
               @replClient.countNamespaceEdits(userName, 828)
-            when "mainSpaceCount"
+            when "mainspacecount"
               @replClient.countNamespaceEdits(userName, 0)
-            when "manualMainSpaceCount"
+            when "manualmainspacecount"
               @replClient.countNonAutomatedNamespaceEdits(userName, 0)
-            when "templateSpaceCount"
+            when "templatespacecount"
               @replClient.countNamespaceEdits(userName, 10)
           end
           @userInfoCache[userName].store(dataAttr.to_sym, count)
