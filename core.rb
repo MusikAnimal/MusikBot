@@ -9,8 +9,8 @@ require 'pry'
 config = {}
 config[:env] = eval(File.open("env").read)
 
-un,pw,db = Auth.dbCredentials(config[:env])
-replClient = Repl::Session.new(un,pw,db)
+un,pw,host,db,port = Auth.dbCredentials(config[:env])
+replClient = Repl::Session.new(un,pw,host,db,port)
 
 MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
 mw = MediaWiki::Gateway.new("https://#{config[:env] == :production ? "en" : "test"}.wikipedia.org/w/api.php", {

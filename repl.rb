@@ -3,13 +3,13 @@ module Repl
   class Session
     require 'mysql2'
 
-    def initialize(username, password, db)
+    def initialize(username, password, host, db, port)
       @client = Mysql2::Client.new(
-        host: "127.0.0.1",
+        host: host,
         username: username,
         password: password,
         database: db,
-        port: 4711
+        port: port
       )
       @db = db
     end
