@@ -822,7 +822,7 @@ module PermClerk
       when :mainSpaceCount
         "has <!-- mb-mainSpaceCount -->#{params[:mainSpaceCount]}<!-- mb-mainSpaceCount-end --> edit#{'s' if params[:mainSpaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
       when :manualMainSpaceCount
-        "has approximently <!-- mb-manualMainSpaceCount -->#{params[:manualMainSpaceCount]}<!-- mb-manualMainSpaceCount-end --> [[User:MusikBot/PermClerk/prerequisites/Non-automated edits|non-automated]] edit#{'s' if params[:manualMainSpaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
+        "has approximately <!-- mb-manualMainSpaceCount -->#{params[:manualMainSpaceCount]}<!-- mb-manualMainSpaceCount-end --> [[User:MusikBot/PermClerk/Prerequisites/Non-automated edits|non-automated]] edit#{'s' if params[:manualMainSpaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
       when :moduleSpaceCount
         "has <!-- mb-moduleSpaceCount -->#{params[:moduleSpaceCount]}<!-- mb-moduleSpaceCount-end --> edit#{'s' if params[:moduleSpaceCount] != 1} in the [[WP:LUA|module namespace]]"
       when :noSaidPermission
