@@ -71,18 +71,19 @@ module Repl
 
     def toolRegexes(index)
       tools = [
-        "^Reverted edits by .* \(talk\) to last version by .*", # Generic revert
-        "WP:HG",                                                # Huggle
-        "WP:TW",                                                # Twinkle
-        "WP:STiki",                                             # STiki
-        "Wikipedia:Igloo",                                      # Igloo
-        "Wikipedia:Tools\/Navigation_popups|popups",            # Popups
-        "WP:AFCH",                                              # AFCH
-        "Wikipedia:AWB|WP:AWB",                                 # AWB
-        "WP:CLEANER",                                           # WP Cleaner
-        "WP:HOTCAT|WP:HC",                                      # HotCat
-        "WP:REFILL",                                            # reFill
-        "User:Jfmantis/WikiPatroller"                           # WikiPatroller
+        "^Reverted edits by \\\\[\\\\[.*?\\\\|.*?\\\\]\\\\] \\\\(\\\\[\\\\[User talk:.*?\\\\|talk\\\\]\\\\]\\\\) to last version by .*", # Generic revert
+        "WP:HG",                                        # Huggle
+        "WP:TW",                                        # Twinkle
+        "WP:STiki",                                     # STiki
+        "Wikipedia:Igloo",                              # Igloo
+        "Wikipedia:Tools\\\\/Navigation_popups|popups", # Popups
+        "WP:AFCH",                                      # AFCH
+        "Wikipedia:AWB|WP:AWB",                         # AWB
+        "WP:CLEANER",                                   # WP Cleaner
+        "WP:HOTCAT|WP:HC",                              # HotCat
+        "WP:REFILL",                                    # reFill
+        "User:Jfmantis/WikiPatroller",                  # WikiPatroller
+        "Wikipedia:WP:FWDS|WP:FWDS"                     # User:Fox Wilson/delsort
       ]
       if index
         [tools[index]]

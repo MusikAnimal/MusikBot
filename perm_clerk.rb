@@ -360,7 +360,7 @@ module PermClerk
               if pass.nil?
                 recordError({
                   group: "prerequisites",
-                  message: "Failed to fetch data <tt>#{key}</t> for User:#{userName}",
+                  message: "Failed to fetch data <tt>#{key}</tt> for User:#{userName}",
                   logMessage: "      failed to fetch prerequisite data: #{key}"
                 })
               elsif pass
