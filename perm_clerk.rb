@@ -793,9 +793,12 @@ module PermClerk
             when "templatespacecount"
               @replClient.countNamespaceEdits(userName, 10)
           end
-          @userInfoCache[userName].store(dataAttr.to_sym, count)
+
+          if count
+            @userInfoCache[userName].store(dataAttr.to_sym, count)
+            sleep 1
+          end
         end
-        sleep 1
       end
 
       return @userInfoCache[userName]
