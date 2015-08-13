@@ -163,7 +163,8 @@ module PermClerk
 
       info("Checking section for User:#{userName}...")
 
-      userName.capitalize!.gsub!("_", " ")
+      userName.capitalize!
+      userName.gsub!("_", " ")
       # TODO: if capitalization happens, update page as part of autoformat task
 
       # XXX: shouldn't include MusikBot's timestamp now
