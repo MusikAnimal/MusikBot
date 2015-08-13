@@ -276,7 +276,7 @@ module PermClerk
         #       We still need this check individually as during the first pass it will be false so that all tasks run, including prereqs
 
         # <AUTORESPOND>
-        if @config["autorespond"] && !shouldUpdatePrereqData
+        if @config["autorespond"] && !shouldUpdatePrereqData && @permission == "Confirmed"
           debug("  Checking if #{userName} already has permission #{@permission}...")
 
           sleep 1
