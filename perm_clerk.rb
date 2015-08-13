@@ -163,7 +163,8 @@ module PermClerk
 
       info("Checking section for User:#{userName}...")
 
-      userName.gsub!("_", " ")
+      userName.gsub!("_", " ").capitalize!
+      # TODO: if capitalization happens, update page as part of autoformat task
 
       # XXX: shouldn't include MusikBot's timestamp now
       timestamps = section.scan(/(?<!&lt;!-- mbdate --&gt; )\d\d:\d\d.*\d{4} \(UTC\)/)
