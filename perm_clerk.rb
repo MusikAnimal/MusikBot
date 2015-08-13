@@ -752,12 +752,13 @@ module PermClerk
       dataAttrs = dataAttrs.flatten
 
       # return cache if there's nothing new to fetch
-      if @userInfoCache[userName] && dataAttrs.select{|da| @userInfoCache[userName].keys.include?(da)}
+      if @userInfoCache[userName] && dataAttrs.all?{|da| @userInfoCache[userName].keys.include?(da)}
         debug("  cache hit for #{userName}")
         return @userInfoCache[userName]
       end
 
-      debug("    Fetching data for: #{dataAttrs.join(", ")}")
+      dataFetchStr = dataAttrs.join(", ")
+      debug("    Fetching data for: #{dataFetchStr.length > 0 ? dataFetchStr : "basic info"}")
 
       # get basic info if we haven't already and query the repl database as needed for other info
       unless @userInfoCache[userName] && @userInfoCache[userName][:editCount]
