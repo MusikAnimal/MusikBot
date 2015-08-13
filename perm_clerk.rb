@@ -163,7 +163,7 @@ module PermClerk
 
       info("Checking section for User:#{userName}...")
 
-      userName.capitalize!
+      userName[0] = userName[0].capitalize
       userName.gsub!("_", " ")
       # TODO: if capitalization happens, update page as part of autoformat task
 
