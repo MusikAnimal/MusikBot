@@ -587,7 +587,7 @@ module PermClerk
 
   def self.reportErrors
     errorsDigest = Digest::MD5.hexdigest(@errors.values.join)
-    if @runStatus["report_errors"] != errorsDigest || parseDateTime(@runStatus["report"]) < currentTime - Rational(3, 24)
+    if @runStatus["report_errors"] != errorsDigest || parseDateTime(@runStatus["report"]) < currentTime - Rational(6, 24)
       unless generateReport
         @runStatus["report"] = currentTime.to_s
         @runStatus["report_errors"] = errorsDigest
