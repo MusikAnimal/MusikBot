@@ -72,10 +72,10 @@ for configPage in configPages
   end
 
   if config[:env] != :production
-    config["archive"] = true
+    config["archive"] = false
     config["autorespond"] = false
-    config["autoformat"] = true
-    config["fetchdeclined"] = true
+    config["autoformat"] = false
+    config["fetchdeclined"] = false
     config["prerequisites"] = true
   end
 end

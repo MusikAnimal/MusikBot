@@ -70,8 +70,11 @@ module Repl
     end
 
     def toolRegexes(index)
+      contribsLink = "\\\\[\\\\[Special:(Contribs|Contributions)\\\\/.*?\\\\|.*?\\\\]\\\\]"
       tools = [
-        "^Reverted edits by \\\\[\\\\[.*?\\\\|.*?\\\\]\\\\] \\\\(\\\\[\\\\[User talk:.*?\\\\|talk\\\\]\\\\]\\\\) to last version by .*", # Generic revert
+        "^Reverted edits by #{contribsLink} \\\\(\\\\[\\\\[User talk:.*?\\\\|talk\\\\]\\\\]\\\\) to last version by .*", # Generic revert
+        "^Undid revision \\\\d+ by #{contribsLink}",    # Undo
+        "^Reverted \\\\d+ pending edits? by #{contribsLink}", # Pending changes revert
         "WP:HG",                                        # Huggle
         "WP:TW",                                        # Twinkle
         "WP:STiki",                                     # STiki

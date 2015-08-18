@@ -54,7 +54,7 @@ module PermClerk
       ]
     else
       @PREREQ_EXPIRY = 0
-      @PERMISSIONS = ["Rollback"]
+      @PERMISSIONS = ["AWB"]
     end
 
     start
@@ -341,7 +341,7 @@ module PermClerk
         end
         # </AUTOFORMAT>
 
-        if !haveResponded && @permission != "Confirmed" && !userName.match(/bot$/)
+        if !haveResponded && @permission != "Confirmed" && !userName.downcase.match(/bot$/)
           # <PREREQUISTES>
           if @config["prerequisites"] && !prereqs.empty?
             if updatingPrereq = section.match(/&lt;!-- mb-\w*(?:Count|Age) --&gt;/)
@@ -777,7 +777,8 @@ module PermClerk
           accountAge: registrationDate ? (Date.today - registrationDate).to_i : 0,
           editCount: apiInfo["editcount"].to_i,
           registration: registrationDate,
-          userGroups: apiQuery[0][0][0].to_a.collect{|g| g[0].to_s}
+          userGroups: apiQuery[0][0][0].to_a.collect{|g| g[0].to_s},
+          userName: userName
         }
       end
 
@@ -828,7 +829,7 @@ module PermClerk
       when :mainSpaceCount
         "has <!-- mb-mainSpaceCount -->#{params[:mainSpaceCount]}<!-- mb-mainSpaceCount-end --> edit#{'s' if params[:mainSpaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
       when :manualMainSpaceCount
-        "has approximately <!-- mb-manualMainSpaceCount -->#{params[:manualMainSpaceCount]}<!-- mb-manualMainSpaceCount-end --> [[User:MusikBot/PermClerk/Prerequisites/Non-automated edits|non-automated]] edit#{'s' if params[:manualMainSpaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
+        "has approximately <!-- mb-manualMainSpaceCount -->#{params[:manualMainSpaceCount]}<!-- mb-manualMainSpaceCount-end --> [//tools.wmflabs.org/musikanimal/nonautomated_edits?username=#{params[:userName]}&offset=0&namespace=0&contribs=on non-automated edit#{'s' if params[:manualMainSpaceCount] != 1}] in the [[WP:MAINSPACE|mainspace]]"
       when :moduleSpaceCount
         "has <!-- mb-moduleSpaceCount -->#{params[:moduleSpaceCount]}<!-- mb-moduleSpaceCount-end --> edit#{'s' if params[:moduleSpaceCount] != 1} in the [[WP:LUA|module namespace]]"
       when :noSaidPermission
