@@ -38,7 +38,6 @@ module Repl
     end
 
     def countNonAutomatedNamespaceEdits(userName, namespace)
-      binding.pry
       @getter.get(@baseUri, {query: {
         username: userName,
         namespace: namespace,

@@ -356,9 +356,6 @@ module PermClerk
             prereqs.each do |key, value|
               pass = userInfo[key.to_sym] >= value rescue nil
 
-              # TODO: special handling for template editor
-              # templateSpaceCount + moduleSpaceCount >= value
-
               if pass.nil?
                 recordError({
                   group: "prerequisites",
