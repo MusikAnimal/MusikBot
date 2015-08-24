@@ -356,6 +356,8 @@ module PermClerk
             prereqs.each do |key, value|
               pass = userInfo[key.to_sym] >= value rescue nil
 
+              next if pass.nil? && userInfo[:editCount] > 50000
+
               if pass.nil?
                 recordError({
                   group: "prerequisites",
