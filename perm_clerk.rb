@@ -796,6 +796,8 @@ module PermClerk
               @replClient.countNonAutomatedNamespaceEdits(userName, 0)
             when "templatespacecount"
               @replClient.countNamespaceEdits(userName, 10)
+            when "templateandmodulespacecount"
+              @replClient.countNamespaceEdits(userName, [10, 828])
           end
 
           if count
@@ -836,6 +838,8 @@ module PermClerk
         "does not appear to have the permission <tt>#{params[:permission]}</tt><!-- mbNoPerm -->"
       when :templateSpaceCount
         "has <!-- mb-templateSpaceCount -->#{params[:templateSpaceCount]}<!-- mb-templateSpaceCount-end --> edit#{'s' if params[:templateSpaceCount] != 1} in the [[WP:TMP|template namespace]]"
+      when :templateAndModuleSpaceCount
+        "has <!-- mb-templateAndModuleSpaceCount -->#{params[:templateAndModuleSpaceCount]}<!-- mb-templateAndModuleSpaceCount-end --> edit#{'s' if params[:templateAndModuleSpaceCount] != 1} in the [[WP:TMP|template]] and [[WP:LUA|module]] namespaces"
     end
   end
 

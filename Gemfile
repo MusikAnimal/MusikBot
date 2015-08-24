@@ -4,3 +4,4 @@ gem 'mediawiki-gateway', github: 'MusikAnimal/mediawiki-gateway', branch: 'maste
 gem 'pry'
 gem 'unicode'
 gem 'mysql2'
+gem 'httparty'

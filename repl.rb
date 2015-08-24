@@ -2,6 +2,7 @@ module Repl
 
   class Session
     require 'mysql2'
+    require 'httparty'
 
     def initialize(username, password, host, db, port)
       @client = Mysql2::Client.new(
@@ -12,6 +13,8 @@ module Repl
         port: port
       )
       @db = db
+      @getter = HTTParty
+      @baseUri = 'https://tools.wmflabs.org/musikanimal/api/nonautomated_edits'
     end
 
     def countArticlesCreated(userName)
@@ -20,28 +23,28 @@ module Repl
         "AND page_namespace = 0 AND page_is_redirect = 0;")
     end
 
-    def countAutomatedEdits(userName, nonAutomated = false, tool = nil)
-      count("SELECT count(*) FROM #{@db}.revision_userindex WHERE rev_user_text=\"#{userName}\" " +
-        "AND rev_comment#{" NOT" if nonAutomated} RLIKE \"#{toolRegexes(tool).join("|")}\";")
-    end
-
-    def countAutomatedNamespaceEdits(userName, namespace, nonAutomated = false, tool = nil)
-      count("SELECT count(*) FROM #{@db}.page JOIN #{@db}.revision_userindex ON page_id = rev_page " +
-        "WHERE rev_user_text = \"#{userName}\" AND page_namespace = #{namespace} " +
-        "AND rev_comment#{" NOT" if nonAutomated} RLIKE \"#{toolRegexes(tool).join("|")}\";")
-    end
-
     def countNamespaceEdits(userName, namespace = 0)
+      namespaceStr = namespace.is_a?(Array) ? "IN (#{namespace.join(',')})" : "= #{namespace}"
       count("SELECT count(*) FROM #{@db}.page JOIN #{@db}.revision_userindex ON page_id = rev_page " +
-        "WHERE rev_user_text = \"#{userName}\" AND page_namespace = #{namespace};")
+        "WHERE rev_user_text = \"#{userName}\" AND page_namespace #{namespaceStr};")
     end
 
     def countNonAutomatedEdits(userName)
-      countAutomatedEdits(userName, true)
+      @getter.get(@baseUri, {query: {
+        username: userName,
+        redirects: "on",
+        moves: "on"
+      }})["nonautomated_count"]
     end
 
     def countNonAutomatedNamespaceEdits(userName, namespace)
-      countAutomatedNamespaceEdits(userName, namespace, true)
+      binding.pry
+      @getter.get(@baseUri, {query: {
+        username: userName,
+        namespace: namespace,
+        redirects: "on",
+        moves: "on"
+      }})["nonautomated_count"]
     end
 
     def countToolEdits(userName, tool)
@@ -67,32 +70,6 @@ module Repl
     def count(query)
       puts query
       @client.query(query).first.values[0].to_i
-    end
-
-    def toolRegexes(index)
-      contribsLink = "\\\\[\\\\[Special:(Contribs|Contributions)\\\\/.*?\\\\|.*?\\\\]\\\\]"
-      tools = [
-        "^Reverted edits by #{contribsLink} \\\\(\\\\[\\\\[User talk:.*?\\\\|talk\\\\]\\\\]\\\\) to last version by .*", # Generic revert
-        "^Undid revision \\\\d+ by #{contribsLink}",    # Undo
-        "^Reverted \\\\d+ pending edits? by #{contribsLink}", # Pending changes revert
-        "WP:HG",                                        # Huggle
-        "WP:TW",                                        # Twinkle
-        "WP:STiki",                                     # STiki
-        "Wikipedia:Igloo",                              # Igloo
-        "Wikipedia:Tools\\\\/Navigation_popups|popups", # Popups
-        "WP:AFCH",                                      # AFCH
-        "Wikipedia:AWB|WP:AWB",                         # AWB
-        "WP:CLEANER",                                   # WP Cleaner
-        "WP:HOTCAT|WP:HC",                              # HotCat
-        "WP:REFILL",                                    # reFill
-        "User:Jfmantis/WikiPatroller",                  # WikiPatroller
-        "Wikipedia:WP:FWDS|WP:FWDS"                     # User:Fox Wilson/delsort
-      ]
-      if index
-        [tools[index]]
-      else
-        tools
-      end
     end
   end
 
