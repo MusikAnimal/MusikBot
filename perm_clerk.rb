@@ -279,6 +279,7 @@ module PermClerk
         if @config["autorespond"] && !shouldUpdatePrereqData && @permission == "Confirmed"
           debug("  Checking if #{userName} already has permission #{@permission}...")
 
+          # TODO: check for sysop on AWB requests
           sleep 1
           if userInfo = getUserInfo(userName)
             if userInfo[:userGroups].include?(PERMISSION_KEYS[@permission])

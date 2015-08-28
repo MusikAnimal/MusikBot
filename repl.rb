@@ -40,9 +40,7 @@ module Repl
     def countNonAutomatedNamespaceEdits(userName, namespace)
       @getter.get(@baseUri, {query: {
         username: userName,
-        namespace: namespace,
-        redirects: "on",
-        moves: "on"
+        namespace: namespace
       }})["nonautomated_count"]
     end
 
