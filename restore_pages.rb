@@ -27,6 +27,7 @@ module RestorePages
 
   pages.each_with_index do |page, index|
     puts "Restoring #{index + 1} out of #{pages.length} pages: #{page}"
+    sleep 0.2
     begin
       delResp = mw.send(:send_request, {
         action: "undelete",
