@@ -54,7 +54,7 @@ module PermClerk
       ]
     else
       @PREREQ_EXPIRY = 0
-      @PERMISSIONS = ["AWB"]
+      @PERMISSIONS = ["Rollback"]
     end
 
     start
@@ -167,7 +167,6 @@ module PermClerk
       userName.gsub!("_", " ")
       # TODO: if capitalization happens, update page as part of autoformat task
 
-      # XXX: shouldn't include MusikBot's timestamp now
       timestamps = section.scan(/(?<!&lt;!-- mbdate --&gt; )\d\d:\d\d.*\d{4} \(UTC\)/)
       newestTimestamp = timestamps.min {|a,b| parseDateTime(b) <=> parseDateTime(a)}
       if overridenResolution = section.match(/\{\{User:MusikBot\/override\|d\}\}/i) ? "done" : section.match(/\{\{User:MusikBot\/override\|nd\}\}/i) ? "notdone" : false
@@ -221,9 +220,11 @@ module PermClerk
           end
 
           if section.include?("&gt;&lt;!-- mbNoPerm --&gt;")
-            warn("    MusikBot already reported that #{userName} does not have the permission #{@permission}")
-            newWikitext << @splitKey + section
-            next
+            unless hasPermission
+              warn("    MusikBot already reported that #{userName} does not have the permission #{@permission}")
+              newWikitext << @splitKey + section
+              next
+            end
           elsif !hasPermission && @permission != "AWB"
             requestChanges << {
               type: :noSaidPermission,
@@ -282,7 +283,7 @@ module PermClerk
           # TODO: check for sysop on AWB requests
           sleep 1
           if userInfo = getUserInfo(userName)
-            if userInfo[:userGroups].include?(PERMISSION_KEYS[@permission])
+            if userInfo[:userGroups].grep(/#{PERMISSION_KEYS[@permission]}/).length > 0
               info("    Found matching user group")
               requestChanges << {
                 type: :autorespond,
@@ -290,6 +291,7 @@ module PermClerk
                 resolution: "{{already done}}"
               }
               haveResponded = true
+              @numOpenRequests -= 1
               @editSummaries << :autorespond
             end
           end
