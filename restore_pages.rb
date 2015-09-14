@@ -20,14 +20,25 @@ module RestorePages
 
   revResp = mw.custom_query({
     list: "deletedrevs",
-    titles: "User_talk:192.0.2.1",
+    titles: pages.first,
     drprop: "token"
   })
   token = revResp[2][0].attributes["token"]
 
   pages.each_with_index do |page, index|
     puts "Restoring #{index + 1} out of #{pages.length} pages: #{page}"
-    sleep 0.2
+
+    logEvents = mw.custom_query({
+      list: "logevents",
+      letype: "delete",
+      letitle: page
+    })
+    if logEvents[0].length > 1
+      puts "  Skipping as there are multiple entries in the deletion log"
+      next
+    end
+
+    sleep 5
     begin
       delResp = mw.send(:send_request, {
         action: "undelete",
