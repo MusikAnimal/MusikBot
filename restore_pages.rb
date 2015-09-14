@@ -18,12 +18,7 @@ module RestorePages
   pages = source_page.split("\n").collect{|p| p.scan(/\[\[:(.*)\]\]/).flatten[0]}
   pages.delete_at(0)
 
-  revResp = mw.custom_query({
-    list: "deletedrevs",
-    titles: pages.first,
-    drprop: "token"
-  })
-  token = revResp[2][0].attributes["token"]
+  token = mw.custom_query({meta: "tokens"})[0].attributes["csrftoken"]
 
   pages.each_with_index do |page, index|
     puts "Restoring #{index + 1} out of #{pages.length} pages: #{page}"
