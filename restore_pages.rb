@@ -6,6 +6,7 @@ module RestorePages
   require 'pry'
 
   env = eval(File.open("env").read)
+  skipped_pages = File.open("skipped_pages", "w")
 
   MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
   mw = MediaWiki::Gateway.new("https://#{env == :production ? "en" : "test"}.wikipedia.org/w/api.php", {
@@ -30,6 +31,7 @@ module RestorePages
     })
     if logEvents[0].length > 1
       puts "  Skipping as there are multiple entries in the deletion log"
+      skipped_pages.write("#{page}\n")
       next
     end
 
