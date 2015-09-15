@@ -21,7 +21,7 @@ module RestorePages
 
   token = mw.custom_query({meta: "tokens"})[0].attributes["csrftoken"]
 
-  pages.each_with_index do |page, index|
+  pages[50..2524].each_with_index do |page, index|
     puts "Restoring #{index + 1} out of #{pages.length} pages: #{page}"
 
     logEvents = mw.custom_query({
@@ -29,6 +29,7 @@ module RestorePages
       letype: "delete",
       letitle: page
     })
+
     if logEvents[0].length > 1
       puts "  Skipping as there are multiple entries in the deletion log"
       skipped_pages.write("#{page}\n")
@@ -40,7 +41,7 @@ module RestorePages
       delResp = mw.send(:send_request, {
         action: "undelete",
         title: page,
-        reason: "Restoring deleted revisions of user talk page",
+        reason: "Restoring deleted revisions of user talk page, see [[Wikipedia:Bots/Requests for approval/MusikBot 3]]",
         token: token
       })
     rescue => e
