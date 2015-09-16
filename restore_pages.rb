@@ -21,8 +21,8 @@ module RestorePages
 
     token = @mw.custom_query({meta: "tokens"})[0].attributes["csrftoken"]
 
-    pages[0..2499].each_with_index do |page, index|
-      puts "Restoring #{index + 1} out of #{pages.length} pages: #{page}"
+    pages[470..2499].each_with_index do |page, index|
+      puts "Restoring #{index + 471} out of #{pages.length} pages: #{page}"
 
       logEvents = @mw.custom_query({
         list: "logevents",
@@ -32,27 +32,27 @@ module RestorePages
 
       if logEvents[0].length > 1
         puts "  Skipping as there are multiple entries in the deletion log"
-        skipped_pages.write("#{page}\n")
-        next
+        skipped_pages.write("#{page}\n") and next
       end
 
       sleep 4
       begin
-        @throttle = 0
+        @undeleteThrottle = 0
         undelete(page, token)
         sleep 1
-        content = @mw.get(page)
-        if !content.is_a?(String)
-          sleep 2
-          content = @mw.get(page)
-        end
 
-        if @mw.get(page).length == 0
-          @mw.edit(page, CGI.unescapeHTML("{{OW}}"), {
-            contentformat: "text/x-wiki",
-            summary: "Adding {{OW}}: Previous talk page content available in page history",
-            text: "{{OW}}"
-          })
+        @fetchThrottle = 0
+        if content = getPageContent(page)
+          if @mw.get(page).length == 0
+            @mw.edit(page, CGI.unescapeHTML("{{OW}}"), {
+              contentformat: "text/x-wiki",
+              summary: "Adding {{OW}}: Previous talk page content available in page history",
+              text: "{{OW}}"
+            })
+          end
+        else
+          puts "  Failed to fetch page #{page}, skipping..."
+          skipped_pages.write("#{page}\n") and next
         end
       rescue => e
         puts "Something went wrong!!! Error: #{e}\nAborting..."
@@ -60,9 +60,27 @@ module RestorePages
     end
   end
 
+  def self.getPageContent(page)
+    @fetchThrottle += 1
+    if @fetchThrottle > 3
+      puts "fetch throttle hit"
+      return false
+    end
+
+    content = @mw.get(page)
+
+    unless content.is_a?(String)
+      puts "fetch attempt ##{@fetchThrottle+1}"
+      sleep 2
+      return getPageContent(page)
+    end
+
+    content
+  end
+
   def self.undelete(page, token)
-    @throttle += 1
-    if @throttle > 3
+    @undeleteThrottle += 1
+    if @undeleteThrottle > 3
       puts "throttle hit, aborting..."
       exit 1
     end
