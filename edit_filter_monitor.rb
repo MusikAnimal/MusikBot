@@ -67,7 +67,7 @@ module EditFilterMonitor
       saved_filter = normalize_data(saved_filters[index]) rescue {}
       id = current_filter['id'].to_s
 
-      %w(description actions enabled deleted private).each do |prop|
+      comparison_props.each do |prop|
         # || 0 to account for nil when deleted/private are not in filter object
         old_value = saved_filter[prop]
         new_value = current_filter[prop]
@@ -102,8 +102,14 @@ module EditFilterMonitor
       net_changes.each do |filter_id, change_set|
         new_str = change_set['new'] ? " '''(new)'''" : ''
         content += ";[[Special:AbuseFilter/#{filter_id}|Filter #{filter_id}]]#{new_str}\n"
-        content += %w(description actions enabled deleted private).collect { |t| entry_str(t, change_set[t]) }.join("\n").gsub(/\n+$/, "\n")
-        content += "\n:Last changed by {{no ping|#{change_set['lasteditor']}}} at #{change_set['lastedittime']}\n"
+        content += comparison_props.collect { |prop| entry_str(prop, change_set[prop]) }.join("\n").gsub(/^\n+/, '').gsub(/\n+$/, '')
+
+        next unless config['lasteditor'] || config['lastedittime']
+
+        content += "\n:Last changed"
+        content += " by {{no ping|#{change_set['lasteditor']}}}" if config['lasteditor']
+        content += " at #{change_set['lastedittime']}" if config['lastedittime']
+        content += "\n"
       end
     else
       # XXX: issue report if there are no changes?
@@ -135,6 +141,14 @@ module EditFilterMonitor
 
     keywords.reverse if after == '0'
     "* #{title}: " + (before.nil? ? keywords.last : "#{keywords.first} &rarr; #{keywords.last}\n")
+  end
+
+  def self.config
+    @config ||= JSON.parse(CGI.unescapeHTML(@mw.get('User:MusikBot/FilterMonitor/config.js')))
+  end
+
+  def self.comparison_props
+    config.select { |_k, v| v }.keys - %w(lasteditor lastedittime)
   end
 
   def self.current_filters
