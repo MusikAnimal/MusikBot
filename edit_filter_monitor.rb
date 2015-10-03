@@ -1,20 +1,3 @@
-# {
-#   45: {
-#     prop: [old_value, new_value],
-#     prop2: [old_value, new_value],
-#     lasteditor: 'MusikAnimal',
-#     lastedittime: '1970-01-01 00:00:00'
-#   }
-# }
-
-# id            INTEGER
-# filter_id     INTEGER
-# actions       STRING
-# lasteditor    STRING
-# lastedittime  DATE
-# deleted       BOOLEAN
-# private       BOOLEAN
-
 $LOAD_PATH << '.'
 require 'mysql2'
 require 'mediawiki-gateway'
@@ -42,8 +25,10 @@ module EditFilterMonitor
     Auth.login(@mw)
 
     env = eval(File.open('env').read)
-    un, pw, host, db, port = Auth.ef_db_credentials(env)
 
+    exit 1 unless @mw.get('User:MusikBot/FilterMonitor/Run') == 'true' || env == :test
+
+    un, pw, host, db, port = Auth.ef_db_credentials(env)
     @client = Mysql2::Client.new(
       host: host,
       username: un,
@@ -51,8 +36,6 @@ module EditFilterMonitor
       database: db,
       port: port
     )
-
-    @noticeboard_path = env == :production ? 'Wikipedia:Edit filter noticeboard' : 'User:MusikBot/FilterMonitor/Edit filter noticeboard'
 
     changes = filter_changes
     generate_report(changes)
@@ -181,17 +164,17 @@ module EditFilterMonitor
   end
 
   def self.issue_report(content, net_changes)
-    error('Failed to write to noticeboard') unless post_to_noticeboard(content, net_changes)
+    # error('Failed to write to noticeboard') unless post_to_noticeboard(content, net_changes)
     error('Failed to write to template') unless update_template(content, net_changes)
   end
 
-  def self.post_to_noticeboard(content, net_changes)
-    edit_page(@noticeboard_path, net_changes,
-      text: content,
-      section: 'new',
-      sectiontitle: 'Recent filter changes'
-    )
-  end
+  # def self.post_to_noticeboard(content, net_changes)
+  #   edit_page(@noticeboard_path, net_changes,
+  #     text: content,
+  #     section: 'new',
+  #     sectiontitle: "Recent filter changes: #{Date.today.strftime('%e %B, %Y')}"
+  #   )
+  # end
 
   def self.update_template(content, net_changes)
     edit_page('User:MusikBot/FilterMonitor/Recent changes', net_changes, text: content)
