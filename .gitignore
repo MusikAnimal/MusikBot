@@ -4,3 +4,5 @@ auth.rb
 TODO
 env
 lastrun
+.bundle
+.ruby-version
