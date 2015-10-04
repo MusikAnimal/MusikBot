@@ -57,8 +57,7 @@ module SoundSearch
         begin
           new_composer_files = HTTParty.get(search_endpoint, {
             query: {
-              composer: composer,
-              list: 'unused'
+              composer: composer
             },
             timeout: 600
           })['files']
