@@ -206,10 +206,10 @@ module EditFilterMonitor
     opts = {
       contentformat: 'text/x-wiki',
       summary: 'Reporting FilterMonitor errors',
-      text: message
+      text: message + ' ~~~~~'
     }
 
-    @mw.edit('User:MusikBot/FilterMonitor/Report', message, opts)
+    @mw.edit('User:MusikBot/FilterMonitor/Error log', message, opts)
   rescue MediaWiki::APIError
     report_error(message, throttle + 1)
   end
