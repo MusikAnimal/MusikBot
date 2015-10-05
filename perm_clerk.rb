@@ -1,6 +1,7 @@
 module PermClerk
   require 'date'
   require 'logger'
+  require 'uri'
 
   COMMENT_INDENT = "\n::"
   AWB_COMMENT_INDENT = "\n*:"
@@ -833,7 +834,7 @@ module PermClerk
     when :mainSpaceCount
       "has <!-- mb-mainSpaceCount -->#{params[:mainSpaceCount]}<!-- mb-mainSpaceCount-end --> edit#{'s' if params[:mainSpaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
     when :manualMainSpaceCount
-      "has approximately <!-- mb-manualMainSpaceCount -->#{params[:manualMainSpaceCount]}<!-- mb-manualMainSpaceCount-end --> [//tools.wmflabs.org/musikanimal/nonautomated_edits?username=#{params[:username]}&offset=0&namespace=0&contribs=on&tools=on non-automated edit#{'s' if params[:manualMainSpaceCount] != 1}] in the [[WP:MAINSPACE|mainspace]]"
+      "has approximately <!-- mb-manualMainSpaceCount -->#{params[:manualMainSpaceCount]}<!-- mb-manualMainSpaceCount-end --> [//tools.wmflabs.org/musikanimal/nonautomated_edits?username=#{URI.escape(params[:username])}&offset=0&namespace=0&contribs=on&tools=on non-automated edit#{'s' if params[:manualMainSpaceCount] != 1}] in the [[WP:MAINSPACE|mainspace]]"
     when :moduleSpaceCount
       "has <!-- mb-moduleSpaceCount -->#{params[:moduleSpaceCount]}<!-- mb-moduleSpaceCount-end --> edit#{'s' if params[:moduleSpaceCount] != 1} in the [[WP:LUA|module namespace]]"
     when :noSaidPermission
