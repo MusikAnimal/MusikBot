@@ -7,7 +7,8 @@ require 'pry'
 
 MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
 
-NUM_DAYS = 7
+NUM_DAYS = 5
+TEMPLATE = 'User:MusikBot/FilterMonitor/Recent changes'
 
 class Object
   def present?
@@ -39,6 +40,8 @@ module EditFilterMonitor
 
     changes = filter_changes
     generate_report(changes)
+  rescue => e
+    report_error(e.message)
   end
 
   def self.filter_changes
@@ -80,38 +83,39 @@ module EditFilterMonitor
   end
 
   def self.generate_report(net_changes)
-    content = ''
+    filter_list = []
     if net_changes.length > 0
       net_changes.each do |filter_id, change_set|
-        new_str = change_set['new'] ? " '''(new)'''" : ''
-        content += ";[[Special:AbuseFilter/#{filter_id}|Filter #{filter_id}]]#{new_str}\n"
-        content += comparison_props.collect { |prop| entry_str(prop, change_set[prop]) }.join("\n").gsub(/^\n+/, '').gsub(/\n+$/, '')
+        content = ''
+        new_str = change_set['new'] ? ' (new)' : ''
+        content += "'''[[Special:AbuseFilter/#{filter_id}|Filter #{filter_id}]]#{new_str}''' &mdash; "
+        content += comparison_props.collect { |prop| entry_str(prop, change_set[prop]) }.compact.join('; ')
 
         next unless config['lasteditor'] || config['lastedittime']
 
         content += "\n:Last changed"
         content += " by {{no ping|#{change_set['lasteditor']}}}" if config['lasteditor']
         content += " at #{change_set['lastedittime']}" if config['lastedittime']
-        content += "\n"
+        filter_list << content
       end
-    else
-      # XXX: issue report if there are no changes?
-      content += "No changes to edit filters in the past #{NUM_DAYS} days.\n"
     end
 
-    content += "\n~~~~\n"
+    filter_list += current_reported_filters
+    content = filter_list.join("\n") + "<!-- mb-end-filter-list -->\n'''[[Special:AbuseFilter/history|Full filter history]]''' ~~~~"
 
     issue_report(content, net_changes)
   end
 
   def self.entry_str(type, changes)
-    return '' unless changes
+    return nil unless changes
     before = changes[0]
     after = changes[1]
 
+    # FIXME: don't say "Deleted: present" when a new filter is created, instead let's do "Filter 123 (Deleted) - ..."
     case type
     when 'actions'
-      title, keywords = 'Actions', [before.blank? ? '(none)' : before, after.blank? ? '(none)' : after]
+      after_str = after.include?('disallow') ? "'''" + after + "'''" : after
+      title, keywords = 'Actions', [before.blank? ? '(none)' : before, after.blank? ? '(none)' : after_str]
     when 'description'
       title, keywords = 'Description', [before.blank? ? '(none)' : before, after.blank? ? '(none)' : after]
     when 'enabled'
@@ -123,7 +127,7 @@ module EditFilterMonitor
     end
 
     keywords.reverse if after == '0'
-    "* #{title}: " + (before.nil? ? keywords.last : "#{keywords.first} &rarr; #{keywords.last}\n")
+    "#{title}: " + (before.nil? ? keywords.last : "#{keywords.first} &rarr; #{keywords.last}")
   end
 
   def self.config
@@ -154,30 +158,27 @@ module EditFilterMonitor
   def self.fetch_current_filters(opts, throttle = 0)
     return false if throttle > 5
 
-    begin
-      sleep throttle * 5
-      return @mw.custom_query(opts).elements['abusefilters']
-    rescue MediaWiki::APIError => e
-      binding.pry
-      return fetch_current_filters(opts, throttle + 1)
-    end
+    sleep throttle * 5
+    return @mw.custom_query(opts).elements['abusefilters']
+  rescue MediaWiki::APIError
+    return fetch_current_filters(opts, throttle + 1)
   end
 
-  def self.issue_report(content, net_changes)
-    # error('Failed to write to noticeboard') unless post_to_noticeboard(content, net_changes)
-    error('Failed to write to template') unless update_template(content, net_changes)
+  def self.current_reported_filters(throttle = 0)
+    return false if throttle > 5
+    sleep throttle * 5
+    filters = @mw.get(TEMPLATE).split('<!-- mb-end-filter-list -->')[0].split(/^'''/).drop(1).map { |f| "'''#{f.chomp("\n")}" }
+    return filters.keep_if { |f| DateTime.parse(f.scan(/(\d\d:\d\d.*\d{4} \(UTC\))/).flatten[0]) > DateTime.now - NUM_DAYS }
+  rescue MediaWiki::APIError
+    return fetch_current_filters(throttle + 1)
   end
 
-  # def self.post_to_noticeboard(content, net_changes)
-  #   edit_page(@noticeboard_path, net_changes,
-  #     text: content,
-  #     section: 'new',
-  #     sectiontitle: "Recent filter changes: #{Date.today.strftime('%e %B, %Y')}"
-  #   )
-  # end
+  def self.issue_report(content, filter_list)
+    error('Failed to write to template') unless update_template(content, filter_list)
+  end
 
-  def self.update_template(content, net_changes)
-    edit_page('User:MusikBot/FilterMonitor/Recent changes', net_changes, text: content)
+  def self.update_template(content, filter_list)
+    edit_page(TEMPLATE, filter_list, text: content)
   end
 
   def self.edit_page(page, changes, opts, throttle = 0)
@@ -191,14 +192,29 @@ module EditFilterMonitor
     begin
       sleep throttle * 5
       @mw.edit(page, CGI.unescapeHTML(opts[:text]), opts)
-    rescue MediaWiki::APIError => e
-      binding.pry
+    rescue MediaWiki::APIError
       return edit_page(page, changes, opts, throttle + 1)
     end
 
     true
   end
 
+  def self.report_error(message, throttle = 0)
+    return if throttle > 5
+    sleep throttle * 5
+
+    opts = {
+      contentformat: 'text/x-wiki',
+      summary: 'Reporting FilterMonitor errors',
+      text: message
+    }
+
+    @mw.edit('User:MusikBot/FilterMonitor/Report', message, opts)
+  rescue MediaWiki::APIError
+    report_error(message, throttle + 1)
+  end
+
+  # Database related stuff
   def self.create_table
     query('CREATE TABLE filters (id INT PRIMARY KEY AUTO_INCREMENT, filter_id INT, description VARCHAR(255), actions VARCHAR(255), ' \
     'lasteditor VARCHAR(255), lastedittime DATETIME, enabled TINYINT, deleted TINYINT, private TINYINT);')
