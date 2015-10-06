@@ -87,7 +87,14 @@ module EditFilterMonitor
     if net_changes.length > 0
       net_changes.each do |filter_id, change_set|
         content = ''
-        new_str = change_set['new'] ? ' (new)' : ''
+        new_str =
+        if change_set['new']
+          ' (new)'
+        elsif change_set['deleted'] && change_set['deleted'][1]
+          change_set['deleted'][1] == '1' ? ' (deleted)' : ' (undeleted)'
+        else
+          ''
+        end
         content += "'''[[Special:AbuseFilter/#{filter_id}|Filter #{filter_id}]]#{new_str}''' &mdash; "
         content += comparison_props.collect { |prop| entry_str(prop, change_set[prop]) }.compact.join('; ')
 
@@ -120,8 +127,8 @@ module EditFilterMonitor
       title, keywords = 'Description', [before.blank? ? '(none)' : before, after.blank? ? '(none)' : after]
     when 'enabled'
       title, keywords = 'Activity', %w(enabled disabled)
-    when 'deleted'
-      title, keywords = 'Deletion', %w(deleted present)
+    # when 'deleted'
+    #   title, keywords = 'Deletion', %w(present deleted)
     when 'private'
       title, keywords = 'Privacy', %w(public private)
     end
