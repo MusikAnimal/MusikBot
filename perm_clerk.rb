@@ -679,7 +679,7 @@ module PermClerk
       # attempt to save
       begin
         opts = {
-          base_timestamp: @base_timestamp,
+          basetimestamp: @base_timestamp,
           contentformat: 'text/x-wiki',
           starttimestamp: @start_timestamp,
           summary: "Bot clerking#{" on #{@users_count} requests" if plural}: #{fixes.join(', ')} (#{request_count_msg})",
