@@ -3,7 +3,7 @@ require 'mysql2'
 require 'mediawiki-gateway'
 require 'auth.rb'
 require 'date'
-require 'pry'
+require 'pry-byebug'
 
 MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
 
@@ -41,100 +41,149 @@ module EditFilterMonitor
     changes = filter_changes
     generate_report(changes)
   rescue => e
-    report_error(e.message)
+    if env == :test
+      raise e
+    else
+      report_error(e.message)
+    end
   end
 
   def self.filter_changes
-    net_changes = {}
+    net_changes = []
 
     current_filters.each_with_index do |current_filter, index|
-      update_sql = 'UPDATE filters SET '
       current_filter = normalize_data(current_filter.attributes)
       saved_filter = normalize_data(saved_filters[index]) rescue {}
+      update_sql = ''
       id = current_filter['id'].to_s
+      changes = {}
 
       comparison_props.each do |prop|
-        # || 0 to account for nil when deleted/private are not in filter object
         old_value = saved_filter[prop]
         new_value = current_filter[prop]
 
         next if old_value == new_value
 
-        net_changes[id] ||= {}
-        net_changes[id][prop] = [old_value, new_value]
+        changes[prop] = new_value
+
         update_sql += "#{prop}='#{new_value}', "
       end
 
-      next unless net_changes[id].present?
+      next if changes.empty?
 
-      net_changes[id]['lasteditor'] = current_filter['lasteditor']
-      net_changes[id]['lastedittime'] = DateTime.parse(current_filter['lastedittime']).strftime('%H:%M, %e %B %Y (UTC)')
+      changes['filter_id'] = current_filter['id']
+      changes['lasteditor'] = current_filter['lasteditor']
+      changes['lastedittime'] = DateTime.parse(current_filter['lastedittime']).strftime('%H:%M, %e %B %Y (UTC)')
 
       if saved_filter.present?
-        query("#{update_sql.chomp(', ')} WHERE filter_id = #{id};")
+        query("UPDATE filters SET #{update_sql.chomp(', ')} WHERE filter_id = #{id};")
       else
-        # new filter!
-        net_changes[id]['new'] = true
+        changes['new'] = true
         insert(current_filter)
       end
+
+      net_changes << changes
     end
 
     net_changes
   end
 
-  def self.generate_report(net_changes)
-    filter_list = []
-    if net_changes.length > 0
-      net_changes.each do |filter_id, change_set|
-        content = ''
-        new_str =
-        if change_set['new']
-          ' (new)'
-        elsif change_set['deleted'] && change_set['deleted'][1]
-          change_set['deleted'][1] == '1' ? ' (deleted)' : ' (undeleted)'
-        else
-          ''
+  def self.generate_report(new_templates_data)
+    old_templates = fetch_old_templates
+    new_templates = []
+
+    if new_templates_data.length > 0
+      new_templates_data.each do |data|
+        # merge duplicate reports
+        old_data = {}
+        old_templates.delete_if do |ot|
+          otd = parse_template(ot)
+          old_data = otd if otd['filter_id'] == data['filter_id']
         end
-        content += "'''[[Special:AbuseFilter/#{filter_id}|Filter #{filter_id}]]#{new_str}''' &mdash; "
-        content += comparison_props.collect { |prop| entry_str(prop, change_set[prop]) }.compact.join('; ')
-
-        next unless config['lasteditor'] || config['lastedittime']
-
-        content += "\n:Last changed"
-        content += " by {{no ping|#{change_set['lasteditor']}}}" if config['lasteditor']
-        content += " at #{change_set['lastedittime']}" if config['lastedittime']
-        filter_list << content
+        new_templates << template(old_data.merge(data))
       end
     end
 
-    filter_list += current_reported_filters
-    content = filter_list.join("\n") + "<!-- mb-end-filter-list -->\n'''[[Special:AbuseFilter/history|Full filter history]]''' ~~~~"
+    new_templates += old_templates
 
-    issue_report(content, net_changes)
+    content = new_templates.join("\n\n") + "<!-- mb-end-filter-list -->\n'''[[Special:AbuseFilter/history|Full filter history]]''' ~~~~"
+
+    report_error('Failed to write to template') unless edit_page(TEMPLATE, content, new_templates_data.collect { |ntd| ntd['filter_id'] })
   end
 
-  def self.entry_str(type, changes)
-    return nil unless changes
-    before = changes[0]
-    after = changes[1]
+  def self.template(data)
+    content = "'''[[Special:AbuseFilter/#{data['filter_id']}|Filter #{data['filter_id']}]]#{' (new)' if data['new']}''' &mdash; "
+    comparison_props.each do |prop|
+      next if data[prop].blank? || (prop == 'deleted' && data['new'])
 
-    # FIXME: don't say "Deleted: present" when a new filter is created, instead let's do "Filter 123 (Deleted) - ..."
-    case type
-    when 'actions'
-      after_str = after.include?('disallow') ? "'''" + after + "'''" : after
-      title, keywords = 'Actions', [before.blank? ? '(none)' : before, after.blank? ? '(none)' : after_str]
-    when 'description'
-      title, keywords = 'Description', [before.blank? ? '(none)' : before, after.blank? ? '(none)' : after]
-    when 'enabled'
-      title, keywords = 'Activity', %w(enabled disabled)
-    # when 'deleted'
-    #   title, keywords = 'Deletion', %w(present deleted)
-    when 'private'
-      title, keywords = 'Privacy', %w(public private)
+      content += "#{humanize_prop(prop)}: #{keyword_from_value(prop, data[prop])}; "
+    end
+    content.chomp!('; ')
+
+    return unless config['lasteditor'] || config['lastedittime']
+
+    content += "\n:Last changed"
+    content += " by {{no ping|#{data['lasteditor']}}}" if config['lasteditor']
+    content += " at #{data['lastedittime']}" if config['lastedittime']
+  end
+
+  def self.parse_template(template)
+    data = {}
+    data['filter_id'] = template.scan(/AbuseFilter\/(\d+)\|/).flatten[0]
+    data['lasteditor'] = template.scan(/no ping\|(.*+)}}/).flatten[0] rescue nil
+    data['lastedittime'] = template.scan(/(\d\d:\d\d.*\d{4} \(UTC\))/).flatten[0] rescue nil
+
+    comparison_props.each do |prop|
+      data[prop] = value_from_keyword(prop, template.scan(/#{dehumanize_prop(prop)}: (\w+)[;\n]/).flatten[0]) rescue nil
     end
 
-    keywords.reverse if after == '0'
-    "#{title}: " + (before.nil? ? keywords.last : "#{keywords.first} &rarr; #{keywords.last}")
+    data
+  end
+
+  def self.humanize_prop(prop, dehumanize = false)
+    props = {
+      'actions' => 'Actions',
+      'description' => 'Description',
+      'enabled' => 'State',
+      'deleted' => 'Deleted',
+      'private' => 'Privacy'
+    }
+    props = props.invert if dehumanize
+    props[prop]
+  end
+
+  def self.dehumanize_prop(prop)
+    humanize_prop(prop, true)
+  end
+
+  def self.keyword_from_value(prop, value)
+    case prop
+    when 'actions'
+      value.blank? ? '(none)' : value
+    when 'description'
+      value
+    when 'enabled'
+      value == '1' ? 'enabled' : 'disabled'
+    when 'deleted'
+      value == '1' ? 'deleted' : 'restored'
+    when 'private'
+      value == '1' ? 'private' : 'public'
+    end
+  end
+
+  def self.value_from_keyword(prop, value)
+    case prop
+    when 'actions'
+      value == '(none)' ? '' : value
+    when 'description'
+      value
+    when 'enabled'
+      value == 'enabled' ? '1' : '0'
+    when 'deleted'
+      value == 'deleted' ? '1' : '0'
+    when 'private'
+      value == 'private' ? '1' : '0'
+    end
   end
 
   def self.config
@@ -171,36 +220,29 @@ module EditFilterMonitor
     return fetch_current_filters(opts, throttle + 1)
   end
 
-  def self.current_reported_filters(throttle = 0)
+  def self.fetch_old_templates(throttle = 0)
     return false if throttle > 5
     sleep throttle * 5
-    filters = @mw.get(TEMPLATE).split('<!-- mb-end-filter-list -->')[0].split(/^'''/).drop(1).map { |f| "'''#{f.chomp("\n")}" }
+    filters = @mw.get(TEMPLATE).split('<!-- mb-end-filter-list -->')[0].split(/^'''/).drop(1).map { |f| "'''#{f.rstrip}" }
     return filters.keep_if { |f| DateTime.parse(f.scan(/(\d\d:\d\d.*\d{4} \(UTC\))/).flatten[0]) > DateTime.now - NUM_DAYS }
   rescue MediaWiki::APIError
-    return fetch_current_filters(throttle + 1)
+    return old_templates(throttle + 1)
   end
 
-  def self.issue_report(content, filter_list)
-    error('Failed to write to template') unless update_template(content, filter_list)
-  end
-
-  def self.update_template(content, filter_list)
-    edit_page(TEMPLATE, filter_list, text: content)
-  end
-
-  def self.edit_page(page, changes, opts, throttle = 0)
+  def self.edit_page(page, content, filter_ids, throttle = 0)
     return false if throttle > 5
 
     opts = {
       contentformat: 'text/x-wiki',
-      summary: "Reporting recent changes to filters #{changes.keys.join(', ')}"
-    }.merge(opts)
+      summary: "Reporting recent changes to filters #{filter_ids.join(', ')}",
+      text: content
+    }
 
     begin
       sleep throttle * 5
-      @mw.edit(page, CGI.unescapeHTML(opts[:text]), opts)
+      @mw.edit(page, CGI.unescapeHTML(content), opts)
     rescue MediaWiki::APIError
-      return edit_page(page, changes, opts, throttle + 1)
+      return edit_page(page, content, filter_ids, throttle + 1)
     end
 
     true
