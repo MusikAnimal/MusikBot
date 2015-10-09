@@ -9,7 +9,10 @@ MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/
 module RotateTDYK
   TEMPLATE_PAGE = 'Template talk:Did you know'
 
-  def self.run
+  def self.run(throttle = 0)
+    puts 'run'
+    sleep throttle * 180
+    puts 'sleep complete'
     env = eval(File.open('env').read)
 
     @mw = MediaWiki::Gateway.new("https://#{env == :production ? 'en' : 'test'}.wikipedia.org/w/api.php", bot: true)
@@ -23,6 +26,11 @@ module RotateTDYK
   rescue => e
     if env == :production
       report_error(e.message)
+      if throttle < 5
+        run(throttle + 1)
+      else
+        report_error('FAILURE: 5 attempts made at processing page, aborting')
+      end
     else
       raise e
     end
@@ -110,7 +118,9 @@ module RotateTDYK
       summary: 'Reporting RotateTDYK errors'
     }
 
-    @mw.edit('User:MusikBot/RotateTDYK/Error log', message + " ~~~~\n\n", opts)
+    content = @mw.get('User:MusikBot/RotateTDYK/Error log') + "\n\n#{message} &mdash; ~~~~~\n\n"
+
+    @mw.edit('User:MusikBot/RotateTDYK/Error log', content, opts)
   rescue MediaWiki::APIError
     report_error(message, throttle + 1)
   end
