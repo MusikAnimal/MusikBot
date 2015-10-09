@@ -19,7 +19,6 @@ module RotateTDYK
 
     @num_days = @mw.get('User:MusikBot/RotateTDYK/Offset').to_i rescue 7
 
-    set_page_props
     process_page
   rescue => e
     if env == :production
@@ -30,6 +29,7 @@ module RotateTDYK
   end
 
   def self.process_page
+    set_page_props
     split = @old_content.split(/\=\=\s*Current\s+nominations\s*\=\=/i)
     older_nominations = split[0]
     @current_nominations = split[1]
