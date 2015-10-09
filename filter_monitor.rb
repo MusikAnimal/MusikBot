@@ -254,11 +254,10 @@ module EditFilterMonitor
 
     opts = {
       contentformat: 'text/x-wiki',
-      summary: 'Reporting FilterMonitor errors',
-      text: message + ' ~~~~~\n\n'
+      summary: 'Reporting FilterMonitor errors'
     }
 
-    @mw.edit('User:MusikBot/FilterMonitor/Error log', message + ' ~~~~~\n\n', opts)
+    @mw.edit('User:MusikBot/FilterMonitor/Error log', message + " ~~~~~\n\n", opts)
   rescue MediaWiki::APIError
     report_error(message, throttle + 1)
   end
