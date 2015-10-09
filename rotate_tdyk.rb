@@ -70,7 +70,7 @@ module RotateTDYK
         basetimestamp: @base_timestamp,
         contentformat: 'text/x-wiki',
         starttimestamp: @start_timestamp,
-        summary: "Rotating date headings for #{today.strftime('%B %-d')}",
+        summary: "Rotating nomination headings for #{today.strftime('%B %-d')}",
         text: content
       )
     rescue MediaWiki::APIError => e
