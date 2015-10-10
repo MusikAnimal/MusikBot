@@ -10,9 +10,7 @@ module RotateTDYK
   TEMPLATE_PAGE = 'Template talk:Did you know'
 
   def self.run(throttle = 0)
-    puts 'run'
     sleep throttle * 180
-    puts 'sleep complete'
     env = eval(File.open('env').read)
 
     @mw = MediaWiki::Gateway.new("https://#{env == :production ? 'en' : 'test'}.wikipedia.org/w/api.php", bot: true)
@@ -38,7 +36,7 @@ module RotateTDYK
 
   def self.process_page
     set_page_props
-    split = @old_content.split(/\=\=\s*Current\s+nominations\s*\=\=/i)
+    split = @old_content.split(/\=\=\s*Current\s+nominations\s*(?:\<\!-- automatically moved by bot --\>)?\s*\=\=/i)
     older_nominations = split[0]
     @current_nominations = split[1]
 
@@ -55,7 +53,7 @@ module RotateTDYK
 
   def self.move_current_nom_heading
     return false if @oldest_day == @current_nom_date
-    current_nom_heading = "==Current nominations==\n"
+    current_nom_heading = "==Current nominations<!-- automatically moved by bot -->==\n"
     new_oldest_day_heading = @current_nominations.scan(/\=\=\=\s*Articles\s+created\/expanded\s+on\s+#{@current_nom_date.strftime('%B %-d')}\s*\=\=\=/i).flatten[0]
     @current_nominations.gsub!(new_oldest_day_heading, current_nom_heading + new_oldest_day_heading)
   end
