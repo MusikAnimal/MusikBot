@@ -36,7 +36,7 @@ module RotateTDYK
 
   def self.process_page
     set_page_props
-    split = @old_content.split(/\=\=\s*Current\s+nominations\s*(?:\<\!-- automatically moved by bot --\>)?\s*\=\=/i)
+    split = @old_content.split(/\=\=\s*Current\s*nominations(?:&lt;!-- automatically moved by bot --&gt;)?\s*\=\=/i)
     older_nominations = split[0]
     @current_nominations = split[1]
 
