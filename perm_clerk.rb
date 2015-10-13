@@ -153,9 +153,9 @@ module PermClerk
       request_changes = []
 
       if @permission == 'AWB'
-        username = section.scan(/^(.*)}}/).flatten[0]
+        username = section.scan(/^(.*?)}}/).flatten[0]
       else
-        username = section.scan(/{{(?:template\:)?rfplinks\|1=(.*)}}/i).flatten[0]
+        username = section.scan(/{{(?:template\:)?rfplinks\|1=(.*?)}}/i).flatten[0]
       end
 
       if !username || username == 'username' || username == 'bot username'
