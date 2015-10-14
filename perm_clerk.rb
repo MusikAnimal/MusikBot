@@ -766,12 +766,7 @@ module PermClerk
 
     # get basic info if we haven't already and query the repl database as needed for other info
     unless @user_info_cache[username] && @user_info_cache[username][:editCount]
-      api_query = @mw.custom_query(
-        list: 'users',
-        ususers: username,
-        usprop: 'groups|editcount|registration',
-        continue: ''
-      )
+      api_query = api_user_info(username)
       api_info = api_query[0][0].attributes
       registration_date = api_info['registration'] ? Date.parse(api_info['registration']) : nil
 
@@ -813,6 +808,19 @@ module PermClerk
     return @user_info_cache[username]
   rescue
     error("  Unable to fetch user info for #{username}") and return false
+  end
+
+  def self.api_user_info(username, throttle = 0)
+    sleep throttle * 5
+    @mw.custom_query(
+      list: 'users',
+      ususers: username,
+      usprop: 'groups|editcount|registration',
+      continue: ''
+    )
+  rescue MediaWiki::APIError => e
+    raise e and return nil if throttle > 5
+    api_user_info(username, throttle + 1)
   end
 
   def self.get_message(type, params = {})
