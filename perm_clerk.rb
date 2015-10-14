@@ -932,7 +932,7 @@ module PermClerk
     @mw.custom_query(
       prop: 'info|revisions',
       rvprop: 'timestamp|content',
-      titles: page_name
+      titles: title
     )
   rescue MediaWiki::APIError => e
     raise e and return false if throttle > 5
