@@ -101,7 +101,6 @@ module PermClerk
       @page_name = "Wikipedia:Requests for permissions/#{@permission}"
     end
 
-    @fetch_throtte = 0
     old_wikitext = set_page_props
 
     return false unless old_wikitext
@@ -466,7 +465,6 @@ module PermClerk
       month_name = key.scan(/\/(\w+)/).flatten[0]
       year = key.scan(/\d{4}/).flatten[0]
 
-      @archive_fetch_throtte = 0
       unless page_wikitext = fetch_archive_page(page_to_edit)
         record_error(
           group: 'archive',
@@ -513,7 +511,6 @@ module PermClerk
         log_page_name = "Wikipedia:Requests for permissions/#{key.scan(/(.*)\//).flatten[0]}"
         info("  Adding new page [[#{page_to_edit}]] to log [[#{log_page_name}]]")
 
-        @archive_fetch_throtte = 0
         unless log_page = fetch_archive_page(log_page_name)
           record_error(
             group: 'archive',
@@ -568,27 +565,11 @@ module PermClerk
   end
 
   def self.fetch_archive_page(page_name)
-    if @archive_fetch_throtte < 3
-      sleep @archive_fetch_throtte
-      @archive_fetch_throtte += 1
-      info("Fetching page [[#{page_name}]]")
-      begin
-        opts = {
-          prop: 'revisions',
-          rvprop: 'content',
-          titles: page_name
-        }
-
-        page_obj = @mw.custom_query(opts)[0][0].elements['revisions']
-
-        return page_obj[0][0].to_s rescue ''
-      rescue => e
-        warn("Unable to fetch page properties, reattmpt ##{@archive_fetch_throtte}. Error: #{e.message}")
-        return fetch_archive_page(page_name)
-      end
-    else
-      error('Unable to fetch page properties, continuing to process next permission') and return false
-    end
+    info("Fetching page [[#{page_name}]]")
+    page_obj = api_archive_page_props(page_name)[0][0].elements['revisions']
+    return page_obj[0][0].to_s rescue ''
+  rescue => e
+    error("Unable to fetch page properties, error: #{e}, continuing to process next permission") and return false
   end
 
   def self.report_errors
@@ -810,19 +791,6 @@ module PermClerk
     error("  Unable to fetch user info for #{username}") and return false
   end
 
-  def self.api_user_info(username, throttle = 0)
-    sleep throttle * 5
-    @mw.custom_query(
-      list: 'users',
-      ususers: username,
-      usprop: 'groups|editcount|registration',
-      continue: ''
-    )
-  rescue MediaWiki::APIError => e
-    raise e and return nil if throttle > 5
-    api_user_info(username, throttle + 1)
-  end
-
   def self.get_message(type, params = {})
     permission_name = @permission == 'AWB' ? 'AWB access' : @permission.downcase
 
@@ -930,35 +898,57 @@ module PermClerk
   end
 
   def self.set_page_props
-    if @fetch_throtte < 3
-      sleep @fetch_throtte
-      @fetch_throtte += 1
-      info("Fetching page properties of [[#{@page_name}]]")
-      begin
-        @start_timestamp = Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+    info("Fetching page properties of [[#{@page_name}]]")
 
-        opts = {
-          prop: 'info|revisions',
-          rvprop: 'timestamp|content',
-          titles: @page_name
-        }
+    page_obj = api_page_props(@page_name)[0][0]
+    @base_timestamp = page_obj.elements['revisions'][0].attributes['timestamp']
+    @revision_id = page_obj.attributes['lastrevid']
 
-        page_obj = @mw.custom_query(opts)[0][0]
-        @base_timestamp = page_obj.elements['revisions'][0].attributes['timestamp']
-        @revision_id = page_obj.attributes['lastrevid']
+    return page_obj.elements['revisions'][0][0].to_s
+  rescue => e
+    record_error(
+      group: 'Internal error',
+      message: "Unable to fetch page properties, error: #{e.message}",
+      log_message: 'Unable to fetch page properties, continuing to process next permission'
+    ) and return false
+  end
 
-        return page_obj.elements['revisions'][0][0].to_s
-      rescue => e
-        warn("Unable to fetch page properties, reattmpt ##{@fetch_throtte}. Error: #{e.message}")
-        return set_page_props
-      end
-    else
-      record_error(
-        group: 'Internal error',
-        message: 'Unable to fetch page properties.',
-        log_message: 'Unable to fetch page properties, continuing to process next permission'
-      ) and return false
-    end
+  def self.api_user_info(username, throttle = 0)
+    sleep throttle * 5
+    @mw.custom_query(
+      list: 'users',
+      ususers: username,
+      usprop: 'groups|editcount|registration',
+      continue: ''
+    )
+  rescue MediaWiki::APIError => e
+    raise e and return false if throttle > 5
+    api_user_info(username, throttle + 1)
+  end
+
+  def self.api_page_props(title, throttle = 0)
+    sleep throttle * 5
+    @start_timestamp = Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+    @mw.custom_query(
+      prop: 'info|revisions',
+      rvprop: 'timestamp|content',
+      titles: page_name
+    )
+  rescue MediaWiki::APIError => e
+    raise e and return false if throttle > 5
+    api_page_props(title, throttle + 1)
+  end
+
+  def self.api_archive_page_props(title, throttle = 0)
+    sleep throttle * 5
+    @mw.custom_query(
+      prop: 'revisions',
+      rvprop: 'content',
+      titles: title
+    )
+  rescue MediaWiki::APIError => e
+    raise e and return false if throttle > 5
+    api_archive_page_props(title, throttle + 1)
   end
 
   def self.record_error(opts)
