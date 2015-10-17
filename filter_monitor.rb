@@ -39,7 +39,7 @@ module EditFilterMonitor
     )
 
     changes = filter_changes
-    generate_report(changes)
+    generate_report(changes) if changes.any?
   rescue => e
     if env == :test
       raise e
@@ -52,7 +52,7 @@ module EditFilterMonitor
     net_changes = []
 
     current_filters.each_with_index do |current_filter, index|
-      current_filter = normalize_data(current_filter.attributes)
+      current_filter = normalize_data(current_filter.attributes, true)
       saved_filter = normalize_data(saved_filters[index]) rescue {}
       update_sql = ''
       id = current_filter['id'].to_s
@@ -116,7 +116,11 @@ module EditFilterMonitor
     comparison_props.each do |prop|
       next if data[prop].blank? || (prop == 'deleted' && data['new'])
 
-      content += "#{humanize_prop(prop)}: #{keyword_from_value(prop, data[prop])}; "
+      if prop == 'pattern'
+        content += "#{humanize_prop(prop)} modified; "
+      else
+        content += "#{humanize_prop(prop)}: #{keyword_from_value(prop, data[prop])}; "
+      end
     end
     content.chomp!('; ')
 
@@ -143,6 +147,7 @@ module EditFilterMonitor
   def self.humanize_prop(prop, dehumanize = false)
     props = {
       'actions' => 'Actions',
+      'pattern' => 'Pattern',
       'description' => 'Description',
       'enabled' => 'State',
       'deleted' => 'Deleted',
@@ -160,6 +165,8 @@ module EditFilterMonitor
     case prop
     when 'actions'
       value.blank? ? '(none)' : value
+    when 'pattern'
+      value
     when 'description'
       value
     when 'enabled'
@@ -199,7 +206,7 @@ module EditFilterMonitor
 
     opts = {
       list: 'abusefilters',
-      abfprop: 'id|description|actions|lasteditor|lastedittime|status|private',
+      abfprop: 'id|description|actions|pattern|lasteditor|lastedittime|status|private',
       abflimit: 1000
     }
 
@@ -213,7 +220,6 @@ module EditFilterMonitor
   # API methods
   def self.fetch_current_filters(opts, throttle = 0)
     return false if throttle > 5
-
     sleep throttle * 5
     return @mw.custom_query(opts).elements['abusefilters']
   rescue MediaWiki::APIError
@@ -265,20 +271,21 @@ module EditFilterMonitor
   # Database related stuff
   def self.create_table
     query('CREATE TABLE filters (id INT PRIMARY KEY AUTO_INCREMENT, filter_id INT, description VARCHAR(255), actions VARCHAR(255), ' \
-    'lasteditor VARCHAR(255), lastedittime DATETIME, enabled TINYINT, deleted TINYINT, private TINYINT);')
+    'pattern VARCHAR(255), lasteditor VARCHAR(255), lastedittime DATETIME, enabled TINYINT, deleted TINYINT, private TINYINT);')
   end
 
   def self.initial_import
     current_filters.each do |filter|
-      attrs = filter.attributes
+      attrs = normalize_data(filter.attributes, true)
       insert(attrs)
     end
   end
 
   def self.insert(obj)
     # id, filter_id, actions, lasteditor, lastedittime, enabled, deleted, private
-    query("INSERT INTO filters VALUES(NULL, #{obj['id']}, '#{obj['description'].gsub("'") { "\\'" }}', '#{obj['actions']}', '#{obj['lasteditor'].gsub("'") { "\\'" }}', " \
-      "'#{obj['lastedittime'].gsub('Z', '')}', '#{attr_value(obj['enabled'])}', '#{attr_value(obj['deleted'])}', '#{attr_value(obj['private'])}');")
+    query("INSERT INTO filters VALUES(NULL, #{obj['id']}, '#{obj['description']}', '#{obj['actions']}', " \
+      "'#{obj['pattern']}', '#{obj['lasteditor']}', '#{obj['lastedittime'].gsub('Z', '')}', "\
+      "'#{attr_value(obj['enabled'])}', '#{attr_value(obj['deleted'])}', '#{attr_value(obj['private'])}');")
   end
 
   def self.query(sql)
@@ -290,7 +297,7 @@ module EditFilterMonitor
     value == '' || value == '1' ? '1' : '0'
   end
 
-  def self.normalize_data(data)
+  def self.normalize_data(data, digest = false)
     %w(enabled deleted private).each do |prop|
       if data[prop].nil?
         data[prop] = '0'
@@ -299,6 +306,14 @@ module EditFilterMonitor
         data[prop] = '1' if data[prop] == ''
       end
     end
+
+    if digest
+      %w(description lasteditor).each do |prop|
+        data[prop] = @client.escape(data[prop].to_s)
+      end
+      data['pattern'] = Digest::MD5.hexdigest(data['pattern']) rescue ''
+    end
+
     data
   end
 end
