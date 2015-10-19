@@ -48,7 +48,7 @@ module RotateTDYK
     moved = move_current_nom_heading
     added = add_new_heading
 
-    edit_page(older_nominations + @current_nominations) if moved || added
+    edit_page(older_nominations.rstrip + "\n" + @current_nominations) if moved || added
   end
 
   def self.move_current_nom_heading
