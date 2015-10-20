@@ -106,7 +106,7 @@ module EditFilterMonitor
 
     new_templates += old_templates
 
-    content = new_templates.join("\n\n") + "<!-- mb-end-filter-list -->\n'''[[Special:AbuseFilter/history|Full filter history]]''' ~~~~"
+    content = new_templates.join("\n\n")
 
     report_error('Failed to write to template') unless edit_page(TEMPLATE, content, new_templates_data.collect { |ntd| ntd['filter_id'] })
   end
