@@ -64,7 +64,18 @@ module EditFilterMonitor
 
         next if old_value == new_value
 
-        changes[prop] = new_value
+        if prop == 'deleted' && new_value == '0'
+          changes['new'] = 'restored'
+        elsif prop == 'deleted' && new_value == '1'
+          changes['new'] = 'deleted'
+        elsif prop == 'actions'
+          changes['actions'] = keyword_from_value(prop, new_value).split(',')
+        elsif prop == 'pattern'
+          changes['pattern'] = true
+        else
+          changes['flags'] ||= []
+          changes['flags'] << keyword_from_value(prop, new_value)
+        end
 
         update_sql += "#{prop}='#{new_value}', "
       end
@@ -78,7 +89,7 @@ module EditFilterMonitor
       if saved_filter.present?
         query("UPDATE filters SET #{update_sql.chomp(', ')} WHERE filter_id = #{id};")
       else
-        changes['new'] = true
+        changes['new'] = 'new'
         insert(current_filter)
       end
 
@@ -92,16 +103,17 @@ module EditFilterMonitor
     old_templates = fetch_old_templates
     new_templates = []
 
-    if new_templates_data.length > 0
-      new_templates_data.each do |data|
-        # merge duplicate reports
-        old_data = {}
-        old_templates.delete_if do |ot|
-          otd = parse_template(ot)
-          old_data = otd if otd['filter_id'] == data['filter_id']
-        end
-        new_templates << template(old_data.merge(data))
+    # merge duplicate reports
+    new_templates_data.each do |data|
+      old_data = {}
+      old_templates.delete_if do |ot|
+        otd = parse_template(ot)
+        old_data = otd if otd['filter_id'] == data['filter_id']
       end
+      # join arrays
+      old_data['actions'] = (data['actions'] || []) | old_data['actions']
+      old_data['flags'] = (data['flags'] || []) | old_data['flags']
+      new_templates << template(old_data.merge(data))
     end
 
     new_templates += old_templates
@@ -112,14 +124,15 @@ module EditFilterMonitor
   end
 
   def self.template(data)
-    content = "'''[[Special:AbuseFilter/#{data['filter_id']}|Filter #{data['filter_id']}]]#{' (new)' if data['new']}''' &mdash; "
-    comparison_props.each do |prop|
-      next if data[prop].blank? || (prop == 'deleted' && data['new'])
+    content = "'''[[Special:AbuseFilter/#{data['filter_id']}|Filter #{data['filter_id']}]]#{' (' + data['new'] + ')' if data['new']}''' &mdash; "
+    %w(actions flags pattern).each do |prop|
+      next if data[prop].blank? || prop == 'deleted'
 
       if prop == 'pattern'
         content += "#{humanize_prop(prop)} modified; "
       else
-        content += "#{humanize_prop(prop)}: #{keyword_from_value(prop, data[prop])}; "
+        value = data[prop].sort.join(',')
+        content += "#{prop.capitalize}: #{value == '' ? '(none)' : value}; "
       end
     end
     content.chomp!('; ')
@@ -134,12 +147,12 @@ module EditFilterMonitor
   def self.parse_template(template)
     data = {}
     data['filter_id'] = template.scan(/AbuseFilter\/(\d+)\|/).flatten[0]
+    data['new'] = template.scan(/\((\w+)\)''' &mdash;/).flatten[0] rescue nil
+    data['pattern'] = template =~ /Pattern modified/ ? true : nil
     data['lasteditor'] = template.scan(/no ping\|(.*+)}}/).flatten[0] rescue nil
     data['lastedittime'] = template.scan(/(\d\d:\d\d.*\d{4} \(UTC\))/).flatten[0] rescue nil
-
-    comparison_props.each do |prop|
-      data[prop] = value_from_keyword(prop, template.scan(/#{dehumanize_prop(prop)}: (\w+)[;\n]/).flatten[0]) rescue nil
-    end
+    data['actions'] = template.scan(/Actions: (.*?)[;\n]/).flatten[0].split(',') rescue []
+    data['flags'] = template.scan(/Flags: (.*?)[;\n]/).flatten[0].split(',') rescue []
 
     data
   end
@@ -171,8 +184,8 @@ module EditFilterMonitor
       value
     when 'enabled'
       value == '1' ? 'enabled' : 'disabled'
-    when 'deleted'
-      value == '1' ? 'deleted' : 'restored'
+    # when 'deleted'
+    #   value == '1' ? 'deleted' : 'restored'
     when 'private'
       value == '1' ? 'private' : 'public'
     end
