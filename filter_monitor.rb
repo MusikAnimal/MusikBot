@@ -139,7 +139,7 @@ module EditFilterMonitor
 
     return unless config['lasteditor'] || config['lastedittime']
 
-    content += "\n:Last changed"
+    content += "\n:Last public change"
     content += " by {{no ping|#{data['lasteditor']}}}" if config['lasteditor']
     content += " at #{data['lastedittime']}" if config['lastedittime']
   end
