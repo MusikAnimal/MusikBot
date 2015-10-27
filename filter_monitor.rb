@@ -111,8 +111,8 @@ module EditFilterMonitor
         old_data = otd if otd['filter_id'] == data['filter_id']
       end
       # join arrays
-      old_data['actions'] = (data['actions'] || []) | old_data['actions']
-      old_data['flags'] = (data['flags'] || []) | old_data['flags']
+      old_data['actions'] = (data['actions'] || []) | (old_data['actions'] || [])
+      old_data['flags'] = (data['flags'] || []) | (old_data['flags'] || [])
       new_templates << template(old_data.merge(data))
     end
 
@@ -242,7 +242,7 @@ module EditFilterMonitor
   def self.fetch_old_templates(throttle = 0)
     return false if throttle > 5
     sleep throttle * 5
-    filters = @mw.get(TEMPLATE).split('<!-- mb-end-filter-list -->')[0].split(/^'''/).drop(1).map { |f| "'''#{f.rstrip}" }
+    filters = @mw.get(TEMPLATE).split(/^'''/).drop(1).map { |f| "'''#{f.rstrip}" }
     return filters.keep_if { |f| DateTime.parse(f.scan(/(\d\d:\d\d.*\d{4} \(UTC\))/).flatten[0]) > DateTime.now - NUM_DAYS }
   rescue MediaWiki::APIError
     return old_templates(throttle + 1)
