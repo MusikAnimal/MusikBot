@@ -56,7 +56,7 @@ module PermClerk
       ]
     else
       @PREREQ_EXPIRY = 0
-      @PERMISSIONS = ['Rollback']
+      @PERMISSIONS = ['AWB']
     end
 
     start
@@ -174,7 +174,7 @@ module PermClerk
         info('  Resolution override found')
       end
       resolution = overriden_resolution || (section.match(/#{@config["regex_done"]}/i) ? 'done' : section.match(/#{@config["regex_notdone"]}/i) ? 'notdone' : false)
-      resolution_date = Date.parse(section.scan(/#{@config["regex_#{resolution}"]}.*?(\d\d:\d\d.*\d{4} \(UTC\))/i).flatten[1]) rescue nil
+      resolution_date = Date.parse(section.scan(/#{@config["regex_#{resolution}"]}.*(\d\d:\d\d, \d+ \w+ \d{4} \(UTC\))/i).flatten.last) rescue nil
 
       # use newest timestamp when forcing resolution and no resolution template exists
       if resolution_date.nil? && overriden_resolution
