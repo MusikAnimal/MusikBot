@@ -43,32 +43,42 @@ module StaleDrafts
       "== Non-redirects ==\n#{pages.length} unedited pages since #{format_date(end_date)}\n\n" \
       "{| class='wikitable sortable'\n! Page\n! Length\n! Revisions\n! style='min-width:75px' | Last edit\n! Links\n! Tagged\n! Mainspace \n|-\n"
 
-    pages.each do |page|
+    pages.each_with_index do |page, index|
       title = page['page_title'].gsub(/_/, ' ')
       date = Date.parse(page['rev_timestamp']).strftime('%Y-%m-%d')
-      api_data = @mw.custom_query(
-        titles: 'Draft:' + page['page_title'],
-        prop: 'linkshere|categories|revisions',
-        lhprop: 'pageid',
-        rvprop: 'ids',
-        lhlimit: 50,
-        rvlimit: 50
-      ).elements['pages'][0].elements rescue nil
+      api_data = get_api_data(page['page_title'])
 
-      puts title if @env == :test
+      puts "#{index} of #{pages.length}: #{title}" if @env == :test
+
+      next if api_data['categories'].to_a.select { |c| c.attributes['title'].include?('AfC submissions') }.any?
 
       links = api_data['linkshere'].elements.to_a.reject { |lh| lh.attributes['pageid'] == '48418678' }.length rescue 0
       templated = api_data['categories'].to_a.map { |c| c.attributes['title'] }.include?('Category:Draft articles') ? 'Yes' : 'No'
       revisions = api_data['revisions'].to_a.length
       revisions = revisions >= 50 ? '50+' : revisions
-      hist_link = "{{ plainlink | url=//en.wikipedia.org/w/index.php?title=Draft:#{page['page_title']}&action=history | name=#{revisions} }}"
+      hist_link = "{{ plainlink | url={{fullurl:Draft:#{page['page_title']}|action=history}} | name=#{revisions} }}"
 
       content += "| [[Draft:#{title}]] \n| #{page['page_len']}\n| #{hist_link}\n| #{date}\n" \
         "| [[Special:Whatlinkshere/Draft:#{page['page_title']}|#{links}]]\n| #{templated}\n| [[#{title}]]\n|-\n"
     end
 
     content = content.chomp("|-\n") + "|}\n\n" # "\n{{/Redirects}}"
-    edit_page('User:MusikBot/StaleDrafts/Report', content, "Reporting #{pages.length} stale non-AfC drafts")
+    edit_page('User:MusikBot/StaleDrafts/Report2', content, "Reporting #{pages.length} stale non-AfC drafts")
+  end
+
+  def self.get_api_data(title, throttle = 0)
+    sleep throttle * 5
+    @mw.custom_query(
+      titles: 'Draft:' + title,
+      prop: 'linkshere|categories|revisions',
+      lhprop: 'pageid',
+      rvprop: 'ids',
+      lhlimit: 50,
+      rvlimit: 50
+    ).elements['pages'][0].elements rescue nil
+  rescue MediaWiki::APIError => e
+    raise e and return false if throttle > 5
+    get_api_data(title, throttle + 1)
   end
 
   def self.process_redirects
@@ -88,7 +98,7 @@ module StaleDrafts
 
       date = Date.parse(page['rev_timestamp']).strftime('%Y-%m-%d')
       title = page['page_title'].gsub(/_/, ' ')
-      hist_link = "{{ plainlink | url=//en.wikipedia.org/w/index.php?title=Draft:#{page['page_title']}&action=history | name=hist }}"
+      hist_link = "{{ plainlink | url={{fullurl:Draft:#{page['page_title']}|action=history}} | name=hist }}"
 
       puts title if @env == :test
 
@@ -105,11 +115,8 @@ module StaleDrafts
   # Repl-related
   def self.fetch_drafts(redirects = false)
     query = 'SELECT DISTINCT page_title, page_len, rev_timestamp FROM enwiki_p.page ' \
-      'JOIN enwiki_p.categorylinks JOIN enwiki_p.revision ' \
-      'WHERE page_namespace = 118 ' \
-      "AND page_is_redirect = #{redirects ? '1' : '0'} " \
-      "AND rev_id = page_latest AND rev_timestamp < '#{end_date}' " \
-      "AND cl_from = page_id AND cl_to NOT RLIKE 'AfC_submissions';"
+      "JOIN enwiki_p.revision WHERE page_namespace = 118 AND page_is_redirect = #{redirects ? 1 : 0} " \
+      "AND rev_id = page_latest AND rev_timestamp < '#{end_date}';"
 
     @repl_client.query(query).to_a
   end
