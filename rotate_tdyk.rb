@@ -16,9 +16,9 @@ module RotateTDYK
     @mw = MediaWiki::Gateway.new("https://#{env == :production ? 'en' : 'test'}.wikipedia.org/w/api.php", bot: true)
     Auth.login(@mw)
 
-    exit 1 unless @mw.get('User:MusikBot/RotateTDYK/Run') == 'true' || env == :test
+    exit 1 unless api_get('User:MusikBot/RotateTDYK/Run') == 'true' || env == :test
 
-    @num_days = @mw.get('User:MusikBot/RotateTDYK/Offset').to_i rescue 7
+    @num_days = api_get('User:MusikBot/RotateTDYK/Offset').to_i rescue 7
 
     process_page
   rescue => e
@@ -116,11 +116,22 @@ module RotateTDYK
       summary: 'Reporting RotateTDYK errors'
     }
 
-    content = @mw.get('User:MusikBot/RotateTDYK/Error log') + "\n\n#{message} &mdash; ~~~~~\n\n"
+    content = api_get('User:MusikBot/RotateTDYK/Error log') + "\n\n#{message} &mdash; ~~~~~\n\n"
 
     @mw.edit('User:MusikBot/RotateTDYK/Error log', content, opts)
   rescue MediaWiki::APIError
     report_error(message, throttle + 1)
+  end
+
+  def self.api_get(page, throttle = 0)
+    sleep throttle
+    @mw.get(page)
+  rescue MediaWiki::APIError
+    if throttle > 5
+      report_error("API error when fetching #{page}")
+    else
+      api_get(page, throttle + 1)
+    end
   end
 
   # utilities
