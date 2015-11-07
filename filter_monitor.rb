@@ -254,7 +254,8 @@ module EditFilterMonitor
     opts = {
       contentformat: 'text/x-wiki',
       summary: "Reporting recent changes to filters #{filter_ids.join(', ')}",
-      text: content
+      text: content,
+      bot: false
     }
 
     begin
