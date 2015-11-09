@@ -31,15 +31,15 @@ module Repl
     def count_nonautomated_edits(username)
       @getter.get(@base_uri, query: {
         username: username,
-        redirects: 'on',
-        moves: 'on'
+        norecord: true
       })['nonautomated_count']
     end
 
     def count_nonautomated_namespace_edits(username, namespace)
       @getter.get(@base_uri, query: {
         username: username,
-        namespace: namespace
+        namespace: namespace,
+        norecord: true
       })['nonautomated_count']
     end
 
@@ -48,11 +48,10 @@ module Repl
     end
 
     def get_articles_created(username)
-      query = "SELECT page_title, rev_timestamp AS timestamp FROM #{@db}.page JOIN #{@db}.revision_userindex ON page_id = rev_page " \
+      sql = "SELECT page_title, rev_timestamp AS timestamp FROM #{@db}.page JOIN #{@db}.revision_userindex ON page_id = rev_page " \
         "WHERE rev_user_text = \"#{username}\" AND rev_timestamp > 1 AND rev_parent_id = 0 " \
         'AND page_namespace = 0 AND page_is_redirect = 0;'
-      puts query
-      res = @client.query(query)
+      res = query(sql)
       articles = []
       res.each do |result|
         result['timestamp'] = DateTime.parse(result['timestamp'])
@@ -61,11 +60,15 @@ module Repl
       articles
     end
 
+    def query(sql)
+      puts sql
+      @client.query(sql)
+    end
+
     private
 
-    def count(query)
-      puts query
-      @client.query(query).first.values[0].to_i
+    def count(sql)
+      query(sql).first.values[0].to_i
     end
   end
 end
