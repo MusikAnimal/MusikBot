@@ -56,7 +56,7 @@ module PermClerk
       ]
     else
       @PREREQ_EXPIRY = 0
-      @PERMISSIONS = ['AWB']
+      @PERMISSIONS = ['Confirmed']
     end
 
     start
@@ -303,7 +303,7 @@ module PermClerk
         if @config['autoformat'] && !should_update_prereq_data && @permission != 'AWB'
           debug('  Checking if request is fragmented...')
 
-          fragmented_regex = /{{rfplinks.*}}\n:(Reason for requesting (?:#{@PERMISSIONS.join("|").downcase}) rights) .*\(UTC\)\n*(.*)/
+          fragmented_regex = /{{rfplinks.*}}\n:(Reason for requesting (?:#{@PERMISSIONS.join("|").downcase}) rights) .*\(UTC\)(?m:(.*?)(?:\n\=\=|\z))/
           fragmented_match = section.scan(fragmented_regex)
 
           if fragmented_match.length > 0
@@ -327,7 +327,7 @@ module PermClerk
               end
             end
 
-            section.gsub!(fragmented_match.flatten[0], actual_reason)
+            section.gsub!(fragmented_match.flatten[0], actual_reason.gsub(/^\n+/, '').gsub(/\n+$/, ''))
 
             duplicate_sig = section.scan(/.*\(UTC\)(.*\(UTC\))/)
             if duplicate_sig.length > 0
