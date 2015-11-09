@@ -26,17 +26,12 @@ module ACCMonitor
 
     @env = eval(File.open('env').read)
 
-    exit 1 unless get_page('User:MusikBot/ACCMonitor/Run') == 'true' || @env == :test
+    exit 1 unless @env == :test || get_page('User:MusikBot/ACCMonitor/Run') == 'true'
 
     un, pw, host, db, port = Auth.db_credentials(@env)
     @repl_client = Repl::Session.new(un, pw, host, db, port)
     @getter = HTTParty
 
-    @content = "<div style='font-size:24px'>Inactive account creators as of #{Date.today.strftime('%-d %B %Y')}</div>\n" \
-      "'''{{User:MusikBot/ACCMonitor/Count}}''' users with no account creation activity in the past {{User:MusikBot/ACCMonitor/Offset}} days\n\n" \
-      "'''#{@coordinator_count}''' event coordinators with the account creator flag after the event has concluded" \
-      "<small>''NOTE: Total actions excludes creation of their own account. " \
-      "Rights log only shows entries where <tt>accountcreator</tt> was granted or revoked.''</small>\n\n"
     normal_header = "{| class='wikitable sortable'\n! Username\n! Total actions\n! style='min-width:100px' " \
       "| Last action\n! Reason granted\n! style='min-width:85px' | Rights log\n|-\n"
     @acc_markup = "==Account creation team==\n{| class='wikitable sortable'\n! Username\n! Total actions\n! style='min-width:100px' " \
@@ -131,13 +126,24 @@ module ACCMonitor
   end
 
   def self.issue_report
-    @content += @acc_markup.chomp("|-\n") + "|}\n\n"
-    @content += @educators_markup.chomp("|-\n") + "|}\n\n"
-    @content += @event_coordinators_markup.chomp("|-\n") + "|}\n\n"
-    @content += @other_users_markup.chomp("|-\n") + "|}\n\n"
+    total = @user_count + @coordinator_count
+    percentage = ((total.to_f / account_creators.to_a.length.to_f) * 100).round
+    content = "<div style='font-size:24px'>Inactive account creators as of #{Date.today.strftime('%-d %B %Y')}</div>\n" \
+      "'''#{total}''' out of #{account_creators.to_a.length} (#{percentage}%) account creators eligible for revocation\n\n" \
+      "'''{{User:MusikBot/ACCMonitor/Count}}''' users with no account creation activity in the past {{User:MusikBot/ACCMonitor/Offset}} days\n\n" \
+      "'''{{User:MusikBot/ACCMonitor/Coordinator count}}''' event coordinators with expired account creator privileges\n\n" \
+      "<small>''NOTE: Total actions excludes creation of their own account. " \
+      "Rights log only shows entries where {{mono|accountcreator}} was granted or revoked.''\n\n" \
+      "''If an account creator is inactive but not eligible for revocation of the right (such as an alternate account), they can be added to the [[User:MusikBot/ACCMonitor/Whitelist|whitelist]].''</small>\n\n"
 
-    edit_page('User:MusikBot/ACCMonitor/Tracking', @content, "Reporting account creation inactivity of #{@user_count} users")
-    edit_page('User:MusikBot/ACCMonitor/Count', @user_count.to_s, "Updating #{@user_count} inactive account creators")
+    content += @acc_markup.chomp("|-\n") + "|}\n\n"
+    content += @educators_markup.chomp("|-\n") + "|}\n\n"
+    content += @event_coordinators_markup.chomp("|-\n") + "|}\n\n"
+    content += @other_users_markup.chomp("|-\n") + "|}\n\n"
+
+    edit_page('User:MusikBot/ACCMonitor/Tracking', content, "Reporting account creation inactivity of #{@user_count} users")
+    edit_page('User:MusikBot/ACCMonitor/Count', @user_count.to_s, "Reporting #{@user_count} inactive account creators")
+    edit_page('User:MusikBot/ACCMonitor/Coordinator count', @coordinator_count.to_s, "Reporting #{@coordinator_count} event coordinators with expired account creator privileges")
   end
 
   def self.normal_entry(user)
