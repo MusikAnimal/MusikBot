@@ -44,26 +44,30 @@ module StaleDrafts
       "{| class='wikitable sortable'\n! Page\n! Length\n! Revisions\n! style='min-width:75px' | Last edit\n! Links\n! Tagged\n! Mainspace \n|-\n"
 
     pages.each_with_index do |page, index|
-      title = page['page_title'].gsub(/_/, ' ')
-      date = Date.parse(page['rev_timestamp']).strftime('%Y-%m-%d')
-      api_data = get_api_data(page['page_title'])
+      begin
+        title = page['page_title'].gsub(/_/, ' ')
+        date = Date.parse(page['rev_timestamp']).strftime('%Y-%m-%d')
+        api_data = get_api_data(page['page_title'])
 
-      puts "#{index} of #{pages.length}: #{title}" if @env == :test
+        puts "#{index} of #{pages.length}: #{title}" if @env == :test
 
-      next if api_data['categories'].to_a.select { |c| c.attributes['title'].include?('AfC submissions') }.any?
+        next if api_data['categories'].to_a.select { |c| c.attributes['title'].include?('AfC submissions') }.any?
 
-      links = api_data['linkshere'].elements.to_a.reject { |lh| lh.attributes['pageid'] == '48418678' }.length rescue 0
-      templated = api_data['categories'].to_a.map { |c| c.attributes['title'] }.include?('Category:Draft articles') ? 'Yes' : 'No'
-      revisions = api_data['revisions'].to_a.length
-      revisions = revisions >= 50 ? '50+' : revisions
-      hist_link = "{{ plainlink | url={{fullurl:Draft:#{page['page_title']}|action=history}} | name=#{revisions} }}"
+        links = api_data['linkshere'].elements.to_a.reject { |lh| lh.attributes['pageid'] == '48418678' }.length rescue 0
+        templated = api_data['categories'].to_a.map { |c| c.attributes['title'] }.include?('Category:Draft articles') ? 'Yes' : 'No'
+        revisions = api_data['revisions'].to_a.length
+        revisions = revisions >= 50 ? '50+' : revisions
+        hist_link = "{{ plainlink | url={{fullurl:Draft:#{page['page_title']}|action=history}} | name=#{revisions} }}"
 
-      content += "| [[Draft:#{title}]] \n| #{page['page_len']}\n| #{hist_link}\n| #{date}\n" \
-        "| [[Special:Whatlinkshere/Draft:#{page['page_title']}|#{links}]]\n| #{templated}\n| [[#{title}]]\n|-\n"
+        content += "| [[Draft:#{title}]] \n| #{page['page_len']}\n| #{hist_link}\n| #{date}\n" \
+          "| [[Special:Whatlinkshere/Draft:#{page['page_title']}|#{links}]]\n| #{templated}\n| [[#{title}]]\n|-\n"
+      rescue => e
+        puts "Error checking page #{page}: #{e.message}"
+      end
     end
 
     content = content.chomp("|-\n") + "|}\n\n" # "\n{{/Redirects}}"
-    edit_page('User:MusikBot/StaleDrafts/Report2', content, "Reporting #{pages.length} stale non-AfC drafts")
+    edit_page('User:MusikBot/StaleDrafts/Report', content, "Reporting #{pages.length} stale non-AfC drafts")
   end
 
   def self.get_api_data(title, throttle = 0)
