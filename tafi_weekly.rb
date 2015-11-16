@@ -29,8 +29,8 @@ module TAFIWeekly
     scheduled_article = add_new_scheduled_selection
     remove_entry_from_afi(scheduled_article)
     create_schedule_page(scheduled_article)
-    add_tafi_to_article(scheduled_article)
-    # message_project_members(scheduled_article)
+    new_article = add_tafi_to_article
+    # message_project_members(new_article)
     old_article = remove_old_tafi
     add_former_tafi(old_article)
   rescue => e
@@ -79,7 +79,8 @@ module TAFIWeekly
     edit_page(page + '/1', content: "[[#{article}]]")
   end
 
-  def self.add_tafi_to_article(article, throttle = 0)
+  def self.add_tafi_to_article(throttle = 0)
+    article = api_get("Wikipedia:Today's articles for improvement/#{today.year}/#{today.cweek}").scan(/\[\[(.*)\]\]/).flatten[0]
     old_content = get_page_props(article, rvsection: 0)
     return nil unless old_content
     new_content = "{{TAFI}}\n" + old_content
@@ -91,11 +92,12 @@ module TAFIWeekly
       conflicts: true
     )
   rescue MediaWiki::APIError => e
-    raise e if @env == :test
     if throttle > 3
       record_error('Edit throttle hit for add_tafi_to_article, aborting') and return false
-    else
+    elsif e.code.to_s == 'editconflict'
       add_tafi_to_article(article, throttle + 1)
+    else
+      raise e
     end
   end
 

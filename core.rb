@@ -74,9 +74,9 @@ end
 if config[:env] != :production
   config['archive'] = false
   config['autorespond'] = false
-  config['autoformat'] = false
+  config['autoformat'] = true
   config['fetchdeclined'] = false
-  config['prerequisites'] = true
+  config['prerequisites'] = false
 end
 
 if config['run']
