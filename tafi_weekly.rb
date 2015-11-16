@@ -30,7 +30,8 @@ module TAFIWeekly
     remove_entry_from_afi(scheduled_article)
     create_schedule_page(scheduled_article)
     new_article = add_tafi_to_article
-    # message_project_members(new_article)
+    message_project_members(new_article)
+    notify_wikiprojects(new_article)
     old_article = remove_old_tafi
     add_former_tafi(old_article)
   rescue => e
@@ -183,6 +184,18 @@ module TAFIWeekly
     subject = "This week's [[Wikipedia:Today's articles for improvement|article for improvement]] (week #{today.cweek}, #{today.year})"
     message = '{{subst:TAFI weekly selections notice}}'
     @mw.mass_message(spamlist, subject, message)
+  end
+
+  def self.notify_wikiprojects(article)
+    talk_text = api_get("Talk:#{article}",
+      rvsection: 0,
+      rvparse: true
+    )
+    wikiprojects = talk_text.scan(%r{\"\/wiki\/Wikipedia:(WikiProject_.*?)(?:#|\/|\")}).flatten.uniq
+    content = '{{subst:TAFI project notice}}'
+    wikiprojects.each do |wikiproject|
+      edit_page("Wikipedia talk:#{wikiproject}", content, section: 'new')
+    end
   end
 
   # API-related
