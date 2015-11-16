@@ -276,7 +276,7 @@ module TAFIWeekly
   end
 
   def self.api_get(page, opts = {}, throttle = 0)
-    sleep throttle
+    sleep throttle * 5
     @mw.get(page, opts)
   rescue MediaWiki::APIError
     if throttle > 5
