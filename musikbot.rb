@@ -79,7 +79,7 @@ module MusikBot
       report_error("Unable to fetch #{page}", e)
     end
 
-    def get_page_props(page, opts)
+    def get_page_props(page, opts = {})
       full_response = opts.delete(:full_response)
 
       opts = {
