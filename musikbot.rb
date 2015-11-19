@@ -1,5 +1,7 @@
+require 'mediawiki-gateway'
 require 'auth'
 require 'repl'
+require 'pry-byebug'
 
 class Object
   def present?
@@ -11,6 +13,8 @@ class Object
   end
 end
 
+MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
+
 module MusikBot
   class Session
     def initialize(task)
@@ -20,7 +24,7 @@ module MusikBot
       @gateway = MediaWiki::Gateway.new("https://#{env == :production ? 'en' : 'test'}.wikipedia.org/w/api.php", bot: true)
       Auth.login(@gateway)
 
-      exit 1 unless env == :test || api_get("User:MusikBot/#{@task}/Run") == 'true'
+      exit 1 unless env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
     end
     attr_reader :gateway
 
@@ -103,7 +107,7 @@ module MusikBot
     def report_error(message, e = nil)
       opts = {
         contentformat: 'text/x-wiki',
-        summary: 'Reporting TAFIWeekly errors'
+        summary: "Reporting #{@task} errors"
       }
       page = "User:MusikBot/#{@task}/Error log"
       message = "\n*[~~~~~] #{message} – in {{mono|#{e.backtrace_locations.first.label}}}: ''#{e.message}''"

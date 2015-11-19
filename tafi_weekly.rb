@@ -1,10 +1,6 @@
 $LOAD_PATH << '.'
-require 'mediawiki-gateway'
 require 'musikbot'
-require 'date'
 require 'pry-byebug'
-
-MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
 
 module TAFIWeekly
   def self.run
