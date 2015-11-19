@@ -1,6 +1,5 @@
 $LOAD_PATH << '.'
 require 'musikbot'
-require 'pry-byebug'
 
 module TAFIWeekly
   def self.run

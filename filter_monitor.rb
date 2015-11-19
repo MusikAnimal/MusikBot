@@ -1,7 +1,6 @@
 $LOAD_PATH << '.'
 require 'musikbot'
 require 'mysql2'
-require 'pry-byebug'
 
 NUM_DAYS = 5
 TEMPLATE = 'User:MusikBot/FilterMonitor/Recent changes'

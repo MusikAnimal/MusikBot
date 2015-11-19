@@ -1,6 +1,5 @@
 $LOAD_PATH << '.'
 require 'musikbot'
-require 'pry-byebug'
 
 module RotateTDYK
   TEMPLATE_PAGE = 'Template talk:Did you know'

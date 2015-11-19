@@ -1,7 +1,6 @@
 $LOAD_PATH << '.'
 require 'musikbot'
 require 'httparty'
-require 'pry-byebug'
 
 module ACCMonitor
   def self.run

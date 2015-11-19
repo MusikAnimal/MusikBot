@@ -1,8 +1,5 @@
 $LOAD_PATH << '.'
 require 'musikbot'
-require 'pry-byebug'
-
-MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
 
 module StaleDrafts
   def self.run
