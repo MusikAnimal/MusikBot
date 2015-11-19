@@ -1,35 +1,11 @@
 $LOAD_PATH << '.'
-require 'mysql2'
-require 'mediawiki-gateway'
-require 'repl'
+require 'musikbot'
 require 'httparty'
-require 'auth.rb'
-require 'date'
 require 'pry-byebug'
-
-MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
-
-class Object
-  def present?
-    !blank?
-  end
-
-  def blank?
-    respond_to?(:empty?) ? empty? : !self
-  end
-end
 
 module ACCMonitor
   def self.run
-    @mw = MediaWiki::Gateway.new('https://en.wikipedia.org/w/api.php', bot: true)
-    Auth.login(@mw)
-
-    @env = eval(File.open('env').read)
-
-    exit 1 unless @env == :test || get_page('User:MusikBot/ACCMonitor/Run') == 'true'
-
-    un, pw, host, db, port = Auth.db_credentials(@env)
-    @repl_client = Repl::Session.new(un, pw, host, db, port)
+    @mb = MusikBot::Session.new(inspect, true)
     @getter = HTTParty
 
     normal_header = "{| class='wikitable sortable'\n! Username\n! Total actions\n! style='min-width:100px' " \
@@ -95,11 +71,7 @@ module ACCMonitor
       end
     end
   rescue => e
-    if @env == :test
-      raise e
-    else
-      report_error(e.message)
-    end
+    @mb.report_error('Fatal error', e)
   end
 
   def self.process_event_coordinators
@@ -200,46 +172,27 @@ module ACCMonitor
     end
     @event_coordinators
   rescue => e
-    report_error("Unable to parse event coordinators page! Error: #{e.message}")
+    @mb.report_error('Unable to parse event coordinators page', e)
   end
 
   # API related
   def self.event_coordinators_text
-    @event_coordinators_text ||= get_page('User:MusikBot/ACCMonitor/Event coordinators')
+    @event_coordinators_text ||= @mb.get('User:MusikBot/ACCMonitor/Event coordinators')
   end
 
   def self.whitelisted_users
-    @whitelisted_users ||= get_page('User:MusikBot/ACCMonitor/Whitelist').split(/^\*/).drop(1).map { |u| u.chomp("\n") }
+    @whitelisted_users ||= @mb.get('User:MusikBot/ACCMonitor/Whitelist').split(/^\*/).drop(1).map { |u| u.chomp("\n") }
   end
 
   def self.num_days
-    @num_days ||= get_page('User:MusikBot/ACCMonitor/Offset').to_i
+    @num_days ||= @mb.get('User:MusikBot/ACCMonitor/Offset').to_i
   end
 
-  def self.get_page(page, throttle = 0)
-    sleep throttle * 5
-    @mw.get(page)
-  rescue MediaWiki::APIError => e
-    raise e and return false if throttle > 5
-    get_page(page, throttle + 1)
-  end
-
-  def self.edit_page(page, content, summary, throttle = 0)
-    sleep throttle * 5
-    opts = {
-      contentformat: 'text/x-wiki',
+  def self.edit_page(page, content, summary)
+    @mb.edit(page,
+      content: content,
       summary: summary
-    }
-    @mw.edit(page, CGI.unescapeHTML(content), opts)
-    return true
-  rescue MediaWiki::APIError => e
-    raise e and return false if throttle > 5
-    edit_page(page, content, summary, throttle + 1)
-  end
-
-  def self.report_error(message)
-    content = get_page('User:MusikBot/ACCMonitor/Error log') + "\n\n#{message} &mdash; ~~~~~\n\n"
-    edit('User:MusikBot/ACCMonitor/Error log', content, 'Reporting ACCMonitor errors')
+    )
   end
 
   private
@@ -248,22 +201,22 @@ module ACCMonitor
   def self.account_creators
     return @account_creators if @account_creators
 
-    @repl_client.query('SELECT user_name FROM enwiki_p.user JOIN user_groups ' \
+    @mb.repl_client.query('SELECT user_name FROM enwiki_p.user JOIN user_groups ' \
       "WHERE ug_group = 'accountcreator' AND ug_user = user_id;")
   end
 
   def self.user_groups(username)
-    @repl_client.query('SELECT ug_group FROM enwiki_p.user_groups ' \
+    @mb.repl_client.query('SELECT ug_group FROM enwiki_p.user_groups ' \
       "JOIN user WHERE user_name = '#{username}' AND ug_user = user_id;")
   end
 
   def self.rights_changes(username)
-    @repl_client.query('SELECT log_timestamp, log_comment, log_user_text, log_params ' \
+    @mb.repl_client.query('SELECT log_timestamp, log_comment, log_user_text, log_params ' \
       "FROM logging_logindex WHERE log_title = '#{username}' AND log_type = 'rights';")
   end
 
   def self.logged_actions(username)
-    @repl_client.query('SELECT log_timestamp, log_title FROM logging_userindex ' \
+    @mb.repl_client.query('SELECT log_timestamp, log_title FROM logging_userindex ' \
       "WHERE log_user_text = '#{username}' AND log_type = 'newusers' " \
       'ORDER BY log_timestamp DESC;')
   end
