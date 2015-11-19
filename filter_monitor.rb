@@ -1,35 +1,15 @@
 $LOAD_PATH << '.'
+require 'musikbot'
 require 'mysql2'
-require 'mediawiki-gateway'
-require 'auth.rb'
-require 'date'
 require 'pry-byebug'
-
-MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
 
 NUM_DAYS = 5
 TEMPLATE = 'User:MusikBot/FilterMonitor/Recent changes'
 
-class Object
-  def present?
-    !blank?
-  end
-
-  def blank?
-    respond_to?(:empty?) ? empty? : !self
-  end
-end
-
-module EditFilterMonitor
+module FilterMonitor
   def self.run
-    @mw = MediaWiki::Gateway.new('https://en.wikipedia.org/w/api.php', bot: true)
-    Auth.login(@mw)
-
-    env = eval(File.open('env').read)
-
-    exit 1 unless @mw.get('User:MusikBot/FilterMonitor/Run') == 'true' || env == :test
-
-    un, pw, host, db, port = Auth.ef_db_credentials(env)
+    @mb = MusikBot::Session.new(inspect, true)
+    un, pw, host, db, port = Auth.ef_db_credentials(eval(File.open('env').read))
     @client = Mysql2::Client.new(
       host: host,
       username: un,
@@ -41,11 +21,7 @@ module EditFilterMonitor
     changes = filter_changes
     generate_report(changes) if changes.any?
   rescue => e
-    if env == :test
-      raise e
-    else
-      report_error(e.message)
-    end
+    @mb.report_error('Fatal error', e)
   end
 
   def self.filter_changes
@@ -93,7 +69,7 @@ module EditFilterMonitor
         insert(current_filter)
       end
 
-      net_changes << changes
+      net_changes << changes unless saved_filter['private'] == '1'
     end
 
     net_changes
@@ -120,7 +96,9 @@ module EditFilterMonitor
 
     content = new_templates.join("\n\n")
 
-    report_error('Failed to write to template') unless edit_page(TEMPLATE, content, new_templates_data.collect { |ntd| ntd['filter_id'] })
+    unless write_template(TEMPLATE, content, new_templates_data.collect { |ntd| ntd['filter_id'] })
+      @mb.report_error('Failed to write to template')
+    end
   end
 
   def self.template(data)
@@ -207,7 +185,7 @@ module EditFilterMonitor
   end
 
   def self.config
-    @config ||= JSON.parse(CGI.unescapeHTML(@mw.get('User:MusikBot/FilterMonitor/config.js')))
+    @config ||= JSON.parse(CGI.unescapeHTML(@mb.get('User:MusikBot/FilterMonitor/config.js')))
   end
 
   def self.comparison_props
@@ -223,7 +201,7 @@ module EditFilterMonitor
       abflimit: 1000
     }
 
-    @current_filters = fetch_current_filters(opts)
+    @current_filters = @mb.gateway.custom_query(opts).elements['abusefilters']
   end
 
   def self.saved_filters
@@ -231,55 +209,18 @@ module EditFilterMonitor
   end
 
   # API methods
-  def self.fetch_current_filters(opts, throttle = 0)
-    return false if throttle > 5
-    sleep throttle * 5
-    return @mw.custom_query(opts).elements['abusefilters']
-  rescue MediaWiki::APIError
-    return fetch_current_filters(opts, throttle + 1)
+  def self.fetch_old_templates
+    filters = @mb.get(TEMPLATE).split(/^'''/).drop(1).map { |f| "'''#{f.rstrip}" }
+    filters.keep_if { |f| DateTime.parse(f.scan(/(\d\d:\d\d.*\d{4} \(UTC\))/).flatten[0]) > DateTime.now - NUM_DAYS }
   end
 
-  def self.fetch_old_templates(throttle = 0)
-    return false if throttle > 5
-    sleep throttle * 5
-    filters = @mw.get(TEMPLATE).split(/^'''/).drop(1).map { |f| "'''#{f.rstrip}" }
-    return filters.keep_if { |f| DateTime.parse(f.scan(/(\d\d:\d\d.*\d{4} \(UTC\))/).flatten[0]) > DateTime.now - NUM_DAYS }
-  rescue MediaWiki::APIError
-    return old_templates(throttle + 1)
-  end
-
-  def self.edit_page(page, content, filter_ids, throttle = 0)
-    return false if throttle > 5
-
+  def self.write_template(page, content, filter_ids)
     opts = {
-      contentformat: 'text/x-wiki',
       summary: "Reporting recent changes to filters #{filter_ids.join(', ')}",
-      text: content,
+      content: content,
       bot: false
     }
-
-    begin
-      sleep throttle * 5
-      @mw.edit(page, CGI.unescapeHTML(content), opts)
-    rescue MediaWiki::APIError
-      return edit_page(page, content, filter_ids, throttle + 1)
-    end
-
-    true
-  end
-
-  def self.report_error(message, throttle = 0)
-    return if throttle > 5
-    sleep throttle * 5
-
-    opts = {
-      contentformat: 'text/x-wiki',
-      summary: 'Reporting FilterMonitor errors'
-    }
-
-    @mw.edit('User:MusikBot/FilterMonitor/Error log', message + " ~~~~~\n\n", opts)
-  rescue MediaWiki::APIError
-    report_error(message, throttle + 1)
+    @mb.edit(page, opts)
   end
 
   # Database related stuff
@@ -332,4 +273,4 @@ module EditFilterMonitor
   end
 end
 
-EditFilterMonitor.run
+FilterMonitor.run
