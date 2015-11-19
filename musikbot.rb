@@ -17,14 +17,14 @@ MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/
 
 module MusikBot
   class Session
-    def initialize(task)
+    def initialize(task, prodonly = false)
       @task = task
 
       env = eval(File.open('env').read)
-      @gateway = MediaWiki::Gateway.new("https://#{env == :production ? 'en' : 'test'}.wikipedia.org/w/api.php", bot: true)
+      @gateway = MediaWiki::Gateway.new("https://#{env == :production || prodonly ? 'en' : 'test'}.wikipedia.org/w/api.php", bot: true)
       Auth.login(@gateway)
 
-      exit 1 unless env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
+      report_error("#{@task} disabled") unless env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
     end
     attr_reader :gateway
 
@@ -110,14 +110,15 @@ module MusikBot
         summary: "Reporting #{@task} errors"
       }
       page = "User:MusikBot/#{@task}/Error log"
-      message = "\n*[~~~~~] #{message} – in {{mono|#{e.backtrace_locations.first.label}}}: ''#{e.message}''"
-      content = get(page) + message
+      message = "\n*[~~~~~] #{message}"
 
       if e
         STDERR.puts "Error during processing: #{$ERROR_INFO}"
         STDERR.puts "Backtrace:\n\t#{e.backtrace.join("\n\t")}"
+        message += " &mdash; in {{mono|#{e.backtrace_locations.first.label}}}: ''#{e.message}''"
       end
 
+      content = get(page) + message
       @gateway.edit(page, content, opts) and return false
     end
   end
