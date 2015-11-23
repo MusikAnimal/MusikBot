@@ -119,6 +119,7 @@ module MusikBot
       message = "\n*[~~~~~] #{message}"
 
       if e
+        STDERR.puts "===#{DateTime.now.strftime('%Y-%m-%d %H:%M:%S')}==="
         STDERR.puts "Error during processing: #{$ERROR_INFO}"
         STDERR.puts "Backtrace:\n\t#{e.backtrace.join("\n\t")}"
         message += " &mdash; in {{mono|#{e.backtrace_locations.first.label}}}: ''#{e.message}''"
