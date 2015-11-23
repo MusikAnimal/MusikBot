@@ -25,7 +25,7 @@ module MusikBot
       @gateway = MediaWiki::Gateway.new("https://#{@env == :production || prodonly ? 'en' : 'test'}.wikipedia.org/w/api.php", bot: true)
       Auth.login(@gateway)
 
-      unless @env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
+      unless task == 'Console' || @env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
         report_error("#{@task} disabled")
         exit 1
       end
@@ -87,6 +87,7 @@ module MusikBot
 
     def get_page_props(page, opts = {})
       full_response = opts.delete(:full_response)
+      no_conflict = opts.delete(:no_conflict)
 
       opts = {
         prop: 'info|revisions',
@@ -99,8 +100,11 @@ module MusikBot
         report_error("Unable to fetch properties of [[#{page}]] - page does not exist!")
       end
 
-      @start_timestamp = Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ')
-      @base_timestamp = page_obj.elements['revisions'][0].attributes['timestamp']
+      unless no_conflict
+        @start_timestamp = Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+        @base_timestamp = page_obj.elements['revisions'][0].attributes['timestamp']
+      end
+
       if full_response
         page_obj
       else
@@ -119,7 +123,7 @@ module MusikBot
       message = "\n*[~~~~~] #{message}"
 
       if e
-        STDERR.puts "===#{DateTime.now.strftime('%Y-%m-%d %H:%M:%S')}==="
+        STDERR.puts "#{'>' * 20} #{DateTime.now.strftime('%Y-%m-%d %H:%M:%S')}"
         STDERR.puts "Error during processing: #{$ERROR_INFO}"
         STDERR.puts "Backtrace:\n\t#{e.backtrace.join("\n\t")}"
         message += " &mdash; in {{mono|#{e.backtrace_locations.first.label}}}: ''#{e.message}''"
