@@ -1,6 +1,7 @@
 require 'mediawiki-gateway'
 require 'auth'
 require 'repl'
+require 'uri'
 require 'pry-byebug'
 
 class Object
@@ -20,18 +21,23 @@ module MusikBot
     def initialize(task, prodonly = false)
       @task = task
 
-      env = eval(File.open('env').read)
-      @gateway = MediaWiki::Gateway.new("https://#{env == :production || prodonly ? 'en' : 'test'}.wikipedia.org/w/api.php", bot: true)
+      @env = eval(File.open('env').read)
+      @gateway = MediaWiki::Gateway.new("https://#{@env == :production || prodonly ? 'en' : 'test'}.wikipedia.org/w/api.php", bot: true)
       Auth.login(@gateway)
 
-      report_error("#{@task} disabled") unless env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
+      unless @env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
+        report_error("#{@task} disabled")
+        exit 1
+      end
     end
+    attr_reader :env
     attr_reader :gateway
 
     # Utilities
     def today
       DateTime.now.new_offset(0).to_date
     end
+    alias_method :now, :today
 
     # Database-related
     def repl_client
