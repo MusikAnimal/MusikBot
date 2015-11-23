@@ -9,7 +9,6 @@ module TAFIWeekly
     remove_entry_from_afi(scheduled_article) if config['remove_entry_from_afi']
     create_schedule_page(scheduled_article) if config['prepare_scheduled_selection']
     add_tafi_to_article if config['add_tafi_to_article']
-    # ~=~=~=~=~=~=~=~ FIXME: IMPORTANT!!! REMOVE HEADER FROM TEMPLATE! ~=~=~=~=~=~=~=~
     message_project_members if config['message_project_members']
     notify_wikiprojects if config['notify_wikiprojects']
     old_article = remove_old_tafi if config['remove_old_tafi']
@@ -19,9 +18,12 @@ module TAFIWeekly
   end
 
   def self.add_new_scheduled_selection(throttle = 0)
+    new_date = @mb.today + (4 * 7)
+    start_date = new_date - 7
     page = "Wikipedia talk:Today's articles for improvement"
     old_content = @mb.get_page_props(page, rvsection: 2)
-    new_content = old_content + "\n" + '{{subst:TAFI scheduled selection}}'
+    new_content = old_content + "\n\n{{subst:TAFI scheduled selection" \
+      "|week=#{new_date.cweek}|year=#{new_date.year}|date=#{start_date.strftime('%d %B %Y')}}}"
 
     @mb.edit(page,
       summary: 'Posting new scheduled week selection',
@@ -30,7 +32,7 @@ module TAFIWeekly
       conflicts: true
     )
 
-    return @mb.get(page).scan(/icon\|\w+}} \[\[(.*?)\]\]\n.*mbdate.*#{@mb.today.day} #{@mb.today.strftime('%B')}/).flatten.last
+    return @mb.get(page).scan(/icon\|\w+}} \[\[(.*?)\]\].*?mbdate.*?#{@mb.today.day} #{@mb.today.strftime('%B')}/).flatten.last
   rescue MediaWiki::APIError => e
     if throttle > 3
       @mb.report_error('Edit throttle hit', e)
@@ -65,11 +67,13 @@ module TAFIWeekly
   end
 
   def self.create_schedule_page(article)
-    week = @mb.today.cweek + 3
-    page = "Wikipedia:Today's articles for improvement/#{@mb.today.year}/#{week}"
+    new_date = @mb.today + (4 * 7)
+    page = "Wikipedia:Today's articles for improvement/#{new_date.year}/#{new_date.cweek}"
     content = "{{subst:Wikipedia:Today's articles for improvement/Schedule/Preload}}"
     @mb.edit(page, content: content)
     @mb.edit(page + '/1', content: "[[#{article}]]")
+    @mb.gateway.purge("Wikipedia:Today's articles for improvement/Schedule")
+    @mb.gateway.purge("Wikipedia talk:Today's articles for improvement")
   end
 
   def self.add_tafi_to_article(throttle = 0)
@@ -94,7 +98,7 @@ module TAFIWeekly
   end
 
   def self.new_tafi
-    @new_tafi ||= @mb.get("Wikipedia:Today's articles for improvement/#{@mb.today.year}/#{@mb.today.cweek}").scan(/\[\[(.*)\]\]/).flatten[0]
+    @new_tafi ||= @mb.get("Wikipedia:Today's articles for improvement/#{@mb.today.year}/#{@mb.today.cweek}/1").scan(/\[\[(.*)\]\]/).flatten[0]
   end
 
   def self.remove_old_tafi(throttle = 0)
@@ -156,9 +160,10 @@ module TAFIWeekly
     end
     content += '}}'
 
+    talk_content = @mb.get_page_props("Talk:#{article}", rvsection: 0)
     @mb.edit("Talk:#{article}",
       summary: "Adding {{Former TAFI}} as previous [[Wikipedia:Today's articles for improvement|article for improvement]]",
-      content: content,
+      content: "#{talk_content}\n#{content}",
       section: 0,
       conflicts: true
     )
@@ -173,14 +178,15 @@ module TAFIWeekly
   end
 
   def self.get_article_class(text)
-    text.scan(/\|class\s*=\s*(\w+)\s*(?:\||})/).flatten.first rescue nil
+    text.scan(/\|class\s*=\s*(\w+)\s*(?:\||})/).flatten.first rescue 'Unassessed'
   end
 
   def self.message_project_members
     spamlist = "Wikipedia:Today's articles for improvement/Members/Notifications"
     subject = "This week's [[Wikipedia:Today's articles for improvement|article for improvement]] (week #{@mb.today.cweek}, #{@mb.today.year})"
-    message = '{{subst:TAFI weekly selection notice}}'
-    @mw.mass_message(spamlist, subject, message)
+    sig = "<span style=\"font-family:sans-serif\"><b>[[User:MusikBot|<span style=\"color:black; font-style:italic\">MusikBot</span>]] <sup>[[User talk:MusikAnimal|<span style=\"color:green\">talk</span>]]</sup></b></span>"
+    message = "{{subst:TAFI weekly selection notice|1=#{sig} using ~~~ on behalf of WikiProject TAFI}}"
+    @mb.gateway.mass_message(spamlist, subject, message)
   end
 
   def self.notify_wikiprojects
@@ -188,10 +194,14 @@ module TAFIWeekly
       rvsection: 0,
       rvparse: true
     )
-    wikiprojects = talk_text.scan(%r{\"\/wiki\/Wikipedia:(WikiProject_.*?)(?:#|\/|\")}).flatten.uniq
+    wikiprojects = talk_text.scan(%r{\"\/wiki\/Wikipedia:(WikiProject_.*?)(?:#|\/|\")}).flatten.uniq - ['WikiProject_Deletion_sorting']
     content = '{{subst:TAFI project notice}}'
     wikiprojects.each do |wikiproject|
-      @mb.edit("Wikipedia talk:#{wikiproject}", content, section: 'new')
+      @mb.edit("Wikipedia talk:#{wikiproject}",
+        content: content,
+        section: 'new',
+        summary: "Notification that [[#{new_tafi}]] has been selected as one of [[WP:TAFI|Today's articles for improvement]]"
+      )
     end
   end
 
