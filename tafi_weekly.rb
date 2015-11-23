@@ -5,14 +5,18 @@ module TAFIWeekly
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    scheduled_article = add_new_scheduled_selection if config['add_new_scheduled_selection']
-    remove_entry_from_afi(scheduled_article) if config['remove_entry_from_afi']
-    create_schedule_page(scheduled_article) if config['prepare_scheduled_selection']
-    add_tafi_to_article if config['add_tafi_to_article']
-    message_project_members if config['message_project_members']
-    notify_wikiprojects if config['notify_wikiprojects']
-    old_article = remove_old_tafi if config['remove_old_tafi']
-    add_former_tafi(old_article) if config['add_former_tafi']
+    # scheduled_article = add_new_scheduled_selection if config['add_new_scheduled_selection']
+    # remove_entry_from_afi(scheduled_article) if config['remove_entry_from_afi']
+    # create_schedule_page(scheduled_article) if config['prepare_scheduled_selection']
+
+    # tag_new_tafi if config['add_tafi_to_article']
+    # detag_old_tafi if config['remove_old_tafi']
+    # add_former_tafi if config['add_former_tafi']
+
+    # message_project_members if config['message_project_members']
+    # notify_wikiprojects if config['notify_wikiprojects']
+
+    add_accomplishments
   rescue => e
     @mb.report_error('Fatal error', e)
   end
@@ -76,7 +80,7 @@ module TAFIWeekly
     @mb.gateway.purge("Wikipedia talk:Today's articles for improvement")
   end
 
-  def self.add_tafi_to_article(throttle = 0)
+  def self.tag_new_tafi(throttle = 0)
     old_content = @mb.get_page_props(new_tafi, rvsection: 0)
     return nil unless old_content
     new_content = "{{TAFI}}\n" + old_content
@@ -91,77 +95,53 @@ module TAFIWeekly
     if throttle > 3
       @mb.report_error('Edit throttle hit', e)
     elsif e.code.to_s == 'editconflict'
-      add_tafi_to_article(article, throttle + 1)
+      tag_new_tafi(article, throttle + 1)
     else
       raise e
     end
   end
 
-  def self.new_tafi
-    @new_tafi ||= @mb.get("Wikipedia:Today's articles for improvement/#{@mb.today.year}/#{@mb.today.cweek}/1").scan(/\[\[(.*)\]\]/).flatten[0]
-  end
-
-  def self.remove_old_tafi(throttle = 0)
+  def self.detag_old_tafi(throttle = 0)
     sleep throttle * 5
 
-    last_week = @mb.today - 7
-    old_tafi_page_name = "Wikipedia:Today's articles for improvement/#{last_week.year}/#{last_week.cweek}/1"
-    article = @mb.get(old_tafi_page_name).scan(/\[\[(.*)\]\]/).flatten[0]
-
-    page_obj = @mb.get_page_props(article,
-      rvprop: 'timestamp|content|ids',
+    page_obj = @mb.get_page_props(old_tafi,
+      rvprop: 'timestamp|content|ids|size',
       rvsection: 0,
       full_response: true
     )
-    @last_rev_id = page_obj.elements['revisions'][0].attributes['revid']
-    old_content = page_obj.elements['revisions'][0][0].to_s
+    @old_tafi_new_rev = page_obj.elements['revisions'][0]
+    old_content = @old_tafi_new_rev[0].to_s
     new_content = old_content.gsub(/\{\{TAFI\}\}\n*/i, '')
 
     if old_content.length != new_content.length
-      @mb.edit(article,
+      @mb.edit(old_tafi,
         summary: "Removing {{TAFI}}, [[Wikipedia:Today's articles for improvement|article for improvement]] period has concluded",
         content: new_content,
         section: 0,
         conflicts: true
       )
     end
-
-    article
   rescue MediaWiki::APIError => e
     if throttle > 3
       @mb.report_error('Edit throttle hit', e)
     elsif e.code.to_s == 'editconflict'
-      remove_old_tafi(throttle + 1)
+      detag_old_tafi(throttle + 1)
     else
       raise e
     end
   end
 
-  def self.add_former_tafi(article, throttle = 0)
-    start_date = @mb.today - 7
-    unless old_talk_text = @mb.get_revision_at_date("Talk:#{article}", start_date, rvsection: 0)
-      @mb.report_error("Unable to fetch [[Talk:#{article}]], aborting add_former_tafi")
-    end
+  def self.add_former_tafi(throttle = 0)
+    content = "{{Former TAFI|date=#{last_week.strftime('%e %B %Y')}|page=#{old_tafi}|oldid2=#{old_tafi_new_rev_id}"
+    content += "|oldid1=#{old_tafi_old_rev_id}"
 
-    old_class = get_article_class(old_talk_text)
-
-    old_id = @mb.get_revision_at_date(article, start_date,
-      rvprop: 'ids',
-      full_response: true
-    ).elements['revisions'][0].attributes['revid'] rescue nil
-
-    content = "{{Former TAFI|date=#{start_date.strftime('%e %B %Y')}|page=#{article}|oldid2=#{@last_rev_id}"
-    content += "|oldid1=#{old_id}" if old_id
-
-    new_talk_text = @mb.get_page_props("Talk:#{article}", rvsection: 0)
-    new_class = get_article_class(new_talk_text)
-    if old_class != new_class && old_class.present? && new_class.present?
-      content += "|oldclass=#{old_class}|newclass=#{new_class}"
+    if old_tafi_old_class != old_tafi_new_class && old_tafi_old_class.present? && old_tafi_new_class.present?
+      content += "|oldclass=#{old_tafi_old_class}|newclass=#{old_tafi_new_class}"
     end
     content += '}}'
 
-    talk_content = @mb.get_page_props("Talk:#{article}", rvsection: 0)
-    @mb.edit("Talk:#{article}",
+    talk_content = @mb.get_page_props("Talk:#{old_tafi}", rvsection: 0)
+    @mb.edit("Talk:#{old_tafi}",
       summary: "Adding {{Former TAFI}} as previous [[Wikipedia:Today's articles for improvement|article for improvement]]",
       content: "#{talk_content}\n#{content}",
       section: 0,
@@ -171,14 +151,10 @@ module TAFIWeekly
     if throttle > 3
       @mb.report_error('Edit throttle hit', e)
     elsif e.code.to_s == 'editconflict'
-      add_former_tafi(article, throttle + 1)
+      add_former_tafi(throttle + 1)
     else
       raise e
     end
-  end
-
-  def self.get_article_class(text)
-    text.scan(/\|class\s*=\s*(\w+)\s*(?:\||})/).flatten.first rescue 'Unassessed'
   end
 
   def self.message_project_members
@@ -194,7 +170,7 @@ module TAFIWeekly
       rvsection: 0,
       rvparse: true
     )
-    wikiprojects = talk_text.scan(%r{\"\/wiki\/Wikipedia:(WikiProject_.*?)(?:#|\/|\")}).flatten.uniq - ['WikiProject_Deletion_sorting']
+    wikiprojects = talk_text.scan(%r{\"\/wiki\/Wikipedia:(WikiProject_.*?)(?:#|\/|\")}).flatten.uniq - wikiproject_exclusions
     content = '{{subst:TAFI project notice}}'
     wikiprojects.each do |wikiproject|
       @mb.edit("Wikipedia talk:#{wikiproject}",
@@ -203,6 +179,140 @@ module TAFIWeekly
         summary: "Notification that [[#{new_tafi}]] has been selected as one of [[WP:TAFI|Today's articles for improvement]]"
       )
     end
+  end
+
+  def self.add_accomplishments
+    editors = []
+    anons = []
+    bots = []
+    reverts = 0
+
+    revisions = old_tafi_revisions.to_a
+    revisions.pop
+
+    revisions.each do |revision|
+      editors << revision.attributes['user']
+      anons << revision.attributes['user'] if revision.attributes['anon']
+      bots << revision.attributes['user'] if revision.attributes['user'] =~ /bot$/i
+      reverts += 1 if revision.attributes['comment'] =~ /Reverted.*?edits?|Undid revision \d+/
+    end
+
+    entry = "{{Wikipedia:Today's articles for improvement/Accomplishments/row" \
+      "|YYYY = #{@mb.today.year}" \
+      "|WW = #{@mb.today.cweek}" \
+      "|oldid = #{old_tafi_old_rev_id}" \
+      "|olddate = #{last_week.strftime('%d %B %Y')}" \
+      "|oldclass = #{old_tafi_old_class}" \
+      "|newid = #{old_tafi_new_rev_id}" \
+      "|newdate = #{@mb.today.strftime('%d %B %Y')}" \
+      "|newclass = #{old_tafi_new_class}" \
+      "|edits = #{revisions.length}" \
+      "|editors = #{editors.uniq.length}" \
+      "|IPs = #{anons.uniq.length}" \
+      "|bots = #{bots.uniq.length}" \
+      "|reverts = #{reverts}" \
+      "|size_before = #{old_tafi_old_rev.attributes['size']}" \
+      "|size_after = #{old_tafi_new_rev.attributes['size']}" \
+      '}}'
+
+    update_accomplishments_page(entry)
+  end
+
+  def self.update_accomplishments_page(entry, throttle = 0)
+    page = "Wikipedia:Today's articles for improvement/Accomplishments"
+    content = @mb.get_page_props(page)
+
+    identifier = "&lt;!-- mb-break --&gt;\n"
+    content.gsub!(/#{identifier}/, "#{entry}\n#{identifier}")
+
+    @mb.edit(page,
+      content: content,
+      conflicts: true,
+      summary: "Adding accomplishments for [[#{old_tafi}]]"
+    )
+  rescue MediaWiki::APIError => e
+    if throttle > 3
+      @mb.report_error('Edit throttle hit', e)
+    elsif e.code.to_s == 'editconflict'
+      update_accomplishments_page(entry, throttle + 1)
+    else
+      raise e
+    end
+  end
+
+  # Helpers
+  def self.old_tafi_revisions
+    @old_tafi_revisions ||= @mb.gateway.custom_query(
+      prop: 'revisions',
+      titles: old_tafi,
+      rvstartid: old_tafi_new_rev_id,
+      rvendid: old_tafi_old_rev_id,
+      rvprop: 'user|comment',
+      rvlimit: 5000
+    ).elements['pages'][0].elements['revisions']
+  end
+
+  # Old
+  def self.old_tafi_old_rev
+    @old_tafi_old_rev ||= @mb.get_revision_at_date(old_tafi, last_week,
+      rvprop: 'ids|size',
+      full_response: true
+    ).elements['revisions'][0]
+  end
+
+  def self.old_tafi_old_rev_id
+    @old_tafi_old_rev_id ||= old_tafi_old_rev.attributes['revid']
+  end
+
+  def self.old_tafi_old_class
+    return @old_tafi_old_class if @old_tafi_old_class
+    unless old_talk_text = @mb.get_revision_at_date("Talk:#{old_tafi}", last_week, rvsection: 0)
+      @mb.report_error("Unable to fetch [[Talk:#{old_tafi}]], aborting add_former_tafi") and return nil
+    end
+    @old_tafi_old_class = get_article_class(old_talk_text)
+  end
+
+  # New
+  def self.old_tafi_new_rev
+    @old_tafi_new_rev ||= @mb.get_page_props(old_tafi,
+      rvprop: 'ids|size',
+      full_response: true
+    ).elements['revisions'][0]
+  end
+
+  def self.old_tafi_new_rev_id
+    @old_tafi_new_rev_id ||= old_tafi_new_rev.attributes['revid']
+  end
+
+  def self.old_tafi_new_class
+    return @old_tafi_new_class if @old_tafi_new_class
+    new_talk_text = @mb.get_page_props("Talk:#{old_tafi}", rvsection: 0)
+    @old_tafi_new_class = get_article_class(new_talk_text)
+  end
+
+  def self.old_tafi
+    return @old_tafi if @old_tafi
+    old_tafi_page_name = "Wikipedia:Today's articles for improvement/#{last_week.year}/#{last_week.cweek}/1"
+    @old_tafi = @mb.get(old_tafi_page_name).scan(/\[\[(.*)\]\]/).flatten[0]
+  end
+
+  def self.new_tafi
+    @new_tafi ||= @mb.get("Wikipedia:Today's articles for improvement/#{@mb.today.year}/#{@mb.today.cweek}/1").scan(/\[\[(.*)\]\]/).flatten[0]
+  end
+
+  def self.get_article_class(text)
+    text.scan(/\|class\s*=\s*(\w+)\s*(?:\||})/).flatten.first || 'Unassessed'
+  end
+
+  def self.wikiproject_exclusions
+    [
+      'WikiProject_Deletion_sorting',
+      'WikiProject_Guild_of_Copy_Editors'
+    ]
+  end
+
+  def self.last_week
+    @mb.today - 7
   end
 
   # API-related
