@@ -5,16 +5,16 @@ module TAFIWeekly
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    # scheduled_article = add_new_scheduled_selection if config['add_new_scheduled_selection']
-    # remove_entry_from_afi(scheduled_article) if config['remove_entry_from_afi']
-    # create_schedule_page(scheduled_article) if config['prepare_scheduled_selection']
+    scheduled_article = add_new_scheduled_selection if @mb.config['run']['add_new_scheduled_selection']
+    remove_entry_from_afi(scheduled_article) if @mb.config['run']['remove_entry_from_afi']
+    create_schedule_page(scheduled_article) if @mb.config['run']['prepare_scheduled_selection']
 
-    # tag_new_tafi if config['add_tafi_to_article']
-    # detag_old_tafi if config['remove_old_tafi']
-    # add_former_tafi if config['add_former_tafi']
+    tag_new_tafi if @mb.config['run']['tag_new_tafi']
+    detag_old_tafi if @mb.config['run']['detag_old_tafi']
+    add_former_tafi if @mb.config['run']['add_former_tafi']
 
-    # message_project_members if config['message_project_members']
-    # notify_wikiprojects if config['notify_wikiprojects']
+    message_project_members if @mb.config['run']['message_project_members']
+    notify_wikiprojects if @mb.config['run']['notify_wikiprojects']
 
     add_accomplishments
   rescue => e
@@ -22,12 +22,11 @@ module TAFIWeekly
   end
 
   def self.add_new_scheduled_selection(throttle = 0)
-    new_date = @mb.today + (4 * 7)
     start_date = new_date - 7
     page = "Wikipedia talk:Today's articles for improvement"
     old_content = @mb.get_page_props(page, rvsection: 2)
     new_content = old_content + "\n\n{{subst:TAFI scheduled selection" \
-      "|week=#{new_date.cweek}|year=#{new_date.year}|date=#{start_date.strftime('%d %B %Y')}}}"
+      "|week=#{new_schedule_date.cweek}|year=#{new_schedule_date.year}|date=#{start_date.strftime('%d %B %Y')}}}"
 
     @mb.edit(page,
       summary: 'Posting new scheduled week selection',
@@ -71,8 +70,7 @@ module TAFIWeekly
   end
 
   def self.create_schedule_page(article)
-    new_date = @mb.today + (4 * 7)
-    page = "Wikipedia:Today's articles for improvement/#{new_date.year}/#{new_date.cweek}"
+    page = "Wikipedia:Today's articles for improvement/#{new_schedule_date.year}/#{new_schedule_date.cweek}"
     content = "{{subst:Wikipedia:Today's articles for improvement/Schedule/Preload}}"
     @mb.edit(page, content: content)
     @mb.edit(page + '/1', content: "[[#{article}]]")
@@ -300,6 +298,10 @@ module TAFIWeekly
     @new_tafi ||= @mb.get("Wikipedia:Today's articles for improvement/#{@mb.today.year}/#{@mb.today.cweek}/1").scan(/\[\[(.*)\]\]/).flatten[0]
   end
 
+  def self.new_schedule_date
+    @mb.today + (3 * 7)
+  end
+
   def self.get_article_class(text)
     text.scan(/\|class\s*=\s*(\w+)\s*(?:\||})/).flatten.first || 'Unassessed'
   end
@@ -316,9 +318,6 @@ module TAFIWeekly
   end
 
   # API-related
-  def self.config
-    @config ||= JSON.parse(CGI.unescapeHTML(@mb.get('User:MusikBot/TAFIWeekly/config.js')))
-  end
 end
 
 TAFIWeekly.run
