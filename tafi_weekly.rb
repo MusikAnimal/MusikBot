@@ -198,8 +198,8 @@ module TAFIWeekly
     end
 
     entry = "{{Wikipedia:Today's articles for improvement/Accomplishments/row" \
-      "|YYYY = #{@mb.today.year}" \
-      "|WW = #{@mb.today.cweek}" \
+      "|YYYY = #{last_week.year}" \
+      "|WW = #{last_week.cweek}" \
       "|oldid = #{old_tafi_old_rev_id}" \
       "|olddate = #{last_week.strftime('%d %B %Y')}" \
       "|oldclass = #{old_tafi_old_class}" \
