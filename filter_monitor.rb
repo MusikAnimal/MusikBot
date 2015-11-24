@@ -68,7 +68,7 @@ module FilterMonitor
         insert(current_filter)
       end
 
-      net_changes << changes unless saved_filter['private'] == '1'
+      net_changes << changes unless current_filter['private'] == '1'
     end
 
     net_changes
