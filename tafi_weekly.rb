@@ -22,11 +22,10 @@ module TAFIWeekly
   end
 
   def self.add_new_scheduled_selection(throttle = 0)
-    start_date = new_date - 7
     page = "Wikipedia talk:Today's articles for improvement"
     old_content = @mb.get_page_props(page, rvsection: 2)
     new_content = old_content + "\n\n{{subst:TAFI scheduled selection" \
-      "|week=#{new_schedule_date.cweek}|year=#{new_schedule_date.year}|date=#{start_date.strftime('%d %B %Y')}}}"
+      "|week=#{new_schedule_date.cweek}|year=#{new_schedule_date.year}|date=#{new_schedule_date.strftime('%d %B %Y')}}}"
 
     @mb.edit(page,
       summary: 'Posting new scheduled week selection',
@@ -169,12 +168,12 @@ module TAFIWeekly
       rvparse: true
     )
     wikiprojects = talk_text.scan(%r{\"\/wiki\/Wikipedia:(WikiProject_.*?)(?:#|\/|\")}).flatten.uniq - wikiproject_exclusions
-    content = '{{subst:TAFI project notice}}'
+    content = '{{subst:TAFI project notice|no_heading=yes}}'
     wikiprojects.each do |wikiproject|
       @mb.edit("Wikipedia talk:#{wikiproject}",
         content: content,
         section: 'new',
-        summary: "Notification that [[#{new_tafi}]] has been selected as one of [[WP:TAFI|Today's articles for improvement]]"
+        summary: "One of your project's articles has been selected for improvement!"
       )
     end
   end
@@ -220,7 +219,7 @@ module TAFIWeekly
     page = "Wikipedia:Today's articles for improvement/Accomplishments"
     content = @mb.get_page_props(page)
 
-    identifier = "&lt;!-- mb-break --&gt;\n"
+    identifier = '&lt;!-- mb-break --&gt;'
     content.gsub!(/#{identifier}/, "#{entry}\n#{identifier}")
 
     @mb.edit(page,
