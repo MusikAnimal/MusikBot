@@ -32,6 +32,7 @@ module MusikBot
     end
     attr_reader :env
     attr_reader :gateway
+    attr_reader :task
 
     # Utilities
     def today
@@ -61,6 +62,10 @@ module MusikBot
       end
 
       @gateway.edit(page, CGI.unescapeHTML(opts.delete(:content)), opts)
+    end
+
+    def config
+      @config ||= JSON.parse(CGI.unescapeHTML(get("User:MusikBot/#{@task}/config.js")))
     end
 
     def get_revision_at_date(page, date, opts = {})
