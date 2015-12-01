@@ -8,6 +8,7 @@ module TAFIWeekly
     scheduled_article = add_new_scheduled_selection if @mb.config['run']['add_new_scheduled_selection']
     remove_entry_from_afi(scheduled_article) if @mb.config['run']['remove_entry_from_afi']
     create_schedule_page(scheduled_article) if @mb.config['run']['prepare_scheduled_selection']
+    archive_schedule if @mb.config['run']['archive_scheduled_entries']
 
     tag_new_tafi if @mb.config['run']['tag_new_tafi']
     detag_old_tafi if @mb.config['run']['detag_old_tafi']
@@ -16,7 +17,7 @@ module TAFIWeekly
     message_project_members if @mb.config['run']['message_project_members']
     notify_wikiprojects if @mb.config['run']['notify_wikiprojects']
 
-    add_accomplishments
+    add_accomplishments if @mb.config['run']['add_accomplishments']
   rescue => e
     @mb.report_error('Fatal error', e)
   end
@@ -75,6 +76,27 @@ module TAFIWeekly
     @mb.edit(page + '/1', content: "[[#{article}]]")
     @mb.gateway.purge("Wikipedia:Today's articles for improvement/Schedule")
     @mb.gateway.purge("Wikipedia talk:Today's articles for improvement")
+  end
+
+  def self.archive_schedule
+    page = "Wikipedia:Today's articles for improvement/Archives/Schedule"
+    identifier = '<!-- mb-break -->'
+    content = @mb.get(page, rvsection: 1)
+
+    if new_schedule_date.cweek == 1
+      content = "===#{new_schedule_date.year}===\nThe TAFI schedule for #{new_schedule_date.year}, by week number:\n" \
+        "{{Div col||20em}}\n\n#{identifier}\n{{div col end}}\n\n'''Notes:'''\n{{reflist|group=#{new_schedule_date.year}}}" \
+        "\n\n#{content}"
+    end
+
+    entry = "'''Week #{new_schedule_date.cweek}'''\n" \
+      "#\{\{Wikipedia:Today's articles for improvement/#{new_schedule_date.year}/#{new_schedule_date.cweek}/1}}"
+    content.gsub!(identifier, "#{entry}\n\n#{identifier}")
+
+    @mb.edit(page,
+      content: content,
+      section: 1
+    )
   end
 
   def self.tag_new_tafi(throttle = 0)
@@ -306,10 +328,7 @@ module TAFIWeekly
   end
 
   def self.wikiproject_exclusions
-    [
-      'WikiProject_Deletion_sorting',
-      'WikiProject_Guild_of_Copy_Editors'
-    ]
+    @mb.config['config']['wikiproject_exclusions']
   end
 
   def self.last_week
