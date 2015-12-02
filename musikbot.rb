@@ -35,10 +35,17 @@ module MusikBot
     attr_reader :task
 
     # Utilities
-    def today
-      DateTime.now.new_offset(0).to_date
+    def now
+      DateTime.now.new_offset(0)
     end
-    alias_method :now, :today
+
+    def today
+      now.to_date
+    end
+
+    def parse_date(str)
+      DateTime.parse(str).new_offset(0)
+    end
 
     # Database-related
     def repl_client
@@ -120,6 +127,8 @@ module MusikBot
     attr_reader :start_timestamp
 
     def report_error(message, e = nil)
+      return fail if @env == :test
+
       opts = {
         contentformat: 'text/x-wiki',
         summary: "Reporting #{@task} errors"
