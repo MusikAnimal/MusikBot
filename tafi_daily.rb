@@ -1,108 +1,112 @@
 $LOAD_PATH << '.'
-require 'mediawiki-gateway'
-require 'auth.rb'
-require 'date'
-require 'pry-byebug'
-
-MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
-
-class Object
-  def present?
-    !blank?
-  end
-
-  def blank?
-    respond_to?(:empty?) ? empty? : !self
-  end
-end
+require 'musikbot'
 
 module TAFIDaily
-  def self.run(throttle = 0)
-    sleep throttle * 180
-    @env = eval(File.open('env').read)
-
-    @mw = MediaWiki::Gateway.new("https://#{@env == :production ? 'en' : 'test'}.wikipedia.org/w/api.php", bot: true)
-    Auth.login(@mw)
-
-    exit 1 unless api_get('User:MusikBot/TAFIDaily/Run') == 'true' || @env == :test
+  def self.run
+    @mb = MusikBot::Session.new(inspect)
 
     process_nomination_board
+    rotate_nominations if @mb.config['run']['rotate_nominations']
   rescue => e
-    report_error("Fatal error: #{e.message}")
+    @mb.report_error("Fatal error: #{e.message}")
+  end
+
+  def self.rotate_nominations(throttle = 0)
+    text = @mb.get_page_props(nominations_board_page_name, rvsection: @mb.config['config']['nominations_section']).chomp('').chomp('{{/TOC}}')
+    genres = []
+
+    sections = text.split(/^==([^=].*?[^=])==\s*\n/)
+    intro = sections.delete_at(0).chomp('')
+
+    sections.each_slice(2).each do |genre|
+      name = genre[0]
+      nominations = genre[1].split(/^===([^=].*?[^=])===\s*\n/)
+      nominations = nominations.drop(1) unless nominations[0] =~ /^===.*?===\s*\n/
+      new_nominations = []
+      nominations.each_slice(2).each { |nn| new_nominations << "===#{nn[0]}===\n#{nn[1].chomp('').gsub(/^\n/, '')}\n\n" }
+      header = '&lt;!-- Place new entries directly below this line, at the top of the list. --&gt;'
+      genres << "==#{name}==\n#{header}\n\n#{new_nominations.rotate.join}".chomp('')
+    end
+
+    @mb.edit(nominations_board_page_name,
+      content: ([intro] + genres.rotate).join("\n\n") + "\n{{/TOC}}",
+      summary: 'Rotating nominations',
+      conflicts: true,
+      section: @mb.config['config']['nominations_section']
+    )
+  rescue MediaWiki::APIError => e
+    if throttle > 3
+      @mb.report_error('Edit throttle hit', e)
+    elsif e.code.to_s == 'editconflict'
+      rotate_nominations(throttle + 1)
+    else
+      raise
+    end
   end
 
   def self.process_nomination_board
-    text = api_get("Wikipedia:Today's articles for improvement/Nominations", rvsection: 1)
-    afi_entries = []
-    approved = []
-    unapproved = []
+    text = @mb.get(nominations_board_page_name)
+    approved_entries = []
+    archive_entries = []
     text.split("\n===").each do |entry|
       section = "\n===#{entry}"
       article, assessment = entry.scan(/{{\s*TAFI nom\s*\|\s*article\s*=(.*?)\s*(?:\||}})(?:class\s*=\s*(\w+))?/i).flatten
 
+      next unless article
+
+      section.gsub!(/\n==[^=].*/m, '')
+
+      timestamps = section.scan(/(?<!&lt;!-- mbdate --&gt; )\d\d:\d\d.*\d{4} \(UTC\)/)
+      newest_timestamp = @mb.parse_date(timestamps.min { |a, b| @mb.parse_date(b) <=> @mb.parse_date(a) })
+      should_archive = newest_timestamp + Rational(@mb.config['config']['archive_offset'], 24) < @mb.now
+
       if entry =~ /{{\s*approved\s*}}/i
-        afi_entries << "# {{icon|#{assessment || 'unknown'}}} [[#{article}]]"
+        approved_entries << "# {{icon|#{assessment || 'unknown'}}} [[#{article}]]"
         text.gsub!(section, '')
-        approved << section
+        archive_entries << section if should_archive
       end
       if entry =~ /{{\s*(not\s*approved|unapproved)\s*}}/i
         text.gsub!(section, '')
-        unapproved << section
+        archive_entries << section if should_archive
       end
     end
-    add_afti_entries(afi_entries) if afi_entries.present?
-    archive_nominations(:approved, approved) if approved.any?
-    archive_nominations(:unapproved, unapproved) if unapproved.any?
+
+    return unless archive_entries.any?
+
+    if @mb.config['run']['update_afi_page'] && approved_entries.present?
+      add_afti_entries(approved_entries)
+    end
+
+    if @mb.config['run']['archive_nominations']
+      archive_nominations(archive_entries)
+      @mb.edit(nominations_board_page_name,
+        content: text,
+        summary: "Archiving #{archive_entries.length} nominations"
+      )
+    end
   end
 
   def self.add_afti_entries(entries)
     page = 'Wikipedia:Articles for improvement/List'
-    text = api_get(page)
-    edit_page(page,
-      content: text + entries.join("\n"),
+    text = @mb.get(page)
+    entries.delete_if { |entry| text.include?(entry.scan(/(\[\[.*?\]\])/).flatten[0].to_s) }
+    @mb.edit(page,
+      content: "#{text}\n#{entries.join("\n")}",
       summary: "Adding #{entries.length} newly approved article#{'s' if entries.length > 1} for improvement"
     )
   end
 
-  def self.archive_section(type, entries)
-    page = "Wikipedia:Today's articles for improvement/Archives/#{type == :approved ? 'Successful' : 'Unsuccessful'} Nominations"
+  def self.archive_nominations(entries)
+    page = "Wikipedia:Today's articles for improvement/Nominations/Archives/#{@mb.today.year}/#{@mb.today.month}"
+    content = @mb.get(page)
+    @mb.edit(page,
+      content: "#{content}\n#{entries.join("\n")}",
+      summary: "Archiving #{entries.length} nominations"
+    )
   end
 
-  # API-related
-  def self.edit_page(page, opts, throttle = 0)
-    sleep throttle * 5
-    opts.merge(contentformat: 'text/x-wiki')
-    @mw.edit(page, CGI.unescapeHTML(opts[:content]), opts)
-  rescue MediaWiki::APIError
-    return false if throttle > 4
-    edit_page(page, opts, throttle + 1)
-  end
-
-  def self.report_error(message, throttle = 0)
-    return if throttle > 5
-    sleep throttle * 5
-
-    opts = {
-      contentformat: 'text/x-wiki',
-      summary: 'Reporting TAFIWeekly errors'
-    }
-
-    content = api_get('User:MusikBot/TAFIWeekly/Error log') + "\n\n#{message} &mdash; ~~~~~\n\n"
-
-    @mw.edit('User:MusikBot/TAFIWeekly/Error log', content, opts)
-  rescue MediaWiki::APIError
-    report_error(message, throttle + 1)
-  end
-
-  def self.api_get(page, opts = {}, throttle = 0)
-    sleep throttle * 5
-    @mw.get(page, opts)
-  rescue MediaWiki::APIError
-    if throttle > 5
-      report_error("API error when fetching #{page}")
-    else
-      api_get(page, throttle + 1)
-    end
+  def self.nominations_board_page_name
+    @mb.config['config']['nominations_board_page_name']
   end
 end
 
