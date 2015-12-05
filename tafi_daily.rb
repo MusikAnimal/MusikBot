@@ -5,8 +5,14 @@ module TAFIDaily
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
+    last_run = @mb.parse_date(File.open('TAFIDaily_lastrun', 'r').read) rescue DateTime.new
+
     process_nomination_board
-    rotate_nominations if @mb.config['run']['rotate_nominations']
+    rotate_nominations if @mb.config['run']['rotate_nominations'] && @mb.now > last_run + Rational(23, 24)
+
+    run_file = File.open('TAFIDaily_lastrun', 'r+')
+    run_file.write(DateTime.now.to_s)
+    run_file.close
   rescue => e
     @mb.report_error("Fatal error: #{e.message}")
   end
@@ -99,10 +105,28 @@ module TAFIDaily
   def self.archive_nominations(entries)
     page = "Wikipedia:Today's articles for improvement/Nominations/Archives/#{@mb.today.year}/#{@mb.today.month}"
     content = @mb.get(page)
+    new_month = content.nil?
     @mb.edit(page,
       content: "#{content}\n#{entries.join("\n")}",
       summary: "Archiving #{entries.length} nominations"
     )
+
+    # create links on archives index
+    if new_month
+      index_page = "Wikipedia:Today's articles for improvement/Nominations/Archives"
+      index_content = @mb.get(index_page, rvsection: 1)
+      year_line = index_content.scan(/\n'''#{@mb.today.year}''':.*?$/).flatten.first || "\n'''#{@mb.today.year}''': "
+      index_content.sub!(year_line, '')
+      index_content.sub!(/<!-- mb-break.*? -->/,
+        "<!-- mb-break (do not remove comment) -->#{year_line}#{' &middot; ' if year_line.include?('[[')}" \
+        "[[/#{@mb.today.year}/#{@mb.today.month}|#{@mb.today.strftime('%b')}]]"
+      )
+      @mb.edit(index_page,
+        content: index_content,
+        section: 1,
+        summary: "Adding archiving entry for [[/#{@mb.today.year}/#{@mb.today.month}]]"
+      )
+    end
   end
 
   def self.nominations_board_page_name
