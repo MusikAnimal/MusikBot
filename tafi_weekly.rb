@@ -53,8 +53,8 @@ module TAFIWeekly
         'Please ensure the {{mono|add_new_scheduled_selection}} task is enabled'
       )
     end
-    page = 'Wikipedia:Articles for improvement'
-    old_content = @mb.get(page, rvsection: 1)
+    page = 'Wikipedia:Articles for improvement/List'
+    old_content = @mb.get(page)
     # FIXME: check for entires with underscores instead of spaces too!
     new_content = old_content.gsub(/#.*?\[\[#{article}\]\]\s*\n/i, '') || old_content.gsub(/#.*?\[\[#{article.gsub(/ /, '_')}\]\]\s*\n/i, '')
 
