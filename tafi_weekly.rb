@@ -241,7 +241,7 @@ module TAFIWeekly
     page = "Wikipedia:Today's articles for improvement/Accomplishments"
     content = @mb.get_page_props(page)
 
-    identifier = '&lt;!-- mb-break --&gt;'
+    identifier = '<!-- mb-break -->'
     content.gsub!(/#{identifier}/, "#{entry}\n#{identifier}")
 
     @mb.edit(page,

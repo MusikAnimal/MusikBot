@@ -6,9 +6,10 @@ module TAFIDaily
     @mb = MusikBot::Session.new(inspect)
 
     last_run = @mb.parse_date(File.open('TAFIDaily_lastrun', 'r').read) rescue DateTime.new
+    rotation_expired = @mb.env == :test ? true : @mb.now > last_run + Rational(23, 24)
 
     process_nomination_board
-    rotate_nominations if @mb.config['run']['rotate_nominations'] && @mb.now > last_run + Rational(23, 24)
+    rotate_nominations if @mb.config['run']['rotate_nominations'] && rotation_expired
 
     run_file = File.open('TAFIDaily_lastrun', 'r+')
     run_file.write(DateTime.now.to_s)
@@ -30,12 +31,12 @@ module TAFIDaily
       nominations = nominations.drop(1) unless nominations[0] =~ /^===.*?===\s*\n/
       new_nominations = []
       nominations.each_slice(2).each { |nn| new_nominations << "===#{nn[0]}===\n#{nn[1].chomp('').gsub(/^\n/, '')}\n\n" }
-      header = '&lt;!-- Place new entries directly below this line, at the top of the list. --&gt;'
+      header = '<!-- Place new entries directly below this line, at the top of the list. -->'
       genres << "==#{name}==\n#{header}\n\n#{new_nominations.rotate.join}".chomp('')
     end
 
     @mb.edit(nominations_board_page_name,
-      content: ([intro] + genres.rotate).join("\n\n") + "\n{{/TOC}}",
+      content: ([intro] + genres.rotate).join("\n\n") + "\n\n\n{{/TOC}}",
       summary: 'Rotating nominations',
       conflicts: true,
       section: @mb.config['config']['nominations_section']
