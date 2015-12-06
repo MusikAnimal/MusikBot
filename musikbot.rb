@@ -54,6 +54,22 @@ module MusikBot
       @repl_client = Repl::Session.new(un, pw, host, db, port)
     end
 
+    # Redis-related
+    def redis_client
+      @redis_client ||= Auth.get_redis
+    end
+
+    def cache(base_key, time = 3600, &res)
+      key = "ma-#{Digest::MD5.hexdigest(base_key.to_s)}"
+
+      unless ret = @redis_client.get(key)
+        @redis_client.set(key, ret = res.call)
+        @redis_client.expire(key, time)
+      end
+
+      ret
+    end
+
     # API-related
     def get(page, opts = {})
       @gateway.get(page, opts)
@@ -68,7 +84,7 @@ module MusikBot
         )
       end
 
-      @gateway.edit(page, CGI.unescapeHTML(opts.delete(:content)), opts)
+      @gateway.edit(page, opts.delete(:content), opts)
     end
 
     def config
@@ -120,7 +136,7 @@ module MusikBot
       if full_response
         page_obj
       else
-        page_obj.elements['revisions'][0][0].to_s
+        page_obj.elements['revisions/rev'].text
       end
     end
     attr_reader :base_timestamp
