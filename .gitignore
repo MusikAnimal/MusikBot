@@ -3,6 +3,6 @@ auth.rb
 *.log
 TODO
 env
-lastrun
+*lastrun
 .bundle
 .ruby-version
