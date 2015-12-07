@@ -63,7 +63,6 @@ module TAFIWeekly
     end
 
     @mb.edit(page,
-      section: 1,
       content: new_content,
       summary: "Removing [[#{article}]] as the new [[Wikipedia:Today's articles for improvement|article for improvement]]"
     )
@@ -129,7 +128,7 @@ module TAFIWeekly
       full_response: true
     )
     @old_tafi_new_rev = page_obj.elements['revisions'][0]
-    old_content = @old_tafi_new_rev[0].to_s
+    old_content = @old_tafi_new_rev.text
     new_content = old_content.gsub(/\{\{TAFI\}\}\n*/i, '')
 
     if old_content.length != new_content.length
