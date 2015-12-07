@@ -16,7 +16,7 @@ module RotateTDYK
 
   def self.process_page(throttle = 0)
     @old_content = @mb.get_page_props(TEMPLATE_PAGE)
-    split = @old_content.split(/\=\=\s*Current\s*nominations(?:&lt;!-- automatically moved by bot --&gt;)?\s*\=\=/i)
+    split = @old_content.split(/\=\=\s*Current\s*nominations(?:\<!-- automatically moved by bot --\>)?\s*\=\=/i)
     older_nominations = split[0]
     @current_nominations = split[1]
 
@@ -56,8 +56,8 @@ module RotateTDYK
     return false if @newest_day == @mb.today
     holding_area = @current_nominations.scan(/\n==\s*Special occasion holding area\s*==/).flatten[0]
     todays_heading = "\n===Articles created/expanded on #{@mb.today.strftime('%B %-d')}===\n" \
-      '&lt;!-- After you have created your nomination page, please add it (e.g., {{Did you know nominations/YOUR ARTICLE TITLE}}) ' \
-      "to the TOP of this section (after this comment).--&gt;\n"
+      '<!-- After you have created your nomination page, please add it (e.g., {{Did you know nominations/YOUR ARTICLE TITLE}}) ' \
+      "to the TOP of this section (after this comment).-->;\n"
     @current_nominations.gsub!(holding_area, todays_heading + holding_area)
   end
 end
