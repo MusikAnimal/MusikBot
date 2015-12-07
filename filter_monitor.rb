@@ -214,8 +214,9 @@ module FilterMonitor
   end
 
   def self.write_template(page, content, filter_ids)
+    filter_list = filter_ids.map { |f| "[[Special:AbuseFilter/#{f}|#{f}]]" }.join(', ')
     opts = {
-      summary: "Reporting recent changes to filters #{filter_ids.join(', ')}",
+      summary: "Reporting recent changes to filters #{filter_list}",
       content: content,
       bot: false
     }
