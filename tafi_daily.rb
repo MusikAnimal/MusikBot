@@ -2,6 +2,8 @@ $LOAD_PATH << '.'
 require 'musikbot'
 
 module TAFIDaily
+  LIST_PAGE = 'Wikipedia:Articles for improvement/List'
+
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
@@ -52,55 +54,67 @@ module TAFIDaily
   end
 
   def self.process_nomination_board
-    text = @mb.get(nominations_board_page_name)
+    @board_text = @mb.get(nominations_board_page_name)
+    @board_edit_summaries = []
     approved_entries = []
     archive_entries = []
-    text.split("\n===").each do |entry|
-      section = "\n===#{entry}"
+    @board_text.split("\n===").each do |entry|
+      @section = "\n===#{entry}"
       article, assessment = entry.scan(/{{\s*TAFI nom\s*\|\s*article\s*=(.*?)\s*(?:\||}})(?:class\s*=\s*(\w+))?/i).flatten
 
       next unless article
 
-      section.gsub!(/\n==[^=].*/m, '')
-
-      timestamps = section.scan(/(?<!&lt;!-- mbdate --&gt; )\d\d:\d\d.*\d{4} \(UTC\)/)
+      @section.gsub!(/\n==[^=].*/m, '')
+      timestamps = @section.scan(/(?<!&lt;!-- mbdate --&gt; )\d\d:\d\d.*\d{4} \(UTC\)/)
       newest_timestamp = @mb.parse_date(timestamps.min { |a, b| @mb.parse_date(b) <=> @mb.parse_date(a) })
       should_archive = newest_timestamp + Rational(@mb.config['config']['archive_offset'], 24) < @mb.now
 
-      if entry =~ /{{\s*approved\s*}}/i
-        approved_entries << "# {{icon|#{assessment || 'unknown'}}} [[#{article}]]"
-        text.gsub!(section, '')
-        archive_entries << section if should_archive
+      if entry =~ /{{\s*((?:not\s*)?approved|unapproved)\s*}}/i
+        if entry =~ /{{\s*approved\s*}}/i
+          approved_entries << "# {{icon|#{assessment || 'unknown'}}} [[#{article}]]"
+        end
+        @board_text.gsub!(@section, '')
+        archive_entries << @section if should_archive
+        next
       end
-      if entry =~ /{{\s*(not\s*approved|unapproved)\s*}}/i
-        text.gsub!(section, '')
-        archive_entries << section if should_archive
-      end
+
+      comment_if_duplicate_nomination(article) if @mb.config['run']['comment_on_duplicate_nominations']
     end
 
-    return unless archive_entries.any?
-
-    if @mb.config['run']['update_afi_page'] && approved_entries.present?
+    if @mb.config['run']['update_afi_page'] && approved_entries.any?
       add_afti_entries(approved_entries)
     end
 
-    if @mb.config['run']['archive_nominations']
+    if @mb.config['run']['archive_nominations'] && archive_entries.any?
       archive_nominations(archive_entries)
+    end
+
+    if @board_edit_summaries
       @mb.edit(nominations_board_page_name,
-        content: text,
-        summary: "Archiving #{archive_entries.length} nominations"
+        content: @board_text,
+        summary: "Bot clerking: #{@board_edit_summaries.join(', ')}"
       )
     end
   end
 
   def self.add_afti_entries(entries)
-    page = 'Wikipedia:Articles for improvement/List'
-    text = @mb.get(page)
-    entries.delete_if { |entry| text.include?(entry.scan(/(\[\[.*?\]\])/).flatten[0].to_s) }
-    @mb.edit(page,
-      content: "#{text}\n#{entries.join("\n")}",
+    entries.delete_if { |entry| afi_list.include?(entry.scan(/(\[\[.*?\]\])/).flatten[0].to_s) }
+    @mb.edit(LIST_PAGE,
+      content: "#{afi_list}\n#{entries.join("\n")}",
       summary: "Adding #{entries.length} newly approved article#{'s' if entries.length > 1} for improvement"
     )
+  end
+
+  def self.comment_if_duplicate_nomination(article)
+    return unless afi_list =~ /\[\[(#{article.gsub('_', ' ')}|#{article.gsub(' ', '_')})\]\]/
+
+    dup_comment = '* {{comment|Automated comment}} This article appears to have already ' \
+      "been chosen as an [[#{LIST_PAGE}|article for improvement]]. Please verify. ~~~~"
+
+    matches = @section.scan(/({{\s*TAFI nom.*?}})\n+(?:\*(.*?)\n)?/m).flatten
+    break_point = matches[1] || matches[0]
+    @board_text.sub!(break_point, "#{break_point}\n#{dup_comment}")
+    @board_edit_summaries << "duplicate nomination found ([[#{article}]])"
   end
 
   def self.archive_nominations(entries)
@@ -128,10 +142,16 @@ module TAFIDaily
         summary: "Adding archiving entry for [[/#{@mb.today.year}/#{@mb.today.month}]]"
       )
     end
+
+    @board_edit_summaries << "archiving #{entries.length} nominations"
   end
 
   def self.nominations_board_page_name
     @mb.config['config']['nominations_board_page_name']
+  end
+
+  def self.afi_list
+    @afi_list ||= @mb.get(LIST_PAGE)
   end
 end
 
