@@ -179,7 +179,7 @@ module TAFIWeekly
     spamlist = "Wikipedia:Today's articles for improvement/Members/Notifications"
     subject = "This week's [[Wikipedia:Today's articles for improvement|article for improvement]] (week #{@mb.today.cweek}, #{@mb.today.year})"
     sig = "<span style=\"font-family:sans-serif\"><b>[[User:MusikBot|<span style=\"color:black; font-style:italic\">MusikBot</span>]] <sup>[[User talk:MusikAnimal|<span style=\"color:green\">talk</span>]]</sup></b></span>"
-    message = "{{subst:TAFI weekly selection notice|1=#{sig} using ~~~ on behalf of WikiProject TAFI}}"
+    message = "{{subst:TAFI weekly selection notice|1=#{sig} ~~~~~ using ~~~ on behalf of WikiProject TAFI}}"
     @mb.gateway.mass_message(spamlist, subject, message)
   end
 
