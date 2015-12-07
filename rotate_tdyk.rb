@@ -57,7 +57,7 @@ module RotateTDYK
     holding_area = @current_nominations.scan(/\n==\s*Special occasion holding area\s*==/).flatten[0]
     todays_heading = "\n===Articles created/expanded on #{@mb.today.strftime('%B %-d')}===\n" \
       '<!-- After you have created your nomination page, please add it (e.g., {{Did you know nominations/YOUR ARTICLE TITLE}}) ' \
-      "to the TOP of this section (after this comment).-->;\n"
+      "to the TOP of this section (after this comment).-->\n"
     @current_nominations.gsub!(holding_area, todays_heading + holding_area)
   end
 end
