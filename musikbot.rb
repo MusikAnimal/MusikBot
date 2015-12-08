@@ -14,6 +14,12 @@ class Object
   end
 end
 
+class String
+  def uncapitalize
+    self[0, 1].downcase + self[1..-1]
+  end
+end
+
 MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
 
 module MusikBot
@@ -65,6 +71,20 @@ module MusikBot
       unless ret = @redis_client.get(key)
         @redis_client.set(key, ret = res.call)
         @redis_client.expire(key, time)
+      end
+
+      ret
+    end
+
+    def disk_cache(filename, time = 3600, &res)
+      if File.mtime(filename) < Time.now.utc - time
+        ret = res.call
+
+        cache_file = File.open(filename, 'r+')
+        cache_file.write(ret.inspect)
+        cache_file.close
+      else
+        ret = eval(File.open(filename).read)
       end
 
       ret
