@@ -7,9 +7,12 @@ module FixPP
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    pages = protect_info(category_members)
+    binding.pry
+    exit 1
 
-    pages.each do |page|
+    pages = protect_info(category_members.join('|'))
+
+    pages.to_a.each do |page|
       process_page(page)
     end
   rescue => e
@@ -18,28 +21,35 @@ module FixPP
 
   def self.process_page(page_obj)
     @page_obj = page_obj
-    title = page_obj.attributes['title']
+    title = @page_obj.attributes['title']
     @content = @mb.get_page_props(title)
-    @matches = @content.scan(/\{\{\s*(?:Template\:)?pp-.*?\}\}/).flatten
+    @edit_summaries = []
+    @is_template = title =~ /^Template:/
 
-    # no protection whatsoever
     if protected?(@page_obj)
-      if title =~ /^Template:/
-        # for templates
-        repair_template_page
+      new_pps = repair_existing_pps
+      remove_pps
+
+      if @is_template
+        @content = noinclude_pp(new_pps)
       else
-        # audit protection info and rebuild the templates
-        auto_build
+        @content = new_pps + "\n" + @content
       end
+
+      @edit_summaries << 'repairing protection templates'
     else
-      remove_pp
+      @edit_summaries << 'removing protection template from unprotected page'
+      remove_pps
     end
+
+    @content.gsub!(/\<noinclude\>\s*\<\/noinclude\>/, '') if @is_template
 
     # FIXME: if no changes have happened, attempt null edit
 
     @mb.edit(title,
-      content: content,
-      conflicts: true
+      content: @content,
+      conflicts: true,
+      summary: @edit_summaries.join(', ')
     )
   rescue MediaWiki::APIError => e
     if throttle > 3
@@ -51,51 +61,111 @@ module FixPP
     end
   end
 
-  def self.repair_template_page
+  def self.noinclude_pp(pps)
     has_doc = @content =~ /\{\{\s*(?:Template\:)?(?:#{doc_templates.join('|')})\s*\}\}/
     has_collapsable_option = @content =~ /\{\{\s*(?:Template\:)?(?:#{collapsable_option_templates.join('|')})\}\}/
 
     if has_doc || has_collapsable_option
-      remove_pp
-
       if @content.include?('<noinclude>')
-        @content.sub('<noinclude>', "<noinclude>#{@matches.join}")
+        @content.sub('<noinclude>', "<noinclude>#{pps}")
       else
-        @content = "<noinclude>#{@matches.join}</noinclude>"
+        "<noinclude>#{pps}</noinclude>\n" + @content
       end
     end
   end
 
-  def self.auto_build
-    template_hash = {}
-
-    # /\{\{\s*(#{k})\s*(\|\s*(small\s*=\s*\w+)|\}\})/i
+  def self.repair_existing_pps
+    new_pps = []
+    needs_pp_added = false
+    existing_types = []
 
     # find which templates they used and normalize them
-    templates = pp_hash.keys.select do |k|
-      if matches = @content.scan(/\{\{\s*(#{k})\s*(\|.*?(small\s*=\s*\w+)|\}\})/)
-        matches.each do |match|
-          template_hash[pp_hash[match[0]]] = {
+    pp_hash.keys.each do |k|
+      puts k
+      matches = @content.scan(/\{\{\s*(#{k})\s*(?:\|.*?(small\s*=\s*\w+)|\}\})/i).flatten
+      next unless matches.any?
 
-          }
+      pp_type = pp_hash[matches[0]]
+      type = pp_protect_type[pp_type.to_sym]
+      small = matches[1].present?
+
+      # edge case with base Template:Pp
+      if type.blank? && pp_type == 'pp'
+        type = @content.scan(/\{\{\s*pp\s*(?:\|.*?action\s*\=\s*(.*?)\|?)\}\}/i).flatten.first
+
+        # if a type couldn't be parsed, mark it as needing all templates to be added
+        #   since they obviously don't know how to do it right
+        needs_pp_added = true and next unless type
+
+        if reason = @content.scan(/\{\{pp\s*\|(?:(?:1\=)?(\w+(?=\||\}\}))|.*?\|1\=(\w+))/).flatten.compact.first
+          pp_type = "pp-#{reason}"
         end
       end
+
+      expiry_key = type == 'flagged' ? 'protection_expiry' : 'expiry'
+      expiry = protection_by_type(@page_obj, type)[expiry_key] if valid_pp = protection_by_type(@page_obj, type)
+
+      # skip if wrong kind of template altogether
+      # we won't try to add the correct template as they may not want a pp-template
+      next unless valid_pp
+
+      existing_types << type
+
+      new_pps << build_pp_template(
+        pp_type: pp_type,
+        type: type,
+        expiry: expiry,
+        small: small
+      )
     end
-    templates.map { |t| pp_hash[t] || t }
 
-    # build our new template hash
-    templates.each do |template|
+    new_pps.join("\n") + (needs_pp_added ? auto_pps(existing_types) : '')
+  end
 
+  def self.auto_pps(existing_types = [])
+    new_pps = ''
+    (%w(edit move flagged) - existing_types).each do |type|
+      next unless settings = protection_by_type(@page_obj, type)
+
+      if type == 'flagged'
+        pp_type = "pp-pc#{settings['level'].to_i + 1}"
+      elsif type == 'move'
+        pp_type = 'pp-move'
+      elsif @is_template
+        pp_type = 'pp-template'
+      else
+        pp_type = 'pp'
+      end
+
+      expiry_key = type == 'flagged' ? 'protection_expiry' : 'expiry'
+      new_pps += build_pp_template(
+        type: type,
+        pp_type: pp_type,
+        expiry: settings[expiry_key],
+        small: true # just assume small=yes
+      )
     end
 
-    # remove all protection templates
-    @content.gsub(/\{\{\s*(?:Template\:)?(?:#{pp_hash.values.flatten.join('|')}).*?\}\}/i, '')
+    new_pps
+  end
 
-    # new_pp += "{{pp-blp|expiry=#{edit_settings}"
+  def self.build_pp_template(opts)
+    new_pp = '{{'
 
-    if move_settings
-
+    if opts[:expiry] == 'infinity'
+      if opts[:type] == 'edit'
+        opts[:pp_type] = 'pp-semi-indef'
+      elsif opts[:type] == 'move'
+        opts[:pp_type] = 'pp-move-indef'
+      end
+      new_pp += opts[:pp_type]
+    else
+      opts[:expiry] = DateTime.parse(opts[:expiry]).strftime('%H:%M, %e %B %Y')
+      new_pp += "#{opts[:pp_type]}|expiry=#{opts[:expiry]}"
+      new_pp += "|action=#{opts[:type]}" if opts[:pp_type] == 'pp'
     end
+
+    "#{new_pp}#{'|small=yes' if opts[:small]}}}"
   end
 
   def self.doc_templates
@@ -106,14 +176,14 @@ module FixPP
     ['cop', 'collapsable', 'collapsable option', 'collapsable_option']
   end
 
-  def self.remove_pp
-    # FIXME: make sure not to leave extra new lines!
-    @matches.each { |match| @content.gsub(match, '') }
+  def self.remove_pps
+    @content.gsub!(/\{\{\s*(?:Template\:)?(?:#{pp_hash.values.flatten.join('|')}).*?\}\}\n*/i, '')
   end
 
   def self.category_members
+    return @category_members if @category_members
     @mb.gateway.purge(CATEGORY)
-    @mb.gateway.custom_query(
+    @category_members = @mb.gateway.custom_query(
       list: 'categorymembers',
       cmtitle: CATEGORY,
       cmlimit: 5000,
@@ -141,62 +211,70 @@ module FixPP
     page.elements['protection'].present? && page.elements['protection'][0].present? ? page.elements['protection'] : nil
   end
 
-  def self.protection_edit(page)
-    protections(page).select { |p| p.attributes['type'] == 'edit' }
-  end
-
-  def self.protect_move(page)
-    protections(page).select { |p| p.attributes['type'] == 'move' }
-  end
-
   def self.flags(page)
     page.elements['flagged'].present? ? page.elements['flagged'] : nil
   end
 
+  def self.protection_by_type(page, type)
+    if type == 'flagged'
+      flags(page).attributes rescue nil
+    else
+      protections(page).select { |p| p.attributes['type'] == type }.first.attributes rescue nil
+    end
+  end
+
   def self.protected?(page)
-    protections(page) || flags(page)
+    (protections(page) || flags(page)).present?
   end
 
   # protection types
   def self.pp_hash
-    # FIXME: maybe fetch all redirects in one go
     return @pp_hash if @pp_hash
-    @mb.cache('pp_hash', 2_592_000) do
+
+    # cache on disk for one week
+    @mb.disk_cache('pp_hash', 604_800) do
       @pp_hash = {}
 
       pp_types.each do |pp_type|
-        redirects(pp_type).each { |r| @pp_hash[r] = pp_type }
+        redirects("Template:#{pp_type}").each { |r| @pp_hash[r.sub(/^Template:/, '').uncapitalize] = pp_type }
       end
+
+      @pp_hash
     end
   end
 
+  def self.pp_protect_type
+    {
+      'pp': '',
+      'pp-move': 'move',
+      'pp-pc1': 'flagged',
+      'pp-pc2': 'flagged',
+      'pp-dispute': 'edit',
+      'pp-move-dispute': 'move',
+      'pp-office': 'edit',
+      'pp-blp': 'edit',
+      'pp-sock': 'edit',
+      'pp-template': 'edit',
+      'pp-usertalk': 'edit',
+      'pp-vandalism': 'edit',
+      'pp-move-vandalism': 'move',
+      'permanently protected': 'edit',
+      'temporarily protected': 'edit',
+      'pp-semi-indef': 'edit',
+      'pp-move-indef': 'move'
+    }
+  end
+
   def self.pp_types
-    [
-      'pp',
-      'pp-move',
-      'pp-pc1',
-      'pp-pc2',
-      'pp-dispute',
-      'pp-move-dispute',
-      'pp-office',
-      'pp-blp',
-      'pp-sock',
-      'pp-template',
-      'pp-usertalk',
-      'pp-vandalism',
-      'pp-move-vandalism',
-      'permanently protected',
-      'temporarily protected',
-      'pp-semi-indef',
-      'pp-move-indef'
-    ]
+    pp_protect_type.keys
   end
 
   def self.redirects(title)
-    [title] + @mb.gateway.custom_query(
+    ret = @mb.gateway.custom_query(
       prop: 'redirects',
       titles: title
-    ).elements['pages'][0].elements['redirects'].map { |r| r.attributes['title'] }
+    ).elements['pages'][0].elements['redirects']
+    [title] + (ret ? ret.map { |r| r.attributes['title'] } : [])
   end
 end
 
