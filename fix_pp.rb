@@ -10,7 +10,10 @@ module FixPP
     pages = protect_info(category_members.join('|'))
 
     pages.to_a.each do |page|
-      process_page(page)
+      # don't try endlessly to fix the same page
+      unless page.elements['revisions'][0].attributes['user'] == 'MusikBot'
+        process_page(page)
+      end
     end
   rescue => e
     @mb.report_error('Fatal error', e)
@@ -23,8 +26,7 @@ module FixPP
     @edit_summaries = []
     @is_template = title =~ /^Template:/
 
-    if protected?(@page_obj)
-      new_pps = repair_existing_pps
+    if protected?(@page_obj) && (new_pps = repair_existing_pps).present?
       remove_pps
 
       if @is_template
@@ -35,11 +37,11 @@ module FixPP
 
       @edit_summaries << 'repairing protection templates'
     else
-      @edit_summaries << 'removing protection template from unprotected page'
       remove_pps
+      @edit_summaries << 'removing protection templates from unprotected page'
     end
 
-    @content.gsub!(/\<noinclude\>\s*\<\/noinclude\>/, '') if @is_template
+    @content.sub!(/\A\<noinclude\>\s*\<\/noinclude\>/, '') if @is_template
 
     # FIXME: if no changes have happened, attempt null edit
 
@@ -62,12 +64,12 @@ module FixPP
     has_doc = @content =~ /\{\{\s*(?:Template\:)?(?:#{doc_templates.join('|')})\s*\}\}/
     has_collapsable_option = @content =~ /\{\{\s*(?:Template\:)?(?:#{collapsable_option_templates.join('|')})\}\}/
 
-    if has_doc || has_collapsable_option
-      if @content.include?('<noinclude>')
-        @content.sub('<noinclude>', "<noinclude>#{pps}")
-      else
-        "<noinclude>#{pps}</noinclude>\n" + @content
-      end
+    return @content if has_doc || has_collapsable_option
+
+    if @content.scan(/\A\<noinclude\>.*?\<\/noinclude\>/).any?
+      @content.sub(/\A\<noinclude\>/, "<noinclude>#{pps}")
+    else
+      "<noinclude>#{pps}</noinclude>\n" + @content
     end
   end
 
@@ -117,7 +119,7 @@ module FixPP
       )
     end
 
-    new_pps.join("\n") + (needs_pp_added ? auto_pps(existing_types) : '')
+    new_pps.join(@is_template ? '' : "\n") + (needs_pp_added ? auto_pps(existing_types) : '')
   end
 
   def self.auto_pps(existing_types = [])
@@ -178,32 +180,12 @@ module FixPP
     @content.gsub!(/\{\{\s*(?:Template\:)?(?:#{pp_hash.keys.flatten.join('|')}).*?\}\}\n*/i, '')
   end
 
-  def self.category_members
-    return @category_members if @category_members
-    @mb.gateway.purge(CATEGORY)
-    @category_members = @mb.gateway.custom_query(
-      list: 'categorymembers',
-      cmtitle: CATEGORY,
-      cmlimit: 5000,
-      cmprop: 'title',
-      cmtype: 'page'
-    ).elements['categorymembers'].map { |cm| cm.attributes['title'] }
-  end
-
   # def self.blp?(page)
   #   @mb.gateway.custom_query(
   #     prop: 'categories',
   #     titles: page
   #   ).elements['pages'][0].elements['categories'].select { |c| c.attributes['title'] == 'Category:Living people' }
   # end
-
-  def self.protect_info(titles)
-    @mb.gateway.custom_query(
-      prop: 'info|flagged',
-      inprop: 'protection',
-      titles: titles
-    ).elements['pages']
-  end
 
   def self.protections(page)
     page.elements['protection'].present? && page.elements['protection'][0].present? ? page.elements['protection'] : nil
@@ -234,7 +216,7 @@ module FixPP
       @pp_hash = {}
 
       pp_types.each do |pp_type|
-        redirects("Template:#{pp_type}").each { |r| @pp_hash[r.sub(/^Template:/, '').uncapitalize] = pp_type }
+        redirects("Template:#{pp_type}").each { |r| @pp_hash[r.sub(/^Template:/, '').downcase] = pp_type }
       end
 
       @pp_hash
@@ -265,6 +247,29 @@ module FixPP
 
   def self.pp_types
     pp_protect_type.keys
+  end
+
+  # API-related
+  def self.protect_info(titles)
+    @mb.gateway.custom_query(
+      prop: 'info|flagged|revisions',
+      inprop: 'protection',
+      rvprop: 'user',
+      rvlimit: 1,
+      titles: titles
+    ).elements['pages']
+  end
+
+  def self.category_members
+    return @category_members if @category_members
+    @mb.gateway.purge(CATEGORY)
+    @category_members = @mb.gateway.custom_query(
+      list: 'categorymembers',
+      cmtitle: CATEGORY,
+      cmlimit: 5000,
+      cmprop: 'title',
+      cmtype: 'page'
+    ).elements['categorymembers'].map { |cm| cm.attributes['title'] }
   end
 
   def self.redirects(title)
