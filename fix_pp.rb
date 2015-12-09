@@ -7,9 +7,6 @@ module FixPP
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    binding.pry
-    exit 1
-
     pages = protect_info(category_members.join('|'))
 
     pages.to_a.each do |page|
@@ -81,7 +78,6 @@ module FixPP
 
     # find which templates they used and normalize them
     pp_hash.keys.each do |k|
-      puts k
       matches = @content.scan(/\{\{\s*(#{k})\s*(?:\|.*?(small\s*=\s*\w+)|\}\})/i).flatten
       next unless matches.any?
 
@@ -91,6 +87,8 @@ module FixPP
 
       # edge case with base Template:Pp
       if type.blank? && pp_type == 'pp'
+        next unless protections(@page_obj) || flags(@page_obj)
+
         type = @content.scan(/\{\{\s*pp\s*(?:\|.*?action\s*\=\s*(.*?)\|?)\}\}/i).flatten.first
 
         # if a type couldn't be parsed, mark it as needing all templates to be added
@@ -160,7 +158,7 @@ module FixPP
       end
       new_pp += opts[:pp_type]
     else
-      opts[:expiry] = DateTime.parse(opts[:expiry]).strftime('%H:%M, %e %B %Y')
+      opts[:expiry] = DateTime.parse(opts[:expiry]).strftime('%H:%M, %-d %B %Y')
       new_pp += "#{opts[:pp_type]}|expiry=#{opts[:expiry]}"
       new_pp += "|action=#{opts[:type]}" if opts[:pp_type] == 'pp'
     end
@@ -177,7 +175,7 @@ module FixPP
   end
 
   def self.remove_pps
-    @content.gsub!(/\{\{\s*(?:Template\:)?(?:#{pp_hash.values.flatten.join('|')}).*?\}\}\n*/i, '')
+    @content.gsub!(/\{\{\s*(?:Template\:)?(?:#{pp_hash.keys.flatten.join('|')}).*?\}\}\n*/i, '')
   end
 
   def self.category_members
