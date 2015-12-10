@@ -9,11 +9,13 @@ module TAFIDaily
     rotation_expired = @mb.env == :test ? true : @mb.now > last_run + Rational(23, 24)
 
     process_nomination_board
-    rotate_nominations if @mb.config['run']['rotate_nominations'] && rotation_expired
 
-    run_file = File.open('TAFIDaily_lastrun', 'r+')
-    run_file.write(DateTime.now.to_s)
-    run_file.close
+    if @mb.config['run']['rotate_nominations'] && rotation_expired
+      rotate_nominations
+      run_file = File.open('TAFIDaily_lastrun', 'r+')
+      run_file.write(DateTime.now.to_s)
+      run_file.close
+    end
   rescue => e
     @mb.report_error("Fatal error: #{e.message}")
   end
