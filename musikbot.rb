@@ -1,5 +1,6 @@
 require 'mediawiki-gateway'
 require 'auth'
+require 'redis'
 require 'repl'
 require 'uri'
 require 'pry-byebug'
@@ -31,7 +32,7 @@ module MusikBot
       @gateway = MediaWiki::Gateway.new("https://#{@env == :production || prodonly ? 'en' : 'test'}.wikipedia.org/w/api.php", bot: true)
       Auth.login(@gateway)
 
-      unless task == 'Console' || @env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
+      unless prodonly || task == 'Console' || @env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
         report_error("#{@task} disabled")
         exit 1
       end
@@ -62,7 +63,7 @@ module MusikBot
 
     # Redis-related
     def redis_client
-      @redis_client ||= Auth.get_redis
+      @redis_client ||= Auth.redis
     end
 
     def cache(base_key, time = 3600, &res)
