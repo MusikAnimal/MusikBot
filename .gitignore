@@ -4,5 +4,6 @@ auth.rb
 TODO
 env
 *lastrun
+pp_hash
 .bundle
 .ruby-version
