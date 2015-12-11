@@ -33,6 +33,7 @@ GEM
     pry-byebug (3.2.0)
       byebug (~> 5.0)
       pry (~> 0.10)
+    redis (3.2.1)
     rest-client (1.8.0)
       http-cookie (>= 1.0.2, < 2.0)
       mime-types (>= 1.16, < 3.0)
@@ -51,6 +52,7 @@ DEPENDENCIES
   mediawiki-gateway!
   mysql2
   pry-byebug
+  redis
   unicode
 
 BUNDLED WITH
