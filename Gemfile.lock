@@ -1,39 +1,37 @@
 GIT
   remote: git://github.com/MusikAnimal/mediawiki-gateway.git
-  revision: 07f406fb2df354dfa17caf6dd513f46f44f9a311
+  revision: 748605fd55cf6bbb84a89dca40e315d315cb0878
   branch: master
   specs:
-    mediawiki-gateway (1.0.5)
+    mediawiki-gateway (1.0.6)
       rest-client (~> 1.7)
 
 GEM
   remote: https://rubygems.org/
   specs:
-    byebug (5.0.0)
-      columnize (= 0.9.0)
+    byebug (8.2.1)
     coderay (1.1.0)
-    columnize (0.9.0)
     domain_name (0.5.25)
       unf (>= 0.0.5, < 1.0.0)
     http-cookie (1.0.2)
       domain_name (~> 0.5)
-    httparty (0.13.5)
+    httparty (0.13.7)
       json (~> 1.8)
       multi_xml (>= 0.5.2)
     json (1.8.3)
     method_source (0.8.2)
-    mime-types (2.6.2)
+    mime-types (2.99)
     multi_xml (0.5.5)
-    mysql2 (0.3.18)
+    mysql2 (0.4.2)
     netrc (0.11.0)
-    pry (0.10.2)
+    pry (0.10.3)
       coderay (~> 1.1.0)
       method_source (~> 0.8.1)
       slop (~> 3.4)
-    pry-byebug (3.2.0)
-      byebug (~> 5.0)
+    pry-byebug (3.3.0)
+      byebug (~> 8.0)
       pry (~> 0.10)
-    redis (3.2.1)
+    redis (3.2.2)
     rest-client (1.8.0)
       http-cookie (>= 1.0.2, < 2.0)
       mime-types (>= 1.16, < 3.0)
