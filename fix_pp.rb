@@ -144,7 +144,7 @@ module FixPP
         # reason (the 1= parameter) will be blp, dispute, sock, etc.
         reason = opts[:raw_code].scan(/\{\{pp\s*\|(?:(?:1\=)?(\w+(?=\||\}\}))|.*?\|1\=(\w+))/).flatten.compact.first
 
-        unless @mb.config['run']['normalize_pp_template']
+        if @mb.config['run']['normalize_pp_template']
           # normalize to pp-reason if we're able to, otherwise use pp-protected
           opts[:pp_type] = normalize_pp(opts[:type], reason)
           @edit_summaries << 'normalizing {{pp}} template'
@@ -184,7 +184,7 @@ module FixPP
       end
     elsif type == 'autoreview'
       "pp-pc#{flags(@page_obj)['level'].to_i + 1}"
-    elsif reason
+    elsif @mb.config['config']['pp_reasons'].include?(reason)
       "pp-#{reason}"
     else
       'pp'
