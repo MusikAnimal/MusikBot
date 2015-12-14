@@ -115,13 +115,13 @@ module FixPP
         pp_type: pp_type = pp_hash[old_pp_type],
         type: type = pp_protect_type[pp_type.to_sym],
         expiry: get_expiry(@page_obj, type),
-        small: raw_code =~ /\|\s*small\s*=\s*#{small_values}\s*(?:\||}})/
+        small: !!(raw_code =~ /\|\s*small\s*=\s*#{small_values}\s*(?:\||}})/)
       }
 
       # generic pp template is handled differently
       if opts[:pp_type] == 'pp' && opts[:type].blank?
         # try to figure out usage of generic {{pp}}
-        opts[:type] = @content.scan(/\{\{\s*pp\s*(?:\|.*?action\s*\=\s*(.*?)(?:\||\}\}))/i).flatten.first
+        opts[:type] = opts[:raw_code].scan(/\{\{\s*pp\s*(?:\|.*?action\s*\=\s*(.*?)(?:\||\}\}))/i).flatten.first
 
         # if a type couldn't be parsed, assume it means edit-protection if it's pp-protected,
         #   otherwise mark it as needing all templates to be added since they apparently have not done it incorrectly
@@ -142,7 +142,7 @@ module FixPP
         opts[:expiry] = get_expiry(@page_obj, opts[:type])
 
         # reason (the 1= parameter) will be blp, dispute, sock, etc.
-        reason = @content.scan(/\{\{pp\s*\|(?:(?:1\=)?(\w+(?=\||\}\}))|.*?\|1\=(\w+))/).flatten.compact.first
+        reason = opts[:raw_code].scan(/\{\{pp\s*\|(?:(?:1\=)?(\w+(?=\||\}\}))|.*?\|1\=(\w+))/).flatten.compact.first
 
         unless @mb.config['run']['normalize_pp_template']
           # normalize to pp-reason if we're able to, otherwise use pp-protected
@@ -187,7 +187,7 @@ module FixPP
     elsif reason
       "pp-#{reason}"
     else
-      'pp-protected'
+      'pp'
     end
   end
 
@@ -241,7 +241,10 @@ module FixPP
       end
       new_pp += opts[:pp_type]
     else
-      opts[:expiry] = DateTime.parse(opts[:expiry]).strftime('%H:%M, %-d %B %Y')
+      unless opts[:expiry] == 'indefinite'
+        opts[:expiry] = DateTime.parse(opts[:expiry]).strftime('%H:%M, %-d %B %Y')
+      end
+
       new_pp += "#{opts[:pp_type]}|expiry=#{opts[:expiry]}"
       new_pp += "|action=#{opts[:type]}" if opts[:pp_type] == 'pp'
     end
