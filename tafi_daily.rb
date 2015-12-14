@@ -8,7 +8,7 @@ module TAFIDaily
     last_run = @mb.parse_date(File.open('TAFIDaily_lastrun', 'r').read) rescue DateTime.new
     rotation_expired = @mb.env == :test ? true : @mb.now > last_run + Rational(23, 24)
 
-    process_nomination_board
+    # process_nomination_board
 
     if @mb.config['run']['rotate_nominations'] && rotation_expired
       rotate_nominations
@@ -27,13 +27,14 @@ module TAFIDaily
     sections = text.split(/^==([^=].*?[^=])==\s*\n/)
     intro = sections.delete_at(0).chomp('')
 
-    sections.each_slice(2).each do |genre|
+    sections.each_slice(2).each_with_index do |genre, index|
       name = genre[0]
       nominations = genre[1].split(/^===([^=].*?[^=])===\s*\n/)
       nominations = nominations.drop(1) unless nominations[0] =~ /^===.*?===\s*\n/
       new_nominations = []
       nominations.each_slice(2).each { |nn| new_nominations << "===#{nn[0]}===\n#{nn[1].chomp('').gsub(/^\n/, '')}\n\n" }
       header = '<!-- Place new entries directly below this line, at the top of the list. -->'
+      header += "\n{{empty section|section=#{index + 2}|date=#{@mb.today.strftime('%B %Y')}}}" if nominations.empty?
       genres << "==#{name}==\n#{header}\n\n#{new_nominations.rotate.join}".chomp('')
     end
 
