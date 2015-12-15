@@ -48,14 +48,13 @@ module FixPP
           @content = new_pps + "\n" + @content
         end
       end
-
-      # if nothing changed, cache page title and touched time into redis to prevent redundant processing
-      return cache_touched(@page_obj, :set) unless @edit_summaries.present?
     elsif @mb.config['run']['remove_all_if_expired']
       # if there's no protection whatsoever, remove all templates, plain and simple
-      @edit_summaries << 'Removing protection templates from unprotected page'
-      remove_pps
+      @edit_summaries << 'Removing protection templates from unprotected page' if remove_pps
     end
+
+    # if nothing changed, cache page title and touched time into redis to prevent redundant processing
+    return cache_touched(@page_obj, :set) unless @edit_summaries.present?
 
     if @mb.env == :test
       binding.pry
@@ -115,7 +114,7 @@ module FixPP
         pp_type: pp_type = pp_hash[old_pp_type],
         type: type = pp_protect_type[pp_type.to_sym],
         expiry: get_expiry(@page_obj, type),
-        small: !!(raw_code =~ /\|\s*small\s*=\s*#{small_values}\s*(?:\||}})/)
+        small: !!(raw_code =~ /\|\s*small\s*=\s*(?:#{small_values})\s*(?:\||}})/)
       }
 
       # generic pp template is handled differently
