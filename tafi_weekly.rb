@@ -90,7 +90,7 @@ module TAFIWeekly
 
     entry = "'''Week #{new_schedule_date.cweek}'''\n" \
       "#\{\{Wikipedia:Today's articles for improvement/#{new_schedule_date.year}/#{new_schedule_date.cweek}/1}}"
-    content.gsub!(identifier, "#{entry}\n\n#{identifier}")
+    content.sub!(identifier, "#{entry}\n\n#{identifier}")
 
     @mb.edit(page,
       content: content,
