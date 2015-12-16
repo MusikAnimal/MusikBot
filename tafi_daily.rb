@@ -71,6 +71,12 @@ module TAFIDaily
       newest_timestamp = @mb.parse_date(timestamps.min { |a, b| @mb.parse_date(b) <=> @mb.parse_date(a) })
       should_archive = newest_timestamp + Rational(@mb.config['config']['archive_offset'], 24) < @mb.now
 
+      if newest_timestamp < @mb.today - 21
+        unapproved_entires_count += 1
+        text.gsub!(section, '')
+        archive_entries << section.chomp('') + "\n{{unapproved}} (automated respone) No further input after 21 days ~~~~"
+      end
+
       if entry =~ /{{\s*approved\s*}}/i
         approved_entries << "# {{icon|#{assessment || 'unknown'}}} [[#{article}]]"
         text.gsub!(section, '')
