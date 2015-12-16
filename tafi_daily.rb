@@ -6,9 +6,9 @@ module TAFIDaily
     @mb = MusikBot::Session.new(inspect)
 
     last_run = @mb.parse_date(File.open('TAFIDaily_lastrun', 'r').read) rescue DateTime.new
-    rotation_expired = @mb.env == :test ? true : @mb.now > last_run + Rational(23, 24)
+    rotation_expired = @mb.now > last_run + Rational(23, 24)
 
-    # process_nomination_board
+    process_nomination_board
 
     if @mb.config['run']['rotate_nominations'] && rotation_expired
       rotate_nominations
@@ -57,6 +57,7 @@ module TAFIDaily
   def self.process_nomination_board
     text = @mb.get(nominations_board_page_name)
     approved_entries = []
+    unapproved_entires_count = 0
     archive_entries = []
     text.split("\n===").each do |entry|
       section = "\n===#{entry}"
@@ -76,6 +77,7 @@ module TAFIDaily
         archive_entries << section if should_archive
       end
       if entry =~ /{{\s*(not\s*approved|unapproved)\s*}}/i
+        unapproved_entires_count += 1
         text.gsub!(section, '')
         archive_entries << section if should_archive
       end
@@ -83,15 +85,18 @@ module TAFIDaily
 
     return unless archive_entries.any?
 
-    if @mb.config['run']['update_afi_page'] && approved_entries.present?
+    if @mb.config['run']['update_afi_page'] && approved_entries.any?
       add_afti_entries(approved_entries)
     end
 
     if @mb.config['run']['archive_nominations']
-      archive_nominations(archive_entries)
+      approved_count = approved_entries.length
+      unapproved_count = unapproved_entires_count
+      archive_nominations(archive_entries, approved_count, unapproved_count)
       @mb.edit(nominations_board_page_name,
         content: text,
-        summary: "Archiving #{archive_entries.length} nominations"
+        summary: "[[#{archive_page_name}|Archiving]] #{archive_entries.length} nominations " \
+          "(#{approved_count} approved, #{unapproved_count} unapproved)"
       )
     end
   end
@@ -99,20 +104,22 @@ module TAFIDaily
   def self.add_afti_entries(entries)
     page = 'Wikipedia:Articles for improvement/List'
     text = @mb.get(page)
-    entries.delete_if { |entry| text.include?(entry.scan(/(\[\[.*?\]\])/).flatten[0].to_s) }
+    text.sub!(/\<!--.*?--\>\n*\z/, '')
+    comment = '<!-- This page is automatically updated by MusikBot. There is no need to edit directly -->'
+    new_entries = entries.select { |entry| !text.include?(entry.scan(/(\[\[.*?\]\])/).flatten[0].to_s) }
+    new_text = "#{text.chomp('')}\n#{new_entries.join("\n")}".chomp('')
     @mb.edit(page,
-      content: "#{text}\n#{entries.join("\n")}",
-      summary: "Adding #{entries.length} newly approved article#{'s' if entries.length > 1} for improvement"
+      content: "#{new_text}\n#{comment}",
+      summary: "Adding #{new_entries.length} newly approved article#{'s' if new_entries.length > 1} for improvement"
     )
   end
 
-  def self.archive_nominations(entries)
-    page = "Wikipedia:Today's articles for improvement/Nominations/Archives/#{@mb.today.year}/#{@mb.today.month}"
-    content = @mb.get(page)
+  def self.archive_nominations(entries, approved, unapproved)
+    content = @mb.get(archive_page_name)
     new_month = content.nil?
-    @mb.edit(page,
+    @mb.edit(archive_page_name,
       content: "#{content}\n#{entries.join("\n")}",
-      summary: "Archiving #{entries.length} nominations"
+      summary: "Archiving #{entries.length} nominations (#{approved} approved, #{unapproved} unapproved)"
     )
 
     # create links on archives index
@@ -135,6 +142,10 @@ module TAFIDaily
 
   def self.nominations_board_page_name
     @mb.config['config']['nominations_board_page_name']
+  end
+
+  def self.archive_page_name
+    "Wikipedia:Today's articles for improvement/Nominations/Archives/#{@mb.today.year}/#{@mb.today.month}"
   end
 end
 
