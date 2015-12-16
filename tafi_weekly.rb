@@ -219,10 +219,10 @@ module TAFIWeekly
       "|YYYY = #{last_week.year}" \
       "|WW = #{last_week.cweek}" \
       "|oldid = #{old_tafi_old_rev_id}" \
-      "|olddate = #{last_week.strftime('%d %B %Y')}" \
+      "|olddate = #{last_week.strftime('%d %b %Y')}" \
       "|oldclass = #{old_tafi_old_class}" \
       "|newid = #{old_tafi_new_rev_id}" \
-      "|newdate = #{@mb.today.strftime('%d %B %Y')}" \
+      "|newdate = #{@mb.today.strftime('%d %b %Y')}" \
       "|newclass = #{old_tafi_new_class}" \
       "|edits = #{revisions.length}" \
       "|editors = #{editors.uniq.length}" \
