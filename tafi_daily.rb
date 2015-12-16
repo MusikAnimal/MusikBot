@@ -75,14 +75,11 @@ module TAFIDaily
         unapproved_entires_count += 1
         text.gsub!(section, '')
         archive_entries << section.chomp('') + "\n{{unapproved}} (automated respone) No further input after 21 days ~~~~"
-      end
-
-      if entry =~ /{{\s*approved\s*}}/i
+      elsif entry =~ /{{\s*approved\s*}}/i
         approved_entries << "# {{icon|#{assessment || 'unknown'}}} [[#{article}]]"
         text.gsub!(section, '')
         archive_entries << section if should_archive
-      end
-      if entry =~ /{{\s*(not\s*approved|unapproved)\s*}}/i
+      elsif entry =~ /{{\s*(not\s*approved|unapproved)\s*}}/i
         unapproved_entires_count += 1
         text.gsub!(section, '')
         archive_entries << section if should_archive
