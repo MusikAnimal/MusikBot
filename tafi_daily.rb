@@ -93,10 +93,14 @@ module TAFIDaily
       approved_count = approved_entries.length
       unapproved_count = unapproved_entires_count
       archive_nominations(archive_entries, approved_count, unapproved_count)
+
+      summaries = []
+      summaries << "#{approved_count} approved" if approved_count > 0
+      summaries << "#{unapproved_count} unapproved" if unapproved_count > 0
+
       @mb.edit(nominations_board_page_name,
         content: text,
-        summary: "[[#{archive_page_name}|Archiving]] #{archive_entries.length} nominations " \
-          "(#{approved_count} approved, #{unapproved_count} unapproved)"
+        summary: "[[#{archive_page_name}|Archiving]] #{archive_entries.length} nominations (#{summaries.join(', ')})"
       )
     end
   end
