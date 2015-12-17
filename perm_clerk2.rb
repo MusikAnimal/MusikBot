@@ -3,11 +3,20 @@ require 'musikbot'
 
 module PermClerk
   COMMENT_INDENT = "\n::"
-  AWB_COMMENT_INDENT = "\n*:"
   COMMENT_PREFIX = '{{comment|Automated comment}} '
-  EDIT_THROTTLE = 3
   SPLIT_KEY = '====[[User:'
-  AWB_SPLIT_KEY = '*{{AWBUser|'
+  PREREQ_EXPIRY = 90
+
+  PERMISSION_KEYS = {
+    'Account creator' => 'accountcreator',
+    'Autopatrolled' => 'autoreviewer',
+    'Confirmed' => '(?=>auto)?confirmed',
+    'File mover' => 'filemover',
+    'Mass message sender' => 'massmessage-sender',
+    'Pending changes reviewer' => 'reviewer',
+    'Rollback' => 'rollbacker',
+    'Template editor' => 'templateeditor'
+  }
 
   def self.run
     @mb = MusikBot::Session.new(inspect)
@@ -19,16 +28,15 @@ module PermClerk
     @errors = {}
     @total_user_count = 0
 
-    permissions.each do |permission|
+    config['pages'].each do |permission|
       @permission = permission
-      @edit_throttle = 0
       @edit_summaries = []
       @headers_removed = {}
       @users_count = 0
 
       begin
-        process(permission)
-        @run_status[permission] = @mb.now.to_s
+        process_permission
+        run_status[permission] = @mb.now.to_s
         @total_user_count += @users_count
       rescue => e
         @mb.report_error("Failed to process #{permission}", e)
@@ -38,43 +46,43 @@ module PermClerk
     run_file = File.open('lastrun', 'r+')
     run_file.write(run_status.inspect)
     run_file.close
+
+    generate_report
   rescue => e
     @mb.report_error('Fatal error', e)
   end
 
-  def self.process
+  def self.process_permission(throttle = 0)
     info("Processing #{@permission}...")
-    @split_key = @permission == 'AWB' ? AWB_SPLIT_KEY : SPLIT_KEY
-    page_name = @permission == 'AWB' ? 'Wikipedia talk:AutoWikiBrowser/CheckPage' : "Wikipedia:Requests for permissions/#{@permission}"
+    page_name = "Wikipedia:Requests for permissions/#{@permission}"
 
     old_wikitext = page_props(page_name)
     return unless formatting_check(old_wikitext)
 
-    last_run = parse_date_time(@run_status[@permission]) rescue DateTime.new
+    last_run = @mb.parse_date(run_status[@permission]) rescue DateTime.new
 
     if prereqs # if prereqs enabled for this permission
       has_prereq_data = old_wikitext.match(/\<!-- mb-\w*(?:Count|Age) --\>/)
-      should_check_prereq_data = config['prerequisites'] ? has_prereq_data.present? : false
+      should_check_prereq_data = has_prereq_data.present?
     else
       should_check_prereq_data = false
     end
 
     # only process if there's data to update or the page has changed since the last run
-    if !should_check_prereq_data && last_run > @last_edit
+    if @mb.env == :production && !should_check_prereq_data && last_run > @last_edit
       return info('  Less than 90 minutes since last run without changes, and no prerequisites to update')
     end
 
-    if config['autoformat']
+    if config['run']['autoformat']
       debug('Checking for extraneous headers')
       old_wikitext = remove_headers(old_wikitext)
     end
 
-    # first make fixes to confirm to what split_key looks for
-    old_wikitext.gsub!(/\*\s+{{AWBUser\|/, '*{{AWBUser|')
+    # first make fixes to confirm to what SPLIT_KEY looks for
     old_wikitext.gsub(/\=\=\=\=\s+\[\[User:/, '====[[User:')
 
     @new_wikitext = []
-    sections = old_wikitext.split(@split_key)
+    sections = old_wikitext.split(SPLIT_KEY)
     @new_wikitext << sections.shift
 
     @num_open_requests = 0
@@ -83,44 +91,57 @@ module PermClerk
       @new_wikitext << process_section(section)
     end
 
-    archive_requests if @archive_changes.length
-    generate_report
+    archive_requests if @archive_changes.any?
+
+    admin_backlog(old_wikitext)
+
+    if @edit_summaries.any?
+      @mb.edit(page_name,
+        content: @new_wikitext.join,
+        summary: perm_edit_summary,
+        conflicts: true
+      )
+    else
+      info('Nothing to do this time around')
+    end
 
     info("#{'~' * 25} Task complete #{'~' * 25}")
+  rescue MediaWiki::APIError => e
+    if throttle > 3
+      @mb.report_error('Edit throttle hit', e)
+    elsif e.code.to_s == 'editconflict'
+      process_permission(throttle + 1)
+    else
+      raise
+    end
   end
 
   def self.process_section(section)
     @section = section
     @bot_section = ''
-    if @permission == 'AWB'
-      bot_split = @section.split(/====\s*Bots/i)
-      @section = bot_split[0]
-      @bot_section = '==== Bots' + bot_split[1] if bot_split[1]
-    end
 
     @request_changes = []
 
-    if @permission == 'AWB'
-      username = @section.scan(/^(.*?)}}/).flatten[0]
-    else
-      username = @section.scan(/{{(?:template\:)?rfplinks\|1=(.*?)}}/i).flatten[0]
-    end
+    username = @section.scan(/{{(?:template\:)?rfplinks\|1=(.*?)}}/i).flatten[0]
 
     if !username || username == 'username' || username == 'bot username'
-      return @split_key + @section + @bot_section
+      return SPLIT_KEY + @section + @bot_section
     end
 
-    @username = username.first.capitalize.gsub('_', ' ')
+    username[0] = username[0].capitalize
+    @username = username.gsub('_', ' ')
 
     info("Checking section for User:#{@username}...")
 
     timestamps = @section.scan(/(?<!\<!-- mbdate --\> )\d\d:\d\d.*\d{4} \(UTC\)/)
-    @newest_timestamp = timestamps.min { |a, b| parse_date_time(b) <=> parse_date_time(a) }
+    @newest_timestamp = timestamps.min { |a, b| @mb.parse_date(b) <=> @mb.parse_date(a) }
     if overriden_resolution = @section.match(/\{\{User:MusikBot\/override\|d\}\}/i) ? 'done' : @section.match(/\{\{User:MusikBot\/override\|nd\}\}/i) ? 'notdone' : false
       info('  Resolution override found')
     end
-    resolution = overriden_resolution || (@section.match(/(?:#{config["regex_done"]})/i) ? 'done' : @section.match(/(?:#{config["regex_notdone"]})/i) ? 'notdone' : false)
-    resolution_timestamp = Date.parse(@section.scan(/(?:#{config["regex_#{resolution}"]}).*(\d\d:\d\d, \d+ \w+ \d{4} \(UTC\))/i).flatten.drop(1).last) rescue nil
+    done_regex = config['archive_config']['done']
+    notdone_regex = config['archive_config']['notdone']
+    resolution = overriden_resolution || (@section.match(/(?:#{done_regex})/i) ? 'done' : @section.match(/(?:#{notdone_regex})/i) ? 'notdone' : false)
+    resolution_timestamp = Date.parse(@section.scan(/(?:#{config['archive_config']["#{resolution}_regex"]}).*(\d\d:\d\d, \d+ \w+ \d{4} \(UTC\))/i).flatten.drop(1).last) rescue nil
 
     # use newest timestamp when forcing resolution and no resolution template exists
     if resolution_timestamp.nil? && overriden_resolution
@@ -132,15 +153,15 @@ module PermClerk
     @should_update_prereq_data = should_update_prereq_data
 
     # archiving has precedence; e.g. if we are archiving, we don't do anything else for this section
-    next unless archiving(resolution, overriden_resolution, resolution_timestamp)
+    return unless archiving(resolution, overriden_resolution, resolution_timestamp)
 
     # determine if there's any else to be done
     if resolution
       info("  #{@username}'s request already responded to")
-      @new_wikitext << @split_key + @section + @bot_section and next
+      @new_wikitext << SPLIT_KEY + @section and return
     elsif @section.match(/{{comment|Automated comment}}.*MusikBot/) && !should_update_prereq_data
       info("  MusikBot has already commented on #{username}'s request and no prerequisite data to update")
-      @new_wikitext << @split_key + @section + @bot_section and next
+      @new_wikitext << SPLIT_KEY + @section and return
     end
 
     # these tasks have already been ran if we're just updating prereq data
@@ -150,34 +171,84 @@ module PermClerk
       fetch_declined
     end
     prerequisites
-
     queue_changes
-
-    edit_permission_page(CGI.unescapeHTML(@new_wikitext.join))
   end
+
+  # FIXME: missing find_links
 
   # Core tasks
   def self.fetch_declined
-    return unless config['fetch_declined']
+    return unless config['run']['fetch_declined']
+    debug("  Searching for declined #{@permission} requests by #{username}...")
+
+    links = find_links(@username)
+
+    if links.length > 0
+      info('    Found previously declined requests')
+      links_message = links.map { |l| "[#{l}]" }.join
+
+      request_changes << {
+        type: :fetchdeclined,
+        numDeclined: links.length,
+        declinedLinks: links_message
+      }
+      @edit_summaries << :fetchdeclined
+    end
+  end
+
+  def self.find_links
+    if @user_links_cache[username]
+      debug("Cache hit for #{username}")
+      return @user_links_cache[username]
+    end
+
+    target_date = @mb.today - @config['fetchdeclined_configs']['offset']
+    links = []
+    dates_to_fetch = (target_date..@mb.today).select { |d| d.day == target_date.day || d.day == @mb.today.day }.uniq(&:month)
+
+    dates_to_fetch.each do |date|
+      key = "#{Date::MONTHNAMES[date.month]} #{date.year}"
+      if @denied_cache[key]
+        debug("    Cache hit for #{key}")
+        page = @denied_cache[key]
+      else
+        page = @mw.get("Wikipedia:Requests for permissions/Denied/#{key}")
+        @denied_cache[key] = page
+      end
+
+      next unless page
+
+      decline_days = page.split(/==\s*\w+\s+/i)
+      decline_days.each do |declineDay|
+        day_number = declineDay.scan(/^(\d+)\s*==/).flatten[0].to_i
+        next if day_number == 0
+        decline_day_date = Date.parse("#{date.year}-#{date.month}-#{day_number}")
+        if decline_day_date >= target_date && match = declineDay.scan(/\{\{Usercheck.*\|#{username.gsub('_', ' ')}}}.*#{@permission}\]\].*(https?:\/\/.*)\s+link\]/i)[0]
+          links << match.flatten[0]
+        end
+      end
+    end
+
+    @user_links_cache[username] = links
   end
 
   def self.autorespond
     # only runs for Confirmed and AWB
-    return unless config['autorespond'] && %w(Confirmed AWB).include?(@permission) && !has_permission?(@username)
+    return unless config['run']['autorespond'] && %w(Confirmed AutoWikiBrowser).include?(@permission) && !has_permission?(@username)
     info("    User has permission #{@permission}")
 
     @request_changes << {
       type: :autorespond,
       permission: @permission.downcase,
       resolution: '{{already done}}',
-      sysop: get_user_info[:userGroups].include?('sysop')
+      sysop: get_user_info(@username)[:userGroups].include?('sysop')
     }
     @num_open_requests -= 1
     @edit_summaries << :autorespond
   end
 
   def self.autoformat
-    return unless config['autoformat'] && @permission != 'AWB'
+    return unless config['run']['autoformat']
 
     fragmented_regex = /{{rfplinks.*}}\n:(Reason for requesting (?:#{@PERMISSIONS.join("|").downcase}) rights) .*\(UTC\)(?m:(.*?)(?:\n\=\=|\z))/
     fragmented_match = @section.scan(fragmented_regex)
@@ -223,7 +294,7 @@ module PermClerk
   end
 
   def self.prerequisites
-    return unless config['prerequisites'] && !@prereqs.empty? && @permission != 'Confirmed' && !@username.downcase.match(/bot$/)
+    return unless config['run']['prerequisites'] && @prereqs.present? && @permission != 'Confirmed' && !@username.downcase.match(/bot$/)
     debug("  Checking if #{username} meets configured prerequisites...")
 
     updating_prereq = @section.match(/\<!-- mb-\w*(?:Count|Age) --\>/)
@@ -266,10 +337,11 @@ module PermClerk
   end
 
   def self.archiving(resolution, overriden_resolution, resolution_timestamp)
-    return true unless config['archive']
+    return true unless config['run']['archive']
+    return false unless resolution
     should_archive_now = @section.match(/\{\{User:MusikBot\/archivenow\}\}/)
 
-    if resolution && @config['archive'] && resolution_timestamp.nil?
+    if resolution_timestamp.nil?
       record_error(
         group: 'archive',
         message: "User:#{@username} - Resolution template not dated",
@@ -277,7 +349,9 @@ module PermClerk
       ) and return false
     end
 
-    return false unless resolution && (should_archive_now || parse_date_time(@newest_timestamp) + Rational(config['archive_offset'], 24) < @mb.now)
+    unless should_archive_now || @mb.parse_date(@newest_timestamp) + Rational(config['archive_config']['offset'].to_i, 24) < @mb.now
+      return false
+    end
 
     if should_archive_now
       info('  Found request for immediate archiving')
@@ -290,9 +364,9 @@ module PermClerk
       if @section.include?('><!-- mbNoPerm -->')
         # unless has_permission?
         warn("    MusikBot already reported that #{@username} does not have the permission #{@permission}")
-        @new_wikitext << @split_key + @section and return false
+        @new_wikitext << SPLIT_KEY + @section and return false
         # end
-      elsif !has_permission?
+      elsif !has_permission? && @mb.env == :production
         @request_changes << {
           type: :noSaidPermission,
           permission: @permission.downcase
@@ -301,7 +375,7 @@ module PermClerk
 
         queue_changes
 
-        if @permission == 'AWB'
+        if @permission == 'AutoWikiBrowser'
           message = 'has not been added to the [[Wikipedia:AutoWikiBrowser/CheckPage|check page]]'
         else
           message = "does not have the permission #{@permission}"
@@ -331,9 +405,7 @@ module PermClerk
     @users_count += 1
     @edit_summaries << "archive#{resolution_page_name}".to_sym
 
-    @new_wikitext << @bot_section
-
-    true
+    false
   end
 
   # Extensions to tasks
@@ -342,17 +414,17 @@ module PermClerk
       info('***** Commentable data found *****')
       @users_count += 1
 
-      @new_section = @split_key + @section.gsub(/\n+$/, '')
+      @new_section = SPLIT_KEY + @section.gsub(/\n+$/, '')
 
       if @request_changes.index { |obj| obj[:type] == :prerequisitesUpdated }
         @new_section += "\n"
       else
         @new_section += message_compiler(@request_changes)
       end
-      @new_wikitext << @new_section + @bot_section
+      @new_wikitext << @new_section
     else
       info('  ~~ No commentable data found ~~')
-      @new_wikitext << @split_key + @section + @bot_section
+      @new_wikitext << SPLIT_KEY + @section
     end
   end
 
@@ -366,15 +438,7 @@ module PermClerk
       month_name = key.scan(/\/(\w+)/).flatten[0]
       year = key.scan(/\d{4}/).flatten[0]
 
-      unless page_wikitext = @mb.get(page_to_edit)
-        record_error(
-          group: 'archive',
-          message: "Unable to fetch archive page for #{key}. Some requests may not have been saved to archives.",
-          log_message: "  unable to fetch archive page for #{key}, aborting",
-          error_set: 'Fatal'
-        ) and return false
-      end
-
+      page_wikitext = @mb.get(page_to_edit)
       new_page = page_wikitext.empty?
 
       edit_summary = "Archiving #{@archive_changes[key].length} request#{'s' if @archive_changes[key].length > 1}:"
@@ -387,7 +451,7 @@ module PermClerk
 
       @archive_changes[key].each do |request|
         edit_summary += " #{request[:username]} (#{request[:permission].downcase});"
-        archive_page_name = request[:permission] == 'AWB' ? 'Wikipedia talk:AutoWikiBrowser/CheckPage' : "Wikipedia:Requests for permissions/#{request[:permission]}"
+        archive_page_name = "Wikipedia:Requests for permissions/#{request[:permission]}"
         link_markup = "*{{Usercheck-short|#{request[:username]}}} [[#{archive_page_name}]] " \
           "<sup>[http://en.wikipedia.org/wiki/Special:PermaLink/#{request[:revision_id]}#User:#{request[:username].gsub(' ', '_')} link]</sup>"
 
@@ -411,14 +475,7 @@ module PermClerk
         log_page_name = "Wikipedia:Requests for permissions/#{key.scan(/(.*)\//).flatten[0]}"
         info("  Adding new page [[#{page_to_edit}]] to log [[#{log_page_name}]]")
 
-        unless log_page = @mb.get(log_page_name)
-          record_error(
-            group: 'archive',
-            message: "Unable to fetch log page [[#{log_page_name}]], archiving aborted",
-            log_message: "  unable to fetch log page [[#{log_page_name}]], aborting",
-            error_set: 'Fatal'
-          ) and return false
-        end
+        log_page = @mb.get(log_page_name)
 
         # convert to {"year" => "requests"}
         year_sections = Hash[*log_page.split(/\=\=\=\s*(\d{4})\s*\=\=\=/).drop(1)]
@@ -432,25 +489,41 @@ module PermClerk
         info("    Attempting to write to page [[#{log_page_name}]]")
         log_page_wikitext = log_page.split('===')[0] + log_page_wikitext
 
-        return false unless @mb.edit(log_page_name,
+        @mb.edit(log_page_name,
           content: log_page_wikitext,
           summary: "Adding entry for [[#{page_to_edit}]]"
         )
       end
 
       info("  Attempting to write to page [[#{page_to_edit}]]")
-      return false unless @mb.edt(page_to_edit,
+      @mb.edit(page_to_edit,
         content: new_wikitext,
         summary: edit_summary
       )
     end
   end
 
+  def self.admin_backlog(old_wikitext)
+    return unless config['run']['admin_backlog']
+
+    timestamps = old_wikitext.scan(/(?<!\<!-- mbdate --\> )\d\d:\d\d.*\d{4} \(UTC\)/)
+    oldest_timestamp = timestamps.min { |a, b| @mb.parse_date(a) <=> @mb.parse_date(b) }
+
+    if @num_open_requests > config['admin_backlog']['requests'] || oldest_timestamp < @mb.today - config['admin_backlog']['days']
+      @edit_summaries << :backlog
+      @new_wikitext.sub('{{WP:PERM/Backlog|none}}', '{{WP:PERM/Backlog}}')
+    else
+      @edit_summaries << :no_backlog
+      @new_wikitext.sub('{{WP:PERM/Backlog}}', '{{WP:PERM/Backlog|none}}')
+    end
+  end
+
   def self.generate_report
     errors_digest = Digest::MD5.hexdigest(@errors.values.join)
-    return unless @run_status['report_errors'] != errors_digest || parse_date_time(@run_status['report']) < @mb.now - Rational(6, 24)
+    expired = @total_user_count > 0 && @mb.parse_date(run_status['report']) < current_time - Rational(6, 24)
+    return unless run_status['report_errors'] != errors_digest || expired
 
-    if @errors.keys.length > 0
+    if @errors.keys.any?
       num_errors = @errors.values.flatten.length
       content = '{{hidden|style=display:inline-block;background:transparent|headerstyle=padding-right:3.5em|header=' \
         "<span style='color:red;font-weight:bold'>#{num_errors} error#{'s' if num_errors > 1} as of ~~~~~</span>|content="
@@ -466,7 +539,7 @@ module PermClerk
     end
 
     info('Updating report...')
-    edit_page('User:MusikBot/PermClerk/Report',
+    @mb.edit('User:MusikBot/PermClerk/Report',
       content: content,
       summary: 'Updating [[User:MusikBot/PermClerk|PermClerk]] report'
     )
@@ -478,11 +551,11 @@ module PermClerk
       prereq_sig_regex = @section.scan(/(\<!-- mbsig --\>.*\<!-- mbdate --\> (\d\d:\d\d.*\d{4} \(UTC\)))/)
       @prereq_signature = prereq_sig_regex.flatten[0]
       @prereq_timestamp = prereq_sig_regex.flatten[1]
-      if @mb.now > parse_date_time(prereq_timestamp) + Rational(config['prereq_exipry'], 1440)
+      if @mb.now > @mb.parse_date(@prereq_timestamp) + Rational(PREREQ_EXPIRY, 1440)
         debug('  Found expired prerequisite data')
         return true
       else
-        debug("  Prerequisite data under #{config['prereq_exipry']} minutes old")
+        debug("  Prerequisite data under #{PREREQ_EXPIRY} minutes old")
       end
     end
     false
@@ -491,13 +564,13 @@ module PermClerk
   def self.formatting_check(old_wikitext)
     ret = true
 
-    split_key_match = old_wikitext.scan(/\n(.*)[^\n]#{Regexp.escape(@split_key)}(.*)\n/).flatten
+    split_key_match = old_wikitext.scan(/\n(.*)[^\n]#{Regexp.escape(SPLIT_KEY)}(.*)\n/).flatten
     if split_key_match.length > 0
       error("A request heading is not on its own line: #{split_key_match[0]}")
       @errors[@permission] = @errors[@permission].to_a << {
         group: 'formatting',
         message: "Unable to process page! A request heading is not on its own line:\n*:" \
-          "<code style='color:red'><nowiki>#{split_key_match[0]}</nowiki></code><code><nowiki>#{@split_key}#{split_key_match[1]}</nowiki></code>"
+          "<code style='color:red'><nowiki>#{split_key_match[0]}</nowiki></code><code><nowiki>#{SPLIT_KEY}#{split_key_match[1]}</nowiki></code>"
       }
       ret = false
     end
@@ -506,8 +579,6 @@ module PermClerk
   end
 
   def self.remove_headers(old_wikitext)
-    return old_wikitext if @permission != 'AWB'
-
     headers_match = old_wikitext.scan(/(^\=\=[^\=]*\=\=([^\=]*)(\=\=\=\=[^\=]*\=\=\=\=\n\*.*rfplinks\|1=(.*)\}\}\n))/)
 
     if headers_match.length > 0
@@ -533,39 +604,109 @@ module PermClerk
     old_wikitext
   end
 
-  # Config-related
-  def self.config
-    return @config if @config
-
-    pages_to_fetch = [
-      'Archive/Run', 'Archive/Offset', 'Autoformat/Run', 'Autorespond/Run',
-      'FetchDeclined/Run', 'FetchDeclined/Offset',
-      'Prerequisites/Run', 'Prerequisites/config.js',
-      'Regex/Done', 'Regex/Notdone'
-    ].map { |p| "User:MusikBot/PermClerk/#{p}" }.join('|')
-
-    config_pages = mw.custom_query(prop: 'revisions', titles: pages_to_fetch, rvprop: 'content')[0]
-
-    @config = {}
-    config_pages.each do |config_page|
-      config_name = config_page.attributes['title'].gsub(%r{User\:MusikBot/PermClerk/?}, '').gsub('/', '_').downcase.chomp('_run').chomp('.js')
-
-      if %w(fetchdeclined_offset archive_offset).include?(config_name)
-        @config[config_name] = config_page.elements['revisions'][0][0].to_s.to_i
-      elsif config_name == 'prerequisites_config'
-        @config[config_name] = JSON.parse(CGI.unescapeHTML(config_page.elements['revisions'][0][0].to_s))
-      elsif config_name =~ /^regex_/
-        @config[config_name] = config_page.elements['revisions'][0][0].to_s
-      else
-        @config[config_name] = config_page.elements['revisions'][0][0].to_s == 'true'
-      end
-    end
-
-    @config['prereq_expiry'] = @mb.env == :production ? 90 : 0
-
-    @config
+  def self.headers_removed?
+    @headers_removed.length > 0
   end
 
+  def self.get_message(type, params = {})
+    case type
+    when :accountAge
+      "has had an account for <!-- mb-accountAge -->#{params[:accountAge]}<!-- mb-accountAge-end --> days"
+    when :articleCount
+      "has created roughly <!-- mb-articleCount -->#{params[:articleCount]}<!-- mb-articleCount-end --> [[WP:ARTICLE|article#{'s' if params[:articleCount] != 1}]]"
+    when :autoformat
+      'An extraneous header or other inappropriate text was removed from this request'
+    when :autorespond
+      "already has the \"#{params[:permission]}\" user right"
+    when :editCount
+      "has <!-- mb-editCount -->#{params[:editCount]}<!-- mb-editCount-end --> total edits"
+    when :fetchdeclined
+      "has had #{params[:numDeclined]} request#{'s' if params[:numDeclined].to_i > 1} for #{@permission.downcase} " \
+        "declined in the past #{config['fetchdeclined_config']['offset']} days (#{params[:declinedLinks]})"
+    when :mainSpaceCount
+      "has <!-- mb-mainSpaceCount -->#{params[:mainSpaceCount]}<!-- mb-mainSpaceCount-end --> " \
+        "edit#{'s' if params[:mainSpaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
+    when :manualMainSpaceCount
+      "has approximately <!-- mb-manualMainSpaceCount -->#{params[:manualMainSpaceCount]}<!-- mb-manualMainSpaceCount-end --> " \
+        "[//tools.wmflabs.org/musikanimal/nonautomated_edits?username=#{URI.escape(params[:username])}&offset=0&" \
+        "namespace=0&contribs=on&tools=on non-automated edit#{'s' if params[:manualMainSpaceCount] != 1}] in the [[WP:MAINSPACE|mainspace]]"
+    when :moduleSpaceCount
+      "has <!-- mb-moduleSpaceCount -->#{params[:moduleSpaceCount]}<!-- mb-moduleSpaceCount-end --> " \
+        "edit#{'s' if params[:moduleSpaceCount] != 1} in the [[WP:LUA|module namespace]]"
+    when :noSaidPermission
+      if params[:permission] == 'autowikibrowser'
+        'does not appear to have been added to the [[Wikipedia:AutoWikiBrowser/CheckPage|CheckPage]]<!-- mbNoPerm -->'
+      else
+        "does not appear to have the permission <tt>#{params[:permission]}</tt><!-- mbNoPerm -->"
+      end
+    when :templateSpaceCount
+      "has <!-- mb-templateSpaceCount -->#{params[:templateSpaceCount]}<!-- mb-templateSpaceCount-end --> " \
+        "edit#{'s' if params[:templateSpaceCount] != 1} in the [[WP:TMP|template namespace]]"
+    when :templateAndModuleSpaceCount
+      "has <!-- mb-templateAndModuleSpaceCount -->#{params[:templateAndModuleSpaceCount]}<!-- mb-templateAndModuleSpaceCount-end --> " \
+        "edit#{'s' if params[:templateAndModuleSpaceCount] != 1} in the [[WP:TMP|template]] and [[WP:LUA|module]] namespaces"
+    end
+  end
+
+  def self.message_compiler(requestData)
+    str = ''
+
+    if index = requestData.index { |obj| obj[:type] == :autoformat }
+      requestData.delete_at(index)
+      str = "#{COMMENT_INDENT}<small>#{COMMENT_PREFIX}#{get_message(:autoformat)} ~~~~</small>\n"
+      return str if requestData.length == 0
+    end
+
+    if index = requestData.index { |obj| obj[:type] == :autorespond }
+      str += "\n::#{requestData[index][:resolution]} (automated response): This user "
+    else
+      str += COMMENT_INDENT + COMMENT_PREFIX + 'This user '
+    end
+
+    requestData.each_with_index do |data, i|
+      type = data.delete(:type).to_sym
+      str = str.chomp(', ') + ' and ' if i == requestData.length - 1 && requestData.length > 1
+      str += get_message(type, data) + ', '
+    end
+
+    str.chomp(', ') + ". ~~~~\n"
+  end
+
+  def self.perm_edit_summary
+    summaries = []
+
+    # get approved/denied counts
+    approved = @edit_summaries.count(:archiveApproved)
+    denied = @edit_summaries.count(:archiveDenied)
+    if approved + denied > 0
+      archive_msg = []
+      archive_msg << "#{approved} approved" if approved > 0
+      archive_msg << "#{denied} denied" if denied > 0
+      archive_msg = archive_msg.join(', ')
+      summaries << "archiving (#{archive_msg})"
+    end
+
+    plural = @users_count > 1
+
+    summaries << 'marked request as already done' if @edit_summaries.include?(:autorespond)
+    summaries << "repaired malformed request#{'s' if plural}" if @edit_summaries.include?(:autoformat)
+    summaries << 'prerequisite data updated' if @edit_summaries.include?(:prerequisitesUpdated)
+    summaries << 'unmet prerequisites' if @edit_summaries.include?(:prerequisites)
+    summaries << 'found previously declined requests' if @edit_summaries.include?(:fetchdeclined)
+    summaries << 'unable to archive one or more requests' if @edit_summaries.include?(:noSaidPermission)
+    summaries << '{{admin backlog}}' if @edit_summaries.include?(:backlog)
+    summaries << '{{no admin backlog}}' if @edit_summaries.include?(:no_backlog)
+
+    if @num_open_requests > 0
+      request_count_msg = "#{@num_open_requests} open request#{'s' if @num_open_requests > 1} remaining"
+    else
+      request_count_msg = '0 open requests remaining'
+    end
+
+    "Bot clerking#{" on #{@users_count} requests" if plural}: #{summaries.join(', ')} (#{request_count_msg})"
+  end
+
+  # Config-related
   def self.run_status
     @run_status ||= eval(File.open('lastrun', 'r').read) rescue {}
   end
@@ -574,7 +715,7 @@ module PermClerk
     {
       'Account creator' => 'accountcreator',
       'Autopatrolled' => 'autoreviewer',
-      'AWB' => 'awb',
+      'AutoWikiBrowser' => 'awb',
       'Confirmed' => '(?=>auto)?confirmed',
       'File mover' => 'filemover',
       'Mass message sender' => 'massmessage-sender',
@@ -585,20 +726,16 @@ module PermClerk
   end
 
   def self.prereqs
-    config['prerequisites'] ? config['prerequisites_config'][@permission.downcase.gsub(/ /, '_')] : nil
-  end
-
-  # Utility
-  def self.parse_date_time(datetime)
-    DateTime.parse(datetime).new_offset(0)
+    config['run']['prerequisites'] ? config['prerequisites_config'][@permission.downcase.gsub(/ /, '_')] : nil
   end
 
   # API-related
   def self.has_permission?
-    if @permission == 'AWB'
-      @mb.get('Wikipedia:AutoWikiBrowser/CheckPage') =~ /\n\*\s*#{@username}/ || get_user_info[:userGroups].include?('sysop')
+    return true if get_user_info(@username)[:userGroups].include?('sysop')
+    if @permission == 'AutoWikiBrowser'
+      @mb.get('Wikipedia:AutoWikiBrowser/CheckPage') =~ /\n\*\s*#{@username}\s*\n/
     else
-      get_user_info[:userGroups].grep(/#{PERMISSION_KEYS[@permission]}/).length > 0 || get_user_info[:userGroups].include?('sysop')
+      get_user_info(@username)[:userGroups].grep(/#{PERMISSION_KEYS[@permission]}/).any?
     end
   end
 
@@ -616,27 +753,85 @@ module PermClerk
 
     # get basic info if we haven't already and query the repl database as needed for other info
     unless @user_info_cache[username] && @user_info_cache[username][:editCount]
-      api_query = api_user_info(username)
-      api_info = api_query[0][0].attributes
-      registration_date = api_info['registration'] ? Date.parse(api_info['registration']) : nil
+      api_obj = @mb.gateway.custom_query(
+        list: 'users',
+        ususers: username,
+        usprop: 'groups|editcount|registration'
+      ).elements['users'][0]
+
+      user_info = api_obj.attributes
+      registration_date = user_info['registration'] ? @mb.parse_date(user_info['registration']) : nil
 
       @user_info_cache[username] = {
-        accountAge: registration_date ? (Date.today - registration_date).to_i : 0,
-        editCount: api_info['editcount'].to_i,
+        accountAge: registration_date ? (@mb.today - registration_date).to_i : 0,
+        editCount: user_info['editcount'].to_i,
         registration: registration_date,
-        userGroups: api_query[0][0][0].to_a.collect { |g| g[0].to_s },
+        userGroups: api_obj.elements['groups'].to_a.collect { |g| g[0].to_s },
         username: username
       }
     end
 
-    # FIXME: more of this method missing...
+    # don't start any queries gone wild
+    unless @user_info_cache[username][:editCount] > 50_000
+      data_attrs.each do |dataAttr|
+        count =
+          case dataAttr.downcase
+          when 'articlecount'
+            @mb.repl_client.count_articles_created(username)
+          when 'modulespacecount'
+            @mb.repl_client.count_namespace_edits(username, 828)
+          when 'mainspacecount'
+            @mb.repl_client.count_namespace_edits(username, 0)
+          when 'manualmainspacecount'
+            @mb.repl_client.count_nonautomated_namespace_edits(username, 0)
+          when 'templatespacecount'
+            @mb.repl_client.count_namespace_edits(username, 10)
+          when 'templateandmodulespacecount'
+            @mb.repl_client.count_namespace_edits(username, [10, 828])
+        end
+
+        @user_info_cache[username].store(dataAttr.to_sym, count) if count
+      end
+    end
+
+    @user_info_cache[username]
   end
 
   def self.page_props(page)
     page_obj = @mb.get_page_props(page, full_response: true)
     @revision_id = page_obj.attributes['lastrevid']
-    page_obj.elements['revisions'][0][0].to_s
+    @last_edit = @mb.parse_date(page_obj.elements['revisions'][0].attributes['timestamp'])
+    page_obj.elements['revisions/rev'].text
   end
+
+  def self.config
+    return @config if @config
+    pages_to_fetch = [
+      'User:MusikBot/PermClerk/Regex/Done',
+      'User:MusikBot/PermClerk/Regex/Notdone',
+      'User:MusikBot/PermClerk/Archive/Offset'
+    ]
+
+    config_pages = @mb.gateway.custom_query(
+      prop: 'revisions',
+      titles: pages_to_fetch.join('|'),
+      rvprop: 'content'
+    ).elements['pages']
+
+    @mb.config['archive_config'] = {}
+
+    config_pages.each do |config_page|
+      param = config_page.attributes['title'].split('/').last.downcase
+      @mb.config['archive_config'][param] = config_page.elements['revisions/rev'].text
+    end
+
+    @config = @mb.config
+  end
+
+  def self.debug(msg); puts("#{@permission.upcase} : #{msg}"); end
+  def self.info(msg); puts("#{@permission.upcase} : #{msg}"); end
+  def self.warn(msg); puts("#{@permission.upcase} : #{msg}"); end
+  def self.error(msg); puts("#{@permission.upcase} : #{msg}"); end
 end
 
 PermClerk.run
