@@ -43,11 +43,11 @@ module PermClerk
       end
     end
 
+    generate_report
+
     run_file = File.open('lastrun', 'r+')
     run_file.write(run_status.inspect)
     run_file.close
-
-    generate_report
   rescue => e
     @mb.report_error('Fatal error', e)
   end
@@ -88,12 +88,14 @@ module PermClerk
     @num_open_requests = 0
 
     sections.each do |section|
-      @new_wikitext << process_section(section)
+      process_section(section)
     end
 
     archive_requests if @archive_changes.any?
 
     admin_backlog(old_wikitext)
+
+    binding.pry
 
     if @edit_summaries.any?
       @mb.edit(page_name,
@@ -119,15 +121,9 @@ module PermClerk
   def self.process_section(section)
     @section = section
     @bot_section = ''
-
     @request_changes = []
 
-    username = @section.scan(/{{(?:template\:)?rfplinks\|1=(.*?)}}/i).flatten[0]
-
-    if !username || username == 'username' || username == 'bot username'
-      return SPLIT_KEY + @section + @bot_section
-    end
-
+    return SPLIT_KEY + @section + @bot_section unless username = @section.scan(/{{(?:template\:)?rfplinks\|1=(.*?)}}/i).flatten[0]
     username[0] = username[0].capitalize
     @username = username.gsub('_', ' ')
 
@@ -141,7 +137,7 @@ module PermClerk
     done_regex = config['archive_config']['done']
     notdone_regex = config['archive_config']['notdone']
     resolution = overriden_resolution || (@section.match(/(?:#{done_regex})/i) ? 'done' : @section.match(/(?:#{notdone_regex})/i) ? 'notdone' : false)
-    resolution_timestamp = Date.parse(@section.scan(/(?:#{config['archive_config']["#{resolution}_regex"]}).*(\d\d:\d\d, \d+ \w+ \d{4} \(UTC\))/i).flatten.drop(1).last) rescue nil
+    resolution_timestamp = Date.parse(@section.scan(/(?:#{config['archive_config']["#{resolution}"]}).*(\d\d:\d\d, \d+ \w+ \d{4} \(UTC\))/i).flatten.drop(1).last) rescue nil
 
     # use newest timestamp when forcing resolution and no resolution template exists
     if resolution_timestamp.nil? && overriden_resolution
@@ -153,13 +149,13 @@ module PermClerk
     @should_update_prereq_data = should_update_prereq_data
 
     # archiving has precedence; e.g. if we are archiving, we don't do anything else for this section
-    return unless archiving(resolution, overriden_resolution, resolution_timestamp)
+    return if archiving(resolution, overriden_resolution, resolution_timestamp)
 
     # determine if there's any else to be done
     if resolution
       info("  #{@username}'s request already responded to")
       @new_wikitext << SPLIT_KEY + @section and return
-    elsif @section.match(/{{comment|Automated comment}}.*MusikBot/) && !should_update_prereq_data
+    elsif @section.match(/{{comment|Automated comment}}.*MusikBot/) && !@should_update_prereq_data
       info("  MusikBot has already commented on #{username}'s request and no prerequisite data to update")
       @new_wikitext << SPLIT_KEY + @section and return
     end
@@ -169,6 +165,7 @@ module PermClerk
       autorespond
       autoformat
       fetch_declined
+      check_revoked
     end
     prerequisites
     queue_changes
@@ -178,16 +175,20 @@ module PermClerk
 
   # Core tasks
   def self.fetch_declined
-    return unless config['run']['fetch_declined']
-    debug("  Searching for declined #{@permission} requests by #{username}...")
+    return unless config['run']['fetch_declined'] || @permission == 'Confirmed'
+    debug("  Searching for declined #{@permission} requests by #{@username}...")
 
-    links = find_links(@username)
+    # cache for a day
+    links = @mb.cache("mb-#{@username}-#{@permission}-declined", 86_400) do
+      find_links
+    end
+    links = JSON.parse(links) if links.is_a?(String)
 
-    if links.length > 0
+    if links.any?
       info('    Found previously declined requests')
       links_message = links.map { |l| "[#{l}]" }.join
 
-      request_changes << {
+      @request_changes << {
         type: :fetchdeclined,
         numDeclined: links.length,
         declinedLinks: links_message
@@ -197,12 +198,7 @@ module PermClerk
   end
 
   def self.find_links
-    if @user_links_cache[username]
-      debug("Cache hit for #{username}")
-      return @user_links_cache[username]
-    end
-
-    target_date = @mb.today - @config['fetchdeclined_configs']['offset']
+    target_date = @mb.today - @config['fetchdeclined_config']['offset']
     links = []
     dates_to_fetch = (target_date..@mb.today).select { |d| d.day == target_date.day || d.day == @mb.today.day }.uniq(&:month)
 
@@ -212,7 +208,7 @@ module PermClerk
         debug("    Cache hit for #{key}")
         page = @denied_cache[key]
       else
-        page = @mw.get("Wikipedia:Requests for permissions/Denied/#{key}")
+        page = @mb.get("Wikipedia:Requests for permissions/Denied/#{key}")
         @denied_cache[key] = page
       end
 
@@ -223,23 +219,23 @@ module PermClerk
         day_number = declineDay.scan(/^(\d+)\s*==/).flatten[0].to_i
         next if day_number == 0
         decline_day_date = Date.parse("#{date.year}-#{date.month}-#{day_number}")
-        if decline_day_date >= target_date && match = declineDay.scan(/\{\{Usercheck.*\|#{username.gsub('_', ' ')}}}.*#{@permission}\]\].*(https?:\/\/.*)\s+link\]/i)[0]
+        if decline_day_date >= target_date && match = declineDay.scan(/\{\{Usercheck.*\|#{@username.gsub('_', ' ')}}}.*#{@permission}\]\].*(https?:\/\/.*)\s+link\]/i)[0]
           links << match.flatten[0]
         end
       end
     end
 
-    @user_links_cache[username] = links
+    links
   end
 
   def self.autorespond
     # only runs for Confirmed and AWB
-    return unless config['run']['autorespond'] && %w(Confirmed AutoWikiBrowser).include?(@permission) && !has_permission?(@username)
+    return unless config['run']['autorespond'] && %w(Confirmed AutoWikiBrowser).include?(@permission) && api_relevant_permission
     info("    User has permission #{@permission}")
 
     @request_changes << {
       type: :autorespond,
-      permission: @permission.downcase,
+      permission: api_relevant_permission,
       resolution: '{{already done}}',
       sysop: get_user_info(@username)[:userGroups].include?('sysop')
     }
@@ -250,14 +246,15 @@ module PermClerk
   def self.autoformat
     return unless config['run']['autoformat']
 
-    fragmented_regex = /{{rfplinks.*}}\n:(Reason for requesting (?:#{@PERMISSIONS.join("|").downcase}) rights) .*\(UTC\)(?m:(.*?)(?:\n\=\=|\z))/
+    # FIXME: make this work for AutoWikiBrowser (might work with |access) or rather it is auto-removed by the template
+    fragmented_regex = /{{rfplinks.*}}\n:(Reason for requesting (?:#{@permission.downcase}) (?:rights|access)) .*\(UTC\)(?m:(.*?)(?:\n\=\=|\z))/
     fragmented_match = @section.scan(fragmented_regex)
 
-    return unless fragmented_match.length > 0
-
-    if @headers_removed[@username] && @headers_removed[@username].length > 0
-      @request_changes << { type: :autoformat }
-      @edit_summaries << :autoformat
+    unless fragmented_match.any?
+      if @headers_removed[@username] && @headers_removed[@username].length > 0
+        @request_changes << { type: :autoformat }
+        @edit_summaries << :autoformat
+      end
       return
     end
 
@@ -269,7 +266,7 @@ module PermClerk
     else
       @section.gsub!(actual_reason, '')
       loop do
-        frag_match = section.match(fragmented_regex)
+        frag_match = @section.match(fragmented_regex)
         if frag_match && frag_match[2] != '' && !(frag_match[2].include?('UTC') && !frag_match[2].include?(@username))
           reason_part = frag_match[2]
           actual_reason += "\n:#{reason_part}"
@@ -294,8 +291,8 @@ module PermClerk
   end
 
   def self.prerequisites
-    return unless config['run']['prerequisites'] && @prereqs.present? && @permission != 'Confirmed' && !@username.downcase.match(/bot$/)
-    debug("  Checking if #{username} meets configured prerequisites...")
+    return unless config['run']['prerequisites'] && prereqs.present? && @permission != 'Confirmed' && !@username.downcase.match(/bot$/)
+    debug("  Checking if #{@username} meets configured prerequisites...")
 
     updating_prereq = @section.match(/\<!-- mb-\w*(?:Count|Age) --\>/)
 
@@ -337,8 +334,7 @@ module PermClerk
   end
 
   def self.archiving(resolution, overriden_resolution, resolution_timestamp)
-    return true unless config['run']['archive']
-    return false unless resolution
+    return false unless config['run']['archive'] && resolution
     should_archive_now = @section.match(/\{\{User:MusikBot\/archivenow\}\}/)
 
     if resolution_timestamp.nil?
@@ -346,11 +342,12 @@ module PermClerk
         group: 'archive',
         message: "User:#{@username} - Resolution template not dated",
         log_message: "    User:#{@username}: Resolution template not dated"
-      ) and return false
+      )
+      return true
     end
 
     unless should_archive_now || @mb.parse_date(@newest_timestamp) + Rational(config['archive_config']['offset'].to_i, 24) < @mb.now
-      return false
+      return true
     end
 
     if should_archive_now
@@ -362,11 +359,9 @@ module PermClerk
     # if we're archiving as done, check if they have the said permission and act accordingly (skip if overriding resolution)
     if resolution == 'done' && !overriden_resolution
       if @section.include?('><!-- mbNoPerm -->')
-        # unless has_permission?
         warn("    MusikBot already reported that #{@username} does not have the permission #{@permission}")
         @new_wikitext << SPLIT_KEY + @section and return false
-        # end
-      elsif !has_permission? && @mb.env == :production
+      elsif !relevant_permission #&& @mb.env == :api_production
         @request_changes << {
           type: :noSaidPermission,
           permission: @permission.downcase
@@ -387,7 +382,7 @@ module PermClerk
             'Use <code><nowiki>{{subst:User:MusikBot/override|d}}</nowiki></code> to archive as approved or ' \
             '<code><nowiki>{{subst:User:MusikBot/override|nd}}</nowiki></code> to archive as declined',
           log_message: "    #{@username} #{message}"
-        ) and return false
+        ) and return true
       end
     end
 
@@ -405,16 +400,16 @@ module PermClerk
     @users_count += 1
     @edit_summaries << "archive#{resolution_page_name}".to_sym
 
-    false
+    true
   end
 
   # Extensions to tasks
   def self.queue_changes
-    if @request_changes.length > 0
+    if @request_changes.any?
       info('***** Commentable data found *****')
       @users_count += 1
 
-      @new_section = SPLIT_KEY + @section.gsub(/\n+$/, '')
+      @new_section = SPLIT_KEY + @section.chomp('')
 
       if @request_changes.index { |obj| obj[:type] == :prerequisitesUpdated }
         @new_section += "\n"
@@ -438,8 +433,8 @@ module PermClerk
       month_name = key.scan(/\/(\w+)/).flatten[0]
       year = key.scan(/\d{4}/).flatten[0]
 
-      page_wikitext = @mb.get(page_to_edit)
-      new_page = page_wikitext.empty?
+      page_wikitext = @mb.get(page_to_edit) || ''
+      new_page = page_wikitext.blank?
 
       edit_summary = "Archiving #{@archive_changes[key].length} request#{'s' if @archive_changes[key].length > 1}:"
 
@@ -503,6 +498,38 @@ module PermClerk
     end
   end
 
+  def self.check_revoked
+    return unless @mb.config['run']['checkrevoked']
+
+    logevents = @mb.gateway.custom_query(
+      list: 'logevents',
+      letype: 'rights',
+      letitle: "User:#{@username}",
+      leprop: 'timestamp|details'
+    ).elements['logevents'].to_a
+
+    revocations = []
+    normalized_perm = PERMISSION_KEYS[@permission]
+
+    logevents.each do |event|
+      in_old = event.elements['params/oldgroups'].collect(&:text).include?(normalized_perm)
+      in_new = event.elements['params/newgroups'].collect(&:text).include?(normalized_perm)
+      timestamp = event.attributes['timestamp']
+
+      next unless in_old && !in_new && @mb.parse_date(timestamp) > @mb.today - @mb.config['checkrevoked_config']['offset']
+
+      revocations << "#{@mb.gateway.wiki_url}?action=query&list=logevents&letitle=User:#{@username}&letype=rights" \
+        "&leprop=user|timestamp|comment|details&lestart=#{timestamp}&leend=#{timestamp}"
+    end
+
+    @request_changes << {
+      type: :checkrevoked,
+      permission: @permission.downcase,
+      revokedLinks: revocations.map { |l| "[#{l}]" }.join
+    }
+    @edit_summaries << :checkrevoked
+  end
+
   def self.admin_backlog(old_wikitext)
     return unless config['run']['admin_backlog']
 
@@ -520,7 +547,7 @@ module PermClerk
 
   def self.generate_report
     errors_digest = Digest::MD5.hexdigest(@errors.values.join)
-    expired = @total_user_count > 0 && @mb.parse_date(run_status['report']) < current_time - Rational(6, 24)
+    expired = @total_user_count > 0 && @mb.parse_date(run_status['report']) < @mb.now - Rational(6, 24)
     return unless run_status['report_errors'] != errors_digest || expired
 
     if @errors.keys.any?
@@ -537,6 +564,9 @@ module PermClerk
     else
       content = "<span style='color:green; font-weight:bold'>No errors!</span> Report generated at ~~~~~"
     end
+
+    run_status['report'] = @mb.now.to_s
+    run_status['report_errors'] = errors_digest
 
     info('Updating report...')
     @mb.edit('User:MusikBot/PermClerk/Report',
@@ -617,7 +647,9 @@ module PermClerk
     when :autoformat
       'An extraneous header or other inappropriate text was removed from this request'
     when :autorespond
-      "already has the \"#{params[:permission]}\" user right"
+      "already has #{params[:permission] == 'AutoWikiBrowser' ? 'AutoWikiBrowser access' : "the \"#{params[:permission]}\" user right"}"
+    when :checkrevoked
+      "has had this permission revoked in the past #{config['checkrevoked_config']['offset']} days (#{params[:revokedLinks]})"
     when :editCount
       "has <!-- mb-editCount -->#{params[:editCount]}<!-- mb-editCount-end --> total edits"
     when :fetchdeclined
@@ -654,7 +686,7 @@ module PermClerk
     if index = requestData.index { |obj| obj[:type] == :autoformat }
       requestData.delete_at(index)
       str = "#{COMMENT_INDENT}<small>#{COMMENT_PREFIX}#{get_message(:autoformat)} ~~~~</small>\n"
-      return str if requestData.length == 0
+      return str if requestData.empty?
     end
 
     if index = requestData.index { |obj| obj[:type] == :autorespond }
@@ -693,6 +725,7 @@ module PermClerk
     summaries << 'prerequisite data updated' if @edit_summaries.include?(:prerequisitesUpdated)
     summaries << 'unmet prerequisites' if @edit_summaries.include?(:prerequisites)
     summaries << 'found previously declined requests' if @edit_summaries.include?(:fetchdeclined)
+    summaries << 'found previous revocations' if @edit_summaries.include?(:checkrevoked)
     summaries << 'unable to archive one or more requests' if @edit_summaries.include?(:noSaidPermission)
     summaries << '{{admin backlog}}' if @edit_summaries.include?(:backlog)
     summaries << '{{no admin backlog}}' if @edit_summaries.include?(:no_backlog)
@@ -730,12 +763,12 @@ module PermClerk
   end
 
   # API-related
-  def self.has_permission?
+  def self.api_relevant_permission
     return true if get_user_info(@username)[:userGroups].include?('sysop')
     if @permission == 'AutoWikiBrowser'
-      @mb.get('Wikipedia:AutoWikiBrowser/CheckPage') =~ /\n\*\s*#{@username}\s*\n/
+      @mb.get('Wikipedia:AutoWikiBrowser/CheckPage') =~ /\n\*\s*#{@username}\s*\n/ ? 'AutoWikiBrowser' : nil
     else
-      get_user_info(@username)[:userGroups].grep(/#{PERMISSION_KEYS[@permission]}/).any?
+      get_user_info(@username)[:userGroups].grep(/#{PERMISSION_KEYS[@permission]}/).first
     end
   end
 
@@ -826,6 +859,15 @@ module PermClerk
     end
 
     @config = @mb.config
+  end
+
+  def self.record_error(opts)
+    error_set = opts[:error_set] || @permission
+    @errors[error_set] = @errors[error_set].to_a << {
+      group: opts[:group],
+      message: opts[:message]
+    }
+    error(opts[:log_message])
   end
 
   def self.debug(msg); puts("#{@permission.upcase} : #{msg}"); end
