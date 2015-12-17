@@ -69,7 +69,7 @@ module MusikBot
     def cache(base_key, time = 3600, &res)
       key = "ma-#{Digest::MD5.hexdigest(base_key.to_s)}"
 
-      unless ret = @redis_client.get(key)
+      unless ret = redis_client.get(key)
         @redis_client.set(key, ret = res.call)
         @redis_client.expire(key, time)
       end
