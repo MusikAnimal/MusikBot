@@ -6,7 +6,7 @@ module TAFIDaily
     @mb = MusikBot::Session.new(inspect)
 
     last_run = @mb.parse_date(File.open('TAFIDaily_lastrun', 'r').read) rescue DateTime.new
-    rotation_expired = @mb.now > last_run + Rational(23, 24)
+    rotation_expired = @mb.now > last_run + Rational(23, 24) || @mb.env == :test
 
     process_nomination_board
 
@@ -27,20 +27,30 @@ module TAFIDaily
     sections = text.split(/^==([^=].*?[^=])==\s*\n/)
     intro = sections.delete_at(0).chomp('')
 
+    error_summaries = []
+
     sections.each_slice(2).each_with_index do |genre, index|
       name = genre[0]
+      genre_without_header = genre[1].sub(/<!-- .*? -->\n*/, '')
       nominations = genre[1].split(/^===([^=].*?[^=])===\s*\n/)
       nominations = nominations.drop(1) unless nominations[0] =~ /^===.*?===\s*\n/
+      header = '<!-- Place new entries directly below this line, at the top of the list. -->'
+
+      if nominations.empty? && genre_without_header =~ /{{\s*TAFI nom|\d\d:\d\d.*\d{4} \(UTC\)/
+        error_summaries << "unable to parse section [[##{name}|#{name}]], content detected but no subheading; possible malformed nomination"
+        genres << "==#{name}==\n#{header}\n\n#{genre_without_header}".chomp('')
+        next
+      end
+
       new_nominations = []
       nominations.each_slice(2).each { |nn| new_nominations << "===#{nn[0]}===\n#{nn[1].chomp('').gsub(/^\n/, '')}\n\n" }
-      header = '<!-- Place new entries directly below this line, at the top of the list. -->'
       header += "\n{{empty section|section=#{index + 2}|date=#{@mb.today.strftime('%B %Y')}}}" if nominations.empty?
       genres << "==#{name}==\n#{header}\n\n#{new_nominations.rotate.join}".chomp('')
     end
 
     @mb.edit(nominations_board_page_name,
       content: ([intro] + genres.rotate).join("\n\n") + "\n\n\n{{/TOC}}",
-      summary: 'Rotating nominations',
+      summary: "Rotating nominations; #{error_summaries.join(';')}".chomp('; '),
       conflicts: true,
       section: @mb.config['config']['nominations_section']
     )
