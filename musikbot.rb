@@ -54,6 +54,10 @@ module MusikBot
       DateTime.parse(str).new_offset(0)
     end
 
+    def db_date(obj)
+      (obj.is_a?(String) ? parse_date(obj) : obj).strftime('%Y-%m-%dT%H:%M:%SZ')
+    end
+
     # Database-related
     def repl_client
       return @repl_client if @repl_client
@@ -119,16 +123,19 @@ module MusikBot
         prop: 'revisions',
         rvprop: 'content',
         titles: page,
-        rvstart: date.strftime('%Y-%m-%dT%H:%M:%SZ'),
+        rvstart: db_date(date),
         rvlimit: 1
       }.merge(opts)
 
       page_obj = @gateway.custom_query(opts).elements['pages'][0]
 
+      return nil if page_obj.nil?
+
       if full_response
         page_obj
       else
-        page_obj.elements['revisions'][0][0].to_s
+        rev = page_obj.elements['revisions/rev']
+        opts[:rvprop] == 'content' ? rev.text : rev
       end
     rescue MediaWiki::APIError => e
       report_error("Unable to fetch #{page}", e)
