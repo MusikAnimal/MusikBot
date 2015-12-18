@@ -6,6 +6,7 @@ module PermClerk
   COMMENT_PREFIX = '{{comment|Automated comment}} '
   SPLIT_KEY = '====[[User:'
   PREREQ_EXPIRY = 90
+  AWB_CHECKPAGE = 'Wikipedia:AutoWikiBrowser/CheckPage'
 
   PERMISSION_KEYS = {
     'Account creator' => 'accountcreator',
@@ -94,8 +95,6 @@ module PermClerk
     archive_requests if @archive_changes.any?
 
     admin_backlog(old_wikitext)
-
-    binding.pry
 
     if @edit_summaries.any?
       @mb.edit(page_name,
@@ -237,7 +236,7 @@ module PermClerk
       type: :autorespond,
       permission: api_relevant_permission,
       resolution: '{{already done}}',
-      sysop: get_user_info(@username)[:userGroups].include?('sysop')
+      sysop: sysop?
     }
     @num_open_requests -= 1
     @edit_summaries << :autorespond
@@ -371,7 +370,7 @@ module PermClerk
         queue_changes
 
         if @permission == 'AutoWikiBrowser'
-          message = 'has not been added to the [[Wikipedia:AutoWikiBrowser/CheckPage|check page]]'
+          message = "has not been added to the [[#{AWB_CHECKPAGE}|check page]]"
         else
           message = "does not have the permission #{@permission}"
         end
@@ -501,26 +500,55 @@ module PermClerk
   def self.check_revoked
     return unless @mb.config['run']['checkrevoked']
 
-    logevents = @mb.gateway.custom_query(
-      list: 'logevents',
-      letype: 'rights',
-      letitle: "User:#{@username}",
-      leprop: 'timestamp|details'
-    ).elements['logevents'].to_a
-
     revocations = []
-    normalized_perm = PERMISSION_KEYS[@permission]
 
-    logevents.each do |event|
-      in_old = event.elements['params/oldgroups'].collect(&:text).include?(normalized_perm)
-      in_new = event.elements['params/newgroups'].collect(&:text).include?(normalized_perm)
-      timestamp = event.attributes['timestamp']
+    if @permission == 'AutoWikiBrowser'
+      # first get revision id
+      rev_id = @mb.get_revision_at_date(
+        AWB_CHECKPAGE,
+        Date.today - @mb.config['checkrevoked_config']['offset'],
+        rvprop: 'ids'
+      ).attributes['revid']
 
-      next unless in_old && !in_new && @mb.parse_date(timestamp) > @mb.today - @mb.config['checkrevoked_config']['offset']
+      # get diff
+      diff = @mb.gateway.custom_query(
+        prop: 'revisions',
+        titles: AWB_CHECKPAGE,
+        rvprop: 'content',
+        rvstartid: rev_id,
+        rvendid: rev_id,
+        rvdiffto: 'cur',
+        rvsection: 3
+      ).elements['pages/0'].elements['revisions/rev/diff'].text
 
-      revocations << "#{@mb.gateway.wiki_url}?action=query&list=logevents&letitle=User:#{@username}&letype=rights" \
-        "&leprop=user|timestamp|comment|details&lestart=#{timestamp}&leend=#{timestamp}"
+      if diff =~ /\<td class=\"diff-deletedline\"\>.*?JoeHebdafdsafd.*?\<\/td\>/
+        revocations << "#{@mb.gateway.wiki_url.chomp('/api.php')}/index.php?title=#{AWB_CHECKPAGE}&type=revision&diff=cur&oldid=#{revid}"
+      else
+        return
+      end
+    else
+      logevents = @mb.gateway.custom_query(
+        list: 'logevents',
+        letype: 'rights',
+        letitle: "User:#{@username}",
+        leprop: 'timestamp|details'
+      ).elements['logevents'].to_a
+
+      normalized_perm = PERMISSION_KEYS[@permission]
+
+      logevents.each do |event|
+        in_old = event.elements['params/oldgroups'].collect(&:text).include?(normalized_perm)
+        in_new = event.elements['params/newgroups'].collect(&:text).include?(normalized_perm)
+        timestamp = event.attributes['timestamp']
+
+        next unless in_old && !in_new && @mb.parse_date(timestamp) > @mb.today - @mb.config['checkrevoked_config']['offset']
+
+        revocations << "#{@mb.gateway.wiki_url}?action=query&list=logevents&letitle=User:#{@username}&letype=rights" \
+          "&leprop=user|timestamp|comment|details&lestart=#{timestamp}&leend=#{timestamp}"
+      end
     end
+
+    return unless revocations.any?
 
     @request_changes << {
       type: :checkrevoked,
@@ -576,6 +604,10 @@ module PermClerk
   end
 
   # Helpers
+  def self.sysop?
+    get_user_info(@username)[:userGroups].include?('sysop')
+  end
+
   def self.should_update_prereq_data
     if @section.scan(/\<!-- mb-/).length > 0
       prereq_sig_regex = @section.scan(/(\<!-- mbsig --\>.*\<!-- mbdate --\> (\d\d:\d\d.*\d{4} \(UTC\)))/)
@@ -647,7 +679,7 @@ module PermClerk
     when :autoformat
       'An extraneous header or other inappropriate text was removed from this request'
     when :autorespond
-      "already has #{params[:permission] == 'AutoWikiBrowser' ? 'AutoWikiBrowser access' : "the \"#{params[:permission]}\" user right"}"
+      "#{'is a sysop and' if params[:sysop]} already has #{params[:permission] == 'AutoWikiBrowser' ? 'AutoWikiBrowser access' : "the \"#{params[:permission]}\" user right"}"
     when :checkrevoked
       "has had this permission revoked in the past #{config['checkrevoked_config']['offset']} days (#{params[:revokedLinks]})"
     when :editCount
@@ -667,7 +699,7 @@ module PermClerk
         "edit#{'s' if params[:moduleSpaceCount] != 1} in the [[WP:LUA|module namespace]]"
     when :noSaidPermission
       if params[:permission] == 'autowikibrowser'
-        'does not appear to have been added to the [[Wikipedia:AutoWikiBrowser/CheckPage|CheckPage]]<!-- mbNoPerm -->'
+        "does not appear to have been added to the [[#{AWB_CHECKPAGE}|CheckPage]]<!-- mbNoPerm -->"
       else
         "does not appear to have the permission <tt>#{params[:permission]}</tt><!-- mbNoPerm -->"
       end
@@ -720,7 +752,7 @@ module PermClerk
 
     plural = @users_count > 1
 
-    summaries << 'marked request as already done' if @edit_summaries.include?(:autorespond)
+    summaries << "marked request#{'s' if plural} as already done" if @edit_summaries.include?(:autorespond)
     summaries << "repaired malformed request#{'s' if plural}" if @edit_summaries.include?(:autoformat)
     summaries << 'prerequisite data updated' if @edit_summaries.include?(:prerequisitesUpdated)
     summaries << 'unmet prerequisites' if @edit_summaries.include?(:prerequisites)
@@ -764,9 +796,10 @@ module PermClerk
 
   # API-related
   def self.api_relevant_permission
-    return true if get_user_info(@username)[:userGroups].include?('sysop')
+    return @permission if sysop?
+
     if @permission == 'AutoWikiBrowser'
-      @mb.get('Wikipedia:AutoWikiBrowser/CheckPage') =~ /\n\*\s*#{@username}\s*\n/ ? 'AutoWikiBrowser' : nil
+      @mb.get(AWB_CHECKPAGE) =~ /\n\*\s*#{@username}\s*\n/ ? 'AutoWikiBrowser' : nil
     else
       get_user_info(@username)[:userGroups].grep(/#{PERMISSION_KEYS[@permission]}/).first
     end
