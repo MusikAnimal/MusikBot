@@ -119,10 +119,9 @@ module PermClerk
 
   def self.process_section(section)
     @section = section
-    @bot_section = ''
     @request_changes = []
 
-    return SPLIT_KEY + @section + @bot_section unless username = @section.scan(/{{(?:template\:)?rfplinks\|1=(.*?)}}/i).flatten[0]
+    return SPLIT_KEY + @section unless username = @section.scan(/{{(?:template\:)?rfplinks\|1=(.*?)}}/i).flatten[0]
     username[0] = username[0].capitalize
     @username = username.gsub('_', ' ')
 
@@ -244,7 +243,7 @@ module PermClerk
     return unless config['run']['autoformat']
 
     # FIXME: make this work for AutoWikiBrowser (might work with |access) or rather it is auto-removed by the template
-    fragmented_regex = /{{rfplinks.*}}\n:(Reason for requesting (?:#{@permission.downcase}) (?:rights|access)) .*\(UTC\)(?m:(.*?)(?:\n\=\=|\z))/
+    fragmented_regex = /\{\{rfplinks.*\}\}\n:(Reason for requesting (?:#{@permission.downcase}) (?:rights|access)) .*\(UTC\)(?m:(.*?)(?:\n\=\=|\z))/
     fragmented_match = @section.scan(fragmented_regex)
 
     unless fragmented_match.any?
@@ -288,7 +287,7 @@ module PermClerk
   end
 
   def self.prerequisites
-    return unless config['run']['prerequisites'] && prereqs.present? && @permission != 'Confirmed' && !@username.downcase.match(/bot$/)
+    return unless config['run']['prerequisites'] && prereqs.present? && @permission != 'Confirmed' # && !@username.downcase.match(/bot$/)
     debug("  Checking if #{@username} meets configured prerequisites...")
 
     updating_prereq = @section.match(/\<!-- mb-\w*(?:Count|Age) --\>/)
@@ -358,7 +357,7 @@ module PermClerk
       if @section.include?('><!-- mbNoPerm -->')
         warn("    MusikBot already reported that #{@username} does not have the permission #{@permission}")
         @new_wikitext << SPLIT_KEY + @section and return false
-      elsif !relevant_permission #&& @mb.env == :api_production
+      elsif !relevant_permission
         @request_changes << {
           type: :noSaidPermission,
           permission: @permission.downcase
