@@ -170,8 +170,6 @@ module PermClerk
     queue_changes
   end
 
-  # FIXME: missing find_links
-
   # Core tasks
   def self.fetch_declined
     return unless config['run']['fetch_declined'] || @permission == 'Confirmed'
@@ -500,52 +498,12 @@ module PermClerk
   def self.check_revoked
     return unless @mb.config['run']['checkrevoked']
 
-    revocations = []
+    info("  Checking revocations of #{@permission} for #{@username}...")
 
     if @permission == 'AutoWikiBrowser'
-      # first get revision id
-      rev_id = @mb.get_revision_at_date(
-        AWB_CHECKPAGE,
-        Date.today - @mb.config['checkrevoked_config']['offset'],
-        rvprop: 'ids'
-      ).attributes['revid']
-
-      # get diff
-      diff = @mb.gateway.custom_query(
-        prop: 'revisions',
-        titles: AWB_CHECKPAGE,
-        rvprop: 'content',
-        rvstartid: rev_id,
-        rvendid: rev_id,
-        rvdiffto: 'cur',
-        rvsection: 3
-      ).elements['pages/0'].elements['revisions/rev/diff'].text
-
-      if diff =~ /\<td class=\"diff-deletedline\"\>.*?JoeHebdafdsafd.*?\<\/td\>/
-        revocations << "#{@mb.gateway.wiki_url.chomp('/api.php')}/index.php?title=#{AWB_CHECKPAGE}&type=revision&diff=cur&oldid=#{revid}"
-      else
-        return
-      end
+      revocations = check_revoked_awb || []
     else
-      logevents = @mb.gateway.custom_query(
-        list: 'logevents',
-        letype: 'rights',
-        letitle: "User:#{@username}",
-        leprop: 'timestamp|details'
-      ).elements['logevents'].to_a
-
-      normalized_perm = PERMISSION_KEYS[@permission]
-
-      logevents.each do |event|
-        in_old = event.elements['params/oldgroups'].collect(&:text).include?(normalized_perm)
-        in_new = event.elements['params/newgroups'].collect(&:text).include?(normalized_perm)
-        timestamp = event.attributes['timestamp']
-
-        next unless in_old && !in_new && @mb.parse_date(timestamp) > @mb.today - @mb.config['checkrevoked_config']['offset']
-
-        revocations << "#{@mb.gateway.wiki_url}?action=query&list=logevents&letitle=User:#{@username}&letype=rights" \
-          "&leprop=user|timestamp|comment|details&lestart=#{timestamp}&leend=#{timestamp}"
-      end
+      revocations = check_revoked_perm.flatten
     end
 
     return unless revocations.any?
@@ -556,6 +514,45 @@ module PermClerk
       revokedLinks: revocations.map { |l| "[#{l}]" }.join
     }
     @edit_summaries << :checkrevoked
+  end
+
+  def self.check_revoked_perm
+    revocations = []
+
+    logevents = @mb.gateway.custom_query(
+      list: 'logevents',
+      letype: 'rights',
+      letitle: "User:#{@username}",
+      leprop: 'timestamp|details'
+    ).elements['logevents'].to_a
+
+    normalized_perm = PERMISSION_KEYS[@permission]
+
+    logevents.each do |event|
+      in_old = event.elements['params/oldgroups'].collect(&:text).include?(normalized_perm)
+      in_new = event.elements['params/newgroups'].collect(&:text).include?(normalized_perm)
+      timestamp = event.attributes['timestamp']
+
+      next unless in_old && !in_new && @mb.parse_date(timestamp) > @mb.today - @mb.config['checkrevoked_config']['offset']
+
+      revocations << "#{@mb.gateway.wiki_url}?action=query&list=logevents&letitle=User:#{@username}&letype=rights" \
+        "&leprop=user|timestamp|comment|details&lestart=#{timestamp}&leend=#{timestamp}"
+    end
+
+    revocations
+  end
+
+  def self.check_revoked_awb
+    old_awb_content = @mb.get_revision_at_date(
+      AWB_CHECKPAGE,
+      @mb.today - @mb.config['checkrevoked_config']['offset']
+    )
+
+    if old_awb_content =~ /\n\*\s*#{@username}\s*\n/ && !(awb_checkpage_content =~ /\n\*\s*#{@username}\s*\n/)
+      return ["#{@mb.gateway.wiki_url.chomp('/api.php')}index.php?title=#{AWB_CHECKPAGE}&action=history"]
+    else
+      return []
+    end
   end
 
   def self.admin_backlog(old_wikitext)
@@ -799,10 +796,14 @@ module PermClerk
     return @permission if sysop?
 
     if @permission == 'AutoWikiBrowser'
-      @mb.get(AWB_CHECKPAGE) =~ /\n\*\s*#{@username}\s*\n/ ? 'AutoWikiBrowser' : nil
+      awb_checkpage_content =~ /\n\*\s*#{@username}\s*\n/ ? 'AutoWikiBrowser' : nil
     else
       get_user_info(@username)[:userGroups].grep(/#{PERMISSION_KEYS[@permission]}/).first
     end
+  end
+
+  def self.awb_checkpage_content
+    @awb_checkpage_content ||= @mb.get(AWB_CHECKPAGE)
   end
 
   def self.get_user_info(username, *data_attrs)
