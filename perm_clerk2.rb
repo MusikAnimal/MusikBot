@@ -44,6 +44,8 @@ module PermClerk
       end
     end
 
+    archive_requests if @archive_changes.any?
+
     generate_report
 
     run_file = File.open('lastrun', 'r+')
@@ -92,13 +94,13 @@ module PermClerk
       process_section(section)
     end
 
-    archive_requests if @archive_changes.any?
+    @new_wikitext = @new_wikitext.map { |aa| aa.chomp('') }.join("\n\n")
 
-    admin_backlog(old_wikitext)
+    admin_backlog
 
     if @edit_summaries.any?
       @mb.edit(page_name,
-        content: @new_wikitext.join,
+        content: @new_wikitext,
         summary: perm_edit_summary,
         conflicts: true
       )
@@ -158,9 +160,10 @@ module PermClerk
       @new_wikitext << SPLIT_KEY + @section and return
     end
 
+    return queue_changes if autorespond
+
     # these tasks have already been ran if we're just updating prereq data
     unless @should_update_prereq_data
-      autorespond
       autoformat
       fetch_declined
       check_revoked
@@ -171,7 +174,7 @@ module PermClerk
 
   # Core tasks
   def self.fetch_declined
-    return unless config['run']['fetch_declined'] || @permission == 'Confirmed'
+    return if !config['run']['fetch_declined'] || @permission == 'Confirmed'
     debug("  Searching for declined #{@permission} requests by #{@username}...")
 
     # cache for a day
@@ -226,7 +229,7 @@ module PermClerk
 
   def self.autorespond
     # only runs for Confirmed and AWB
-    return unless config['run']['autorespond'] && %w(Confirmed AutoWikiBrowser).include?(@permission) && api_relevant_permission
+    return false unless config['run']['autorespond'] && %w(Confirmed AutoWikiBrowser).include?(@permission) && api_relevant_permission
     info("    User has permission #{@permission}")
 
     @request_changes << {
@@ -237,6 +240,7 @@ module PermClerk
     }
     @num_open_requests -= 1
     @edit_summaries << :autorespond
+    true
   end
 
   def self.autoformat
@@ -357,7 +361,7 @@ module PermClerk
       if @section.include?('><!-- mbNoPerm -->')
         warn("    MusikBot already reported that #{@username} does not have the permission #{@permission}")
         @new_wikitext << SPLIT_KEY + @section and return false
-      elsif !relevant_permission
+      elsif !api_relevant_permission
         @request_changes << {
           type: :noSaidPermission,
           permission: @permission.downcase
@@ -545,27 +549,32 @@ module PermClerk
     old_awb_content = @mb.get_revision_at_date(
       AWB_CHECKPAGE,
       @mb.today - @mb.config['checkrevoked_config']['offset']
-    )
+    ) rescue nil
 
-    if old_awb_content =~ /\n\*\s*#{@username}\s*\n/ && !(awb_checkpage_content =~ /\n\*\s*#{@username}\s*\n/)
+    if old_awb_content && old_awb_content =~ /\n\*\s*#{@username}\s*\n/ && !(awb_checkpage_content =~ /\n\*\s*#{@username}\s*\n/)
       return ["#{@mb.gateway.wiki_url.chomp('/api.php')}index.php?title=#{AWB_CHECKPAGE}&action=history"]
     else
       return []
     end
   end
 
-  def self.admin_backlog(old_wikitext)
+  def self.admin_backlog
+    # always update for Account creator
+    is_account_creator = @permission == 'Account creator'
     return unless config['run']['admin_backlog']
 
-    timestamps = old_wikitext.scan(/(?<!\<!-- mbdate --\> )\d\d:\d\d.*\d{4} \(UTC\)/)
+    timestamps = @new_wikitext.scan(/(?<!\<!-- mbdate --\> )\d\d:\d\d.*\d{4} \(UTC\)/)
     oldest_timestamp = timestamps.min { |a, b| @mb.parse_date(a) <=> @mb.parse_date(b) }
+    min_num_requests = is_account_creator ? 0 : config['adminbacklog_config']['requests']
 
-    if @num_open_requests > config['admin_backlog']['requests'] || oldest_timestamp < @mb.today - config['admin_backlog']['days']
+    if @num_open_requests > 0 && (@num_open_requests > min_num_requests || @mb.parse_date(oldest_timestamp) < @mb.today - config['adminbacklog_config']['offset'])
       @edit_summaries << :backlog
-      @new_wikitext.sub('{{WP:PERM/Backlog|none}}', '{{WP:PERM/Backlog}}')
+      info('{{WP:PERM/Backlog}}')
+      @new_wikitext.sub!('{{WP:PERM/Backlog|none}}', '{{WP:PERM/Backlog}}')
     else
       @edit_summaries << :no_backlog
-      @new_wikitext.sub('{{WP:PERM/Backlog}}', '{{WP:PERM/Backlog|none}}')
+      info('{{WP:PERM/Backlog|none}}')
+      @new_wikitext.sub!('{{WP:PERM/Backlog}}', '{{WP:PERM/Backlog|none}}')
     end
   end
 
@@ -605,7 +614,7 @@ module PermClerk
   end
 
   def self.should_update_prereq_data
-    if @section.scan(/\<!-- mb-/).length > 0
+    if @section =~ /\<!-- mb-/
       prereq_sig_regex = @section.scan(/(\<!-- mbsig --\>.*\<!-- mbdate --\> (\d\d:\d\d.*\d{4} \(UTC\)))/)
       @prereq_signature = prereq_sig_regex.flatten[0]
       @prereq_timestamp = prereq_sig_regex.flatten[1]
@@ -792,6 +801,7 @@ module PermClerk
 
   # API-related
   def self.api_relevant_permission
+    info("  checking if #{@username} has permission #{@permission}")
     return @permission if sysop?
 
     if @permission == 'AutoWikiBrowser'
