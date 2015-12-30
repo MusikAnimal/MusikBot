@@ -122,7 +122,7 @@ module FilterMonitor
 
     return unless @mb.config['lasteditor'] || @mb.config['lastedittime']
 
-    content += "\n:#{i18n('Last public change')}"
+    content += "\n:#{i18n('Last changed')}"
     content += " #{i18n('by')} {{no ping|#{data['lasteditor']}}}" if @mb.config['lasteditor']
     content += " #{i18n('at')} #{data['lastedittime']}" if @mb.config['lastedittime']
   end
@@ -284,7 +284,7 @@ module FilterMonitor
         'Fatal error' => 'Erro fatal',
         'Filter' => 'Filtro',
         'Flags' => 'Sinalizações',
-        'Last public change' => 'Última alteração público',
+        'Last changed' => 'Última alteração',
         'Modified' => 'modificada',
         'New' => 'novo',
         'None' => 'nenhum',
