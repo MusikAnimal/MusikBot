@@ -81,12 +81,20 @@ module MusikBot
       now.to_date
     end
 
-    def parse_date(str)
-      DateTime.parse(str).new_offset(0)
+    def parse_date(obj)
+      obj.is_a?(String) ? DateTime.parse(obj).new_offset(0) : obj.new_offset(0)
     end
 
-    def db_date(obj)
-      (obj.is_a?(String) ? parse_date(obj) : obj).strftime('%Y-%m-%dT%H:%M:%SZ')
+    def wiki_date(date)
+      parse_date(date).strftime('%k:%M, %-d %B %Y (UTC)')
+    end
+
+    def api_date(date)
+      parse_date(date).strftime('%Y-%m-%dT%H:%M:%SZ')
+    end
+
+    def db_date(date)
+      parse_date(date).strftime('%Y%m%d000000')
     end
 
     # Database-related
@@ -155,7 +163,7 @@ module MusikBot
         prop: 'revisions',
         rvprop: 'content',
         titles: page,
-        rvstart: db_date(date),
+        rvstart: api_date(date),
         rvlimit: 1
       }.merge(opts)
 
