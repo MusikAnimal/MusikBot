@@ -69,7 +69,6 @@ module FilterMonitor
         insert(current_filter)
       end
 
-      binding.pry
       net_changes << changes unless current_filter['private'] == '1' && @mb.config['private'] == false
     end
 
@@ -204,14 +203,13 @@ module FilterMonitor
     summaries.keys.each do |f|
       edit_summary += "[[#{i18n('Special:AbuseFilter')}/#{f}|#{f}]]" + (summaries[f].any? ? " (#{summaries[f].join(', ')})" : '') + '; '
     end
-    binding.pry
 
     opts = {
       summary: "#{i18n('Reporting recent changes to filters')} #{edit_summary.chomp('; ')}",
       content: content,
       bot: false
     }
-    # @mb.edit(page, opts)
+    @mb.edit(page, opts)
   end
 
   # Database related stuff
