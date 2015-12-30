@@ -12,8 +12,8 @@ module StaleDrafts
   def self.process_nonredirects
     pages = fetch_drafts
 
-    content = "<div style='font-size:24px'>Stale non-AFC drafts as of #{Date.today.strftime('%-d %B %Y')}</div>\n" \
-      "== Non-redirects ==\n#{pages.length} unedited pages since #{format_date(end_date)}\n\n" \
+    content = "<div style='font-size:24px'>Stale non-AFC drafts as of #{@mb.today.strftime('%-d %B %Y')}</div>\n" \
+      "== Non-redirects ==\n#{pages.length} unedited pages since #{@mb.wiki_date(end_date)}\n\n" \
       "{| class='wikitable sortable'\n! Page\n! Length\n! Revisions\n! style='min-width:75px' | Last edit\n! Links\n! Tagged\n! Mainspace \n|-\n"
 
     pages.each_with_index do |page, index|
@@ -42,7 +42,8 @@ module StaleDrafts
     content = content.chomp("|-\n") + "|}\n\n" # "\n{{/Redirects}}"
     @mb.edit('User:MusikBot/StaleDrafts/Report',
       content: content,
-      summary: "Reporting #{pages.length} stale non-AfC drafts"
+      summary: "Reporting #{pages.length} stale non-AfC drafts",
+      bot: false
     )
   end
 
@@ -81,7 +82,7 @@ module StaleDrafts
       inner_content += "| [[Draft:#{title}]] (#{hist_link}) | [[Special:Whatlinkshere/Draft:#{page['page_title']}|#{links}]])\n| #{date}\n|-\n"
     end
 
-    content = "== Redirects ==\n#{pages.length} redirects with 0 backlinks since #{format_date(end_date)}\n\n" \
+    content = "== Redirects ==\n#{pages.length} redirects with 0 backlinks since #{@mb.wiki_date(end_date)}\n\n" \
       "{| class='wikitable sortable'\n! Page\n! Links\n! Last edit\n|-\n" + inner_content
     content = content.chomp("|-\n") + "|}\n\n"
 
@@ -101,16 +102,8 @@ module StaleDrafts
   end
 
   # Utility
-  def self.format_date(date)
-    DateTime.parse(date.to_s).strftime('%k:%M, %-d %B %Y (UTC)')
-  end
-
-  def self.db_format_date(date)
-    Date.parse(date.to_s).strftime('%Y%m%d000000')
-  end
-
   def self.end_date
-    db_format_date(Date.today << 6)
+    @mb.db_date(Date.today << 6)
   end
 end
 
