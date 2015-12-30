@@ -1,3 +1,4 @@
+require 'optparse'
 require 'mediawiki-gateway'
 require 'auth'
 require 'redis'
@@ -21,25 +22,38 @@ class String
   end
 end
 
-MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
-
 module MusikBot
   class Session
     def initialize(task, prodonly = false)
       @task = task
-
       @env = eval(File.open('env').read)
-      @gateway = MediaWiki::Gateway.new("https://#{@env == :production || prodonly ? 'en' : 'test'}.wikipedia.org/w/api.php", bot: true)
+      @opts = {
+        prodonly: prodonly,
+        project: 'en.wikipedia'
+      }
+      OptionParser.new do |args|
+        args.banner = 'Usage: script.rb [options]'
+
+        args.on('-p', '--project PROJECT', 'Project name (en.wikipedia)') { |v| @opts[:project] = v }
+      end.parse!
+
+      MediaWiki::Gateway.default_user_agent = "MusikBot/1.1 (https://#{@opts[:project]}.org/wiki/User:MusikBot/)"
+      @gateway = MediaWiki::Gateway.new("https://#{@opts[:project]}.org/w/api.php", bot: true)
       Auth.login(@gateway)
 
-      unless prodonly || task == 'Console' || @env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
+      unless @task == 'Console' || @opts[:prodonly] || @env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
         report_error("#{@task} disabled")
         exit 1
       end
     end
+    attr_reader :opts
     attr_reader :env
     attr_reader :gateway
     attr_reader :task
+
+    def lang
+      @opts[:project].chomp('.wikipedia')
+    end
 
     # Utilities
     def now
@@ -59,6 +73,7 @@ module MusikBot
     end
 
     # Database-related
+    # FIXME: currently does enwiki-only
     def repl_client
       return @repl_client if @repl_client
       un, pw, host, db, port = Auth.db_credentials(@env)
