@@ -17,8 +17,25 @@ class Object
 end
 
 class String
+  def capitalize_first
+    self[0] = self[0].capitalize
+    self
+  end
+
   def uncapitalize
     self[0, 1].downcase + self[1..-1]
+  end
+
+  def uppercase?
+    match(/\p{Upper}/).present?
+  end
+
+  def lowercase?
+    !uppercase?
+  end
+
+  def capitalized?
+    self[0, 1].uppercase?
   end
 end
 
