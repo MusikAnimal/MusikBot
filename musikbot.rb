@@ -82,7 +82,13 @@ module MusikBot
     end
 
     def parse_date(obj)
-      obj.is_a?(String) ? DateTime.parse(obj).new_offset(0) : obj.new_offset(0)
+      if obj.is_a?(String)
+        DateTime.parse(obj).new_offset(0)
+      elsif obj.is_a?(DateTime)
+        obj.new_offset(0)
+      else
+        obj
+      end
     end
 
     def wiki_date(date)
