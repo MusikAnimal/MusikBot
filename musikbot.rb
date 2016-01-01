@@ -46,7 +46,7 @@ module MusikBot
       @env = eval(File.open('env').read)
       @opts = {
         prodonly: prodonly,
-        project: 'en.wikipedia'
+        project: @env == :test ? 'test.wikipedia' : 'en.wikipedia'
       }
       OptionParser.new do |args|
         args.banner = 'Usage: script.rb [options]'
@@ -54,8 +54,11 @@ module MusikBot
         args.on('-p', '--project PROJECT', 'Project name (en.wikipedia)') { |v| @opts[:project] = v }
       end.parse!
 
-      MediaWiki::Gateway.default_user_agent = "MusikBot/1.1 (https://#{@opts[:project]}.org/wiki/User:MusikBot/)"
-      @gateway = MediaWiki::Gateway.new("https://#{@opts[:project]}.org/w/api.php", bot: true)
+      @gateway = MediaWiki::Gateway.new("https://#{@opts[:project]}.org/w/api.php", {
+        bot: true,
+        retry_count: 5,
+        user_agent: "MusikBot/1.1 (https://#{@opts[:project]}.org/wiki/User:MusikBot/)"
+      })
       Auth.login(@gateway)
 
       unless @task == 'Console' || @opts[:prodonly] || @env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
