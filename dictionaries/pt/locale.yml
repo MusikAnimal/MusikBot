@@ -32,6 +32,7 @@ pt:
     - Sábado
     formats:
       default: "%d/%m/%Y"
+      heading: "%-d de %B de %Y"
       long: "%d de %B de %Y"
       short: "%d de %B"
     month_names:
@@ -116,7 +117,6 @@ pt:
     am: am
     formats:
       default: "%A, %d de %B de %Y, %H:%Mh"
-      heading: "%-d de %B de %Y"
       long: "%A, %d de %B de %Y, %H:%Mh"
       reporting: "%Y-%m-%d %Hh%Mmin"
       short: "%d/%m, %H:%M hs"
