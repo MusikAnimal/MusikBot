@@ -9,7 +9,7 @@ require 'pry'
 config = {}
 config[:env] = eval(File.open('env').read)
 
-un, pw, host, db, port = Auth.db_credentials(config[:env])
+un, pw, host, db, port = Auth.db_credentials('en')
 repl_client = Repl::Session.new(un, pw, host, db, port)
 
 MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
@@ -19,13 +19,13 @@ Auth.login(mw)
 # refresh randomized infobox image, just for fun :)
 if config[:env] == :production
   begin
-    run_status = eval(File.open('lastrun', 'r').read) rescue {}
+    run_status = eval(File.open('disk_cache/lastrun', 'r').read) rescue {}
 
     if DateTime.parse(run_status['purge']).new_offset(0) + 1 < DateTime.now.new_offset(0)
       mw.purge('User:MusikBot')
 
       run_status['purge'] = DateTime.now.new_offset(0).to_s
-      run_file = File.open('lastrun', 'r+')
+      run_file = File.open('disk_cache/lastrun', 'r+')
       run_file.write(run_status.inspect)
       run_file.close
     end

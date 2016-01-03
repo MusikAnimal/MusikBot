@@ -35,8 +35,8 @@ module PermClerk
     @logger = Logger.new('perm_clerk.log')
     @logger.level = Logger::DEBUG
 
-    @run_status = eval(File.open('lastrun', 'r').read) rescue {}
-    @run_file = File.open('lastrun', 'r+')
+    @run_status = eval(File.open('disk_cache/lastrun', 'r').read) rescue {}
+    @run_file = File.open('disk_cache/lastrun', 'r+')
 
     @archive_changes = {}
     @errors = {}
