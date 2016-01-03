@@ -13,7 +13,9 @@ module FixPP
       page_obj = protect_info(page).first
 
       # don't try endlessly to fix the same page
-      if @mb.env == :production && @mb.parse_date(page_obj.attributes['touched']) > cache_touched(page_obj, :get)
+      # if @mb.env == :production && cache_touched(page_obj, :get) >= @mb.parse_date(page_obj.attributes['touched'])
+      # FIXME: just going to not reprocess anything within an hour after last processing
+      if @mb. env == :production && cache_touched(page_obj, :get)
         STDOUT.puts "cache hit for #{page_obj.attributes['title']}"
       elsif page_obj.elements['revisions'][0].attributes['user'] == 'MusikBot'
         STDOUT.puts 'MusikBot was last to edit page'
@@ -324,13 +326,14 @@ module FixPP
 
   # Redis
   def self.cache_touched(page, action)
-    key = "mb-fixpp-#{page.attributes['page_id']}"
+    key = "mb-fixpp-#{page.attributes['pageid']}"
 
     if action == :set
       @mb.redis_client.set(key, page.attributes['touched'])
-      @mb.redis_client.expire(key, 10_800) # 3 hours
+      @mb.redis_client.expire(key, 3600) # 1 hour, was 3 hours = 10_800
     else
-      DateTime.parse(@mb.redis_client.get(key)) rescue @mb.now
+      ret = @mb.redis_client.get(key)
+      ret.nil? ? @mb.now - 9999 : @mb.parse_date(ret)
     end
   end
 
