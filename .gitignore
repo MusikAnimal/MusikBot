@@ -3,7 +3,6 @@ auth.rb
 *.log
 TODO
 env
-*lastrun
-pp_hash
 .bundle
 .ruby-version
+disk_cache
