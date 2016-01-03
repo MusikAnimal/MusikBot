@@ -15,7 +15,7 @@ module FixPP
       # don't try endlessly to fix the same page
       # if @mb.env == :production && cache_touched(page_obj, :get) >= @mb.parse_date(page_obj.attributes['touched'])
       # FIXME: just going to not reprocess anything within an hour after last processing
-      if @mb. env == :production && cache_touched(page_obj, :get)
+      if @mb.env == :production && cache_touched(page_obj, :get)
         STDOUT.puts "cache hit for #{page_obj.attributes['title']}"
       elsif page_obj.elements['revisions'][0].attributes['user'] == 'MusikBot'
         STDOUT.puts 'MusikBot was last to edit page'
