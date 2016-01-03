@@ -118,7 +118,7 @@ module FixPP
       }
 
       # generic pp template is handled differently
-      if opts[:pp_type] == 'pp' && opts[:type].blank?
+      if opts[:pp_type] == :pp && opts[:type].blank?
         # try to figure out usage of generic {{pp}}
         opts[:type] = opts[:raw_code].scan(/\{\{\s*pp\s*(?:\|.*?action\s*\=\s*(.*?)(?:\||\}\}))/i).flatten.first
 
