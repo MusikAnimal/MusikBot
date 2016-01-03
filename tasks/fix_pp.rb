@@ -5,8 +5,7 @@ CATEGORY = 'Category:Wikipedia pages with incorrect protection templates'
 
 module FixPP
   def self.run
-    # FIXME: remember to remove 'true' so it will go by /Run
-    @mb = MusikBot::Session.new(inspect, true)
+    @mb = MusikBot::Session.new(inspect)
 
     pages = category_members
 
