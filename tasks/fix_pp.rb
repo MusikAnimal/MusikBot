@@ -154,7 +154,7 @@ module FixPP
       # check if there's corresponding protection for the pp template on page
       # API response could be cached (protect info still there but it's expired)
       if opts[:expiry].nil? || (opts[:expiry] != 'indefinite' && @mb.parse_date(opts[:expiry]) < @mb.now)
-        human_type = opts[:type] == 'flagged' ? 'pending changes' : type
+        human_type = opts[:type] == 'flagged' ? 'pending changes' : opts[:type]
 
         if @mb.config['run']['remove_individual_if_expired']
           @edit_summaries << "removing {{#{old_pp_type}}} as page is not #{human_type}-protected"
@@ -233,7 +233,7 @@ module FixPP
   def self.build_pp_template(opts)
     new_pp = '{{'
 
-    if opts[:expiry] == 'infinity' && opts[:type] != 'flagged'
+    if opts[:expiry] == 'indefinite' && opts[:type] != 'flagged'
       if opts[:type] == 'edit'
         opts[:pp_type] = 'pp-semi-indef'
       elsif opts[:type] == 'move'
