@@ -63,7 +63,7 @@ module MusikBot
       @env = eval(File.open("#{PROJECT_ROOT}/env").read)
       @opts = {
         prodonly: prodonly,
-        project: @env == :test ? 'test.wikipedia' : 'en.wikipedia'
+        project: @env == :test && !prodonly ? 'test.wikipedia' : 'en.wikipedia'
       }
       OptionParser.new do |args|
         args.banner = 'Usage: script.rb [options]'
