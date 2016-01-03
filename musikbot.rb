@@ -45,10 +45,15 @@ class String
   alias_method :t, :translate
 end
 
-def t(str, opts = {})
-  return str if I18n.locale == :en && opts.empty?
-  res = str.clone.uncapitalize.translate(opts)
-  str.capitalized? ? res.capitalize_first : res.uncapitalize
+def t(key, opts = {})
+  if I18n.locale == :en && opts.blank?
+    key
+  elsif key.is_a?(Symbol)
+    I18n.t(key, opts)
+  else
+    res = key.clone.uncapitalize.translate(opts)
+    key.capitalized? ? res.capitalize_first : res.uncapitalize
+  end
 end
 
 module MusikBot
@@ -130,7 +135,7 @@ module MusikBot
     # FIXME: currently does enwiki-only
     def repl_client
       return @repl_client if @repl_client
-      un, pw, host, db, port = Auth.db_credentials
+      un, pw, host, db, port = Auth.db_credentials(lang)
       @repl_client = Repl::Session.new(un, pw, host, db, port)
     end
 
