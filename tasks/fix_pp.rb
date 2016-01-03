@@ -333,7 +333,8 @@ module FixPP
       @mb.redis_client.expire(key, 3600) # 1 hour, was 3 hours = 10_800
     else
       ret = @mb.redis_client.get(key)
-      ret.nil? ? @mb.now - 9999 : @mb.parse_date(ret)
+      # ret.nil? ? @mb.now - 9999 : @mb.parse_date(ret)
+      @mb.parse_date(ret)
     end
   end
 
