@@ -1,4 +1,5 @@
 require 'optparse'
+require 'i18n'
 require 'mediawiki-gateway'
 require 'auth'
 require 'redis'
@@ -37,13 +38,24 @@ class String
   def capitalized?
     self[0, 1].uppercase?
   end
+
+  def translate(opts = {})
+    I18n.t(self, opts)
+  end
+  alias_method :t, :translate
+end
+
+def t(str, opts = {})
+  return str if I18n.locale == :en && opts.empty?
+  res = str.clone.uncapitalize.translate(opts)
+  str.capitalized? ? res.capitalize_first : res.uncapitalize
 end
 
 module MusikBot
   class Session
     def initialize(task, prodonly = false)
       @task = task
-      @env = eval(File.open('env').read)
+      @env = eval(File.open("#{PROJECT_ROOT}/env").read)
       @opts = {
         prodonly: prodonly,
         project: @env == :test ? 'test.wikipedia' : 'en.wikipedia'
@@ -54,11 +66,17 @@ module MusikBot
         args.on('-p', '--project PROJECT', 'Project name (en.wikipedia)') { |v| @opts[:project] = v }
       end.parse!
 
-      @gateway = MediaWiki::Gateway.new("https://#{@opts[:project]}.org/w/api.php", {
+      @opts[:lang] = @env == :test ? :en : @opts[:project].scan(/^\w\w/).first.to_sym
+      I18n.load_path = Dir["#{PROJECT_ROOT}/dictionaries/*/*.yml"]
+      I18n.backend.load_translations
+      I18n.config.available_locales = @opts[:lang]
+      I18n.locale = @opts[:lang]
+
+      @gateway = MediaWiki::Gateway.new("https://#{@opts[:project]}.org/w/api.php",
         bot: true,
         retry_count: 5,
         user_agent: "MusikBot/1.1 (https://#{@opts[:project]}.org/wiki/User:MusikBot/)"
-      })
+      )
       Auth.login(@gateway)
 
       unless @task == 'Console' || @opts[:prodonly] || @env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
@@ -72,7 +90,7 @@ module MusikBot
     attr_reader :task
 
     def lang
-      @opts[:project].chomp('.wikipedia')
+      @opts[:lang]
     end
 
     # Utilities
@@ -84,18 +102,20 @@ module MusikBot
       now.to_date
     end
 
-    def parse_date(obj)
+    def parse_date(obj, convert = false)
       if obj.is_a?(String)
         DateTime.parse(obj).new_offset(0)
       elsif obj.is_a?(DateTime)
         obj.new_offset(0)
+      elsif convert
+        obj.to_datetime
       else
         obj
       end
     end
 
     def wiki_date(date)
-      parse_date(date).strftime('%k:%M, %-d %B %Y (UTC)')
+      I18n.l(parse_date(date, true), format: :wiki_time)
     end
 
     def api_date(date)
@@ -110,7 +130,7 @@ module MusikBot
     # FIXME: currently does enwiki-only
     def repl_client
       return @repl_client if @repl_client
-      un, pw, host, db, port = Auth.db_credentials(@env)
+      un, pw, host, db, port = Auth.db_credentials
       @repl_client = Repl::Session.new(un, pw, host, db, port)
     end
 
@@ -131,6 +151,7 @@ module MusikBot
     end
 
     def disk_cache(filename, time = 3600, &res)
+      filename = "#{PROJECT_ROOT}/disk_cache/#{filename}"
       if File.mtime(filename) < Time.now.utc - time
         ret = res.call
 
@@ -142,6 +163,10 @@ module MusikBot
       end
 
       ret
+    end
+
+    def local_storage(filename, opts)
+      File.open("#{PROJECT_ROOT}/disk_cache/#{filename}", opts)
     end
 
     # API-related

@@ -1,4 +1,4 @@
-$LOAD_PATH << '.'
+$LOAD_PATH << '..'
 require 'musikbot'
 
 CATEGORY = 'Category:Wikipedia pages with incorrect protection templates'

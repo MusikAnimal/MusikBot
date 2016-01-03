@@ -1,4 +1,4 @@
-$LOAD_PATH << '.'
+$LOAD_PATH << '..'
 
 require 'mediawiki-gateway'
 require 'auth.rb'

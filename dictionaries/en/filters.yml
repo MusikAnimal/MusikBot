@@ -1,0 +1,5 @@
+en:
+  edit_summary: 'Reporting %{num} stale filters'
+  last_changed: 'Last [[Special:AbuseFilter/history/%{id}/diff/prev|changed]]'
+  summary: '%{num} enabled filters with no hits in %{days} days'
+  title: 'Stale filters as of %{date}'

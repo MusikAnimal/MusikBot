@@ -1,4 +1,4 @@
-$LOAD_PATH << '.'
+$LOAD_PATH << '..'
 require 'musikbot'
 require 'httparty'
 
@@ -24,6 +24,8 @@ module ACCMonitor
     process_event_coordinators
 
     issue_report
+  rescue => e
+    @mb.report_error('Fatal error', e)
   end
 
   def self.process_accounts
@@ -36,17 +38,17 @@ module ACCMonitor
       # queries
       user_actions = logged_actions(username).reject { |la| la['log_title'] == username }
       rights_log = rights_changes(username).select { |rc| rc['log_params'].scan(/accountcreator/).length == 1 }
-      last_action = Date.parse(user_actions.first['log_timestamp']) rescue nil
+      last_action = @mb.parse_date(user_actions.first['log_timestamp']) rescue nil
       permissions = user_groups(username).collect { |ug| ug['ug_group'] }
       acc_info = acc_stats(username)
 
       if acc_info
-        acc_last_action = Date.parse(acc_info['lastactive']) rescue nil
-        acc_active = acc_last_action > Date.today - num_days rescue nil
+        acc_last_action = @mb.parse_date(acc_info['lastactive']) rescue nil
+        acc_active = acc_last_action > @mb.today - num_days rescue nil
       end
 
-      next if acc_active || (last_action && last_action > Date.today - num_days)
-      # next unless acc_inactive || last_action.nil? || (last_action < Date.today - num_days && acc_info.nil?)
+      next if acc_active || (last_action && last_action > @mb.today - num_days)
+      # next unless acc_inactive || last_action.nil? || (last_action < @mb.today - num_days && acc_info.nil?)
 
       puts '  meets inactivity threshold'
       @user_count += 1
@@ -69,21 +71,19 @@ module ACCMonitor
         @other_users_markup += normal_entry(user)
       end
     end
-  rescue => e
-    @mb.report_error('Fatal error', e)
   end
 
   def self.process_event_coordinators
     usernames = []
 
     event_coordinators.each do |user|
-      next if user[:event_date] > Date.today || whitelisted_users.include?(user[:username])
+      next if user[:event_date] > @mb.today || whitelisted_users.include?(user[:username])
       usernames << user[:username]
       permissions = user_groups(user[:username]).collect { |ug| ug['ug_group'] }
 
       if permissions.include?('accountcreator') || ['Example', 'Test', 'Test user'].include?(user[:username])
         user[:num_actions] = logged_actions(user[:username]).reject { |la| la['log_title'] == user[:username] }.length
-        user[:last_action] = Date.parse(user_actions.first['log_timestamp']).strftime('%Y %B %-d') rescue '-'
+        user[:last_action] = @mb.parse_date(user_actions.first['log_timestamp']).strftime('%Y %B %-d') rescue '-'
         user[:rights_log] = rights_changes(user[:username]).select { |rc| rc['log_params'].scan(/accountcreator/).length == 1 }.reverse
 
         @coordinator_count += 1
@@ -99,7 +99,7 @@ module ACCMonitor
   def self.issue_report
     total = @user_count + @coordinator_count
     percentage = ((total.to_f / account_creators.to_a.length.to_f) * 100).round
-    content = "<div style='font-size:24px'>Inactive account creators as of #{Date.today.strftime('%-d %B %Y')}</div>\n" \
+    content = "<div style='font-size:24px'>Inactive account creators as of #{@mb.today.strftime('%-d %B %Y')}</div>\n" \
       "'''#{total}''' out of #{account_creators.to_a.length} (#{percentage}%) account creators eligible for revocation\n\n" \
       "'''{{User:MusikBot/ACCMonitor/Count}}''' users with no account creation activity in the past {{User:MusikBot/ACCMonitor/Offset}} days\n\n" \
       "'''{{User:MusikBot/ACCMonitor/Coordinator count}}''' event coordinators with expired account creator privileges\n\n" \
@@ -145,7 +145,7 @@ module ACCMonitor
   def self.rights_log_markup(username, rights_log)
     markup = "{{collapse top|bg=transparent|bg2=transparent|border=0|border2=transparent|padding=0|title={{/Log link|#{username}}}}}\n"
     rights_log.each do |entry|
-      date = Date.parse(entry['log_timestamp']).strftime('%-d %B %Y')
+      date = @mb.parse_date(entry['log_timestamp']).strftime('%-d %B %Y')
       userlinks = "{{u|#{entry['log_user_text']}}}"
       granted = entry['log_params'] =~ /oldgroups.*accountcreator.*newgroups/ ? 'Revoked' : 'Granted'
       markup += "* #{date} - #{granted} by #{userlinks} - ''#{entry['log_comment']}''\n"
@@ -165,7 +165,7 @@ module ACCMonitor
       matches = entry.scan(/{{\s*no\s*ping\s*\|(.*?)}}(.*)/i).flatten
       @event_coordinators << {
         username: matches[0].strip,
-        event_date: Date.parse(matches[1]),
+        event_date: @mb.parse_date(matches[1]),
         index: index
       }
     end

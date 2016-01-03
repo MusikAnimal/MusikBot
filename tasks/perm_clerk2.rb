@@ -1,4 +1,4 @@
-$LOAD_PATH << '.'
+$LOAD_PATH << '..'
 require 'musikbot'
 
 module PermClerk
@@ -48,7 +48,7 @@ module PermClerk
 
     generate_report
 
-    run_file = File.open('lastrun', 'r+')
+    run_file = @mb.local_storage('lastrun', 'r+')
     run_file.write(run_status.inspect)
     run_file.close
   rescue => e
@@ -99,11 +99,12 @@ module PermClerk
     admin_backlog
 
     if @edit_summaries.any?
-      @mb.edit(page_name,
-        content: @new_wikitext,
-        summary: perm_edit_summary,
-        conflicts: true
-      )
+      binding.pry
+      # @mb.edit(page_name,
+      #   content: @new_wikitext,
+      #   summary: perm_edit_summary,
+      #   conflicts: true
+      # )
     else
       info('Nothing to do this time around')
     end
@@ -137,16 +138,14 @@ module PermClerk
     done_regex = config['archive_config']['done']
     notdone_regex = config['archive_config']['notdone']
     resolution = overriden_resolution || (@section.match(/(?:#{done_regex})/i) ? 'done' : @section.match(/(?:#{notdone_regex})/i) ? 'notdone' : false)
-    resolution_timestamp = Date.parse(@section.scan(/(?:#{config['archive_config']["#{resolution}"]}).*(\d\d:\d\d, \d+ \w+ \d{4} \(UTC\))/i).flatten.drop(1).last) rescue nil
+    resolution_timestamp = @mb.parse_date(@section.scan(/(?:#{config['archive_config']["#{resolution}"]}).*(\d\d:\d\d, \d+ \w+ \d{4} \(UTC\))/i).flatten.drop(1).last) rescue nil
 
     # use newest timestamp when forcing resolution and no resolution template exists
     if resolution_timestamp.nil? && overriden_resolution
-      resolution_timestamp = Date.parse(@newest_timestamp)
+      resolution_timestamp = @mb.parse_date(@newest_timestamp)
     end
 
     @num_open_requests += 1 unless resolution
-
-    @should_update_prereq_data = should_update_prereq_data
 
     # archiving has precedence; e.g. if we are archiving, we don't do anything else for this section
     return if archiving(resolution, overriden_resolution, resolution_timestamp)
@@ -155,7 +154,11 @@ module PermClerk
     if resolution
       info("  #{@username}'s request already responded to")
       @new_wikitext << SPLIT_KEY + @section and return
-    elsif @section.match(/{{comment|Automated comment}}.*MusikBot/) && !@should_update_prereq_data
+    end
+
+    @should_update_prereq_data = should_update_prereq_data
+
+    if @section.match(/{{comment|Automated comment}}.*MusikBot/) && !@should_update_prereq_data
       info("  MusikBot has already commented on #{username}'s request and no prerequisite data to update")
       @new_wikitext << SPLIT_KEY + @section and return
     end
@@ -217,7 +220,7 @@ module PermClerk
       decline_days.each do |declineDay|
         day_number = declineDay.scan(/^(\d+)\s*==/).flatten[0].to_i
         next if day_number == 0
-        decline_day_date = Date.parse("#{date.year}-#{date.month}-#{day_number}")
+        decline_day_date = @mb.parse_date("#{date.year}-#{date.month}-#{day_number}")
         if decline_day_date >= target_date && match = declineDay.scan(/\{\{Usercheck.*\|#{@username.gsub('_', ' ')}}}.*#{@permission}\]\].*(https?:\/\/.*)\s+link\]/i)[0]
           links << match.flatten[0]
         end
@@ -346,8 +349,9 @@ module PermClerk
       return true
     end
 
+    # not time to archive
     unless should_archive_now || @mb.parse_date(@newest_timestamp) + Rational(config['archive_config']['offset'].to_i, 24) < @mb.now
-      return true
+      return false
     end
 
     if should_archive_now
@@ -484,17 +488,19 @@ module PermClerk
         info("    Attempting to write to page [[#{log_page_name}]]")
         log_page_wikitext = log_page.split('===')[0] + log_page_wikitext
 
-        @mb.edit(log_page_name,
-          content: log_page_wikitext,
-          summary: "Adding entry for [[#{page_to_edit}]]"
-        )
+        binding.pry
+        # @mb.edit(log_page_name,
+        #   content: log_page_wikitext,
+        #   summary: "Adding entry for [[#{page_to_edit}]]"
+        # )
       end
 
       info("  Attempting to write to page [[#{page_to_edit}]]")
-      @mb.edit(page_to_edit,
-        content: new_wikitext,
-        summary: edit_summary
-      )
+      binding.pry
+      # @mb.edit(page_to_edit,
+      #   content: new_wikitext,
+      #   summary: edit_summary
+      # )
     end
   end
 
@@ -567,11 +573,14 @@ module PermClerk
     oldest_timestamp = timestamps.min { |a, b| @mb.parse_date(a) <=> @mb.parse_date(b) }
     min_num_requests = is_account_creator ? 0 : config['adminbacklog_config']['requests']
 
+    backlogged = @new_wikitext.include?('{{WP:PERM/Backlog}}')
+
     if @num_open_requests > 0 && (@num_open_requests > min_num_requests || @mb.parse_date(oldest_timestamp) < @mb.today - config['adminbacklog_config']['offset'])
+      return if backlogged # no change
       @edit_summaries << :backlog
       info('{{WP:PERM/Backlog}}')
       @new_wikitext.sub!('{{WP:PERM/Backlog|none}}', '{{WP:PERM/Backlog}}')
-    else
+    elsif !backlogged
       @edit_summaries << :no_backlog
       info('{{WP:PERM/Backlog|none}}')
       @new_wikitext.sub!('{{WP:PERM/Backlog}}', '{{WP:PERM/Backlog|none}}')
@@ -602,10 +611,11 @@ module PermClerk
     run_status['report_errors'] = errors_digest
 
     info('Updating report...')
-    @mb.edit('User:MusikBot/PermClerk/Report',
-      content: content,
-      summary: 'Updating [[User:MusikBot/PermClerk|PermClerk]] report'
-    )
+    binding.pry
+    # @mb.edit('User:MusikBot/PermClerk/Report',
+    #   content: content,
+    #   summary: 'Updating [[User:MusikBot/PermClerk|PermClerk]] report'
+    # )
   end
 
   # Helpers
@@ -778,7 +788,7 @@ module PermClerk
 
   # Config-related
   def self.run_status
-    @run_status ||= eval(File.open('lastrun', 'r').read) rescue {}
+    @run_status ||= eval(@mb.local_storage('lastrun', 'r').read) rescue {}
   end
 
   def self.permissions

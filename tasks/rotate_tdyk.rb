@@ -1,4 +1,4 @@
-$LOAD_PATH << '.'
+$LOAD_PATH << '..'
 require 'musikbot'
 
 module RotateTDYK
@@ -21,8 +21,8 @@ module RotateTDYK
     @current_nominations = split[1]
 
     date_headings = @current_nominations.scan(/\=\=\=\s*Articles\s+created\/expanded\s+on\s+(\w+\s+\d+)\s*\=\=\=/i).flatten
-    @oldest_day = Date.parse("#{date_headings.first} #{@mb.today.year}")
-    @newest_day = Date.parse("#{date_headings.last} #{@mb.today.year}")
+    @oldest_day = @mb.parse_date("#{date_headings.first} #{@mb.today.year}")
+    @newest_day = @mb.parse_date("#{date_headings.last} #{@mb.today.year}")
     @current_nom_date = @mb.today - @num_days
 
     moved = move_current_nom_heading
@@ -46,7 +46,10 @@ module RotateTDYK
   end
 
   def self.move_current_nom_heading
-    return false if @oldest_day == @current_nom_date
+    # T:TDYK doesn't actually state the year anywhere on the page, but we can safely compare just the day/month
+    if [@oldest_day.day, @oldest_day.month] == [@current_nom_date.day, @current_nom_date.month]
+      return false
+    end
     current_nom_heading = "==Current nominations<!-- automatically moved by bot -->==\n"
     new_oldest_day_heading = @current_nominations.scan(/\=\=\=\s*Articles\s+created\/expanded\s+on\s+#{@current_nom_date.strftime('%B %-d')}\s*\=\=\=/i).flatten[0]
     @current_nominations.gsub!(new_oldest_day_heading, current_nom_heading + new_oldest_day_heading)

@@ -1,0 +1,9 @@
+pt:
+  days: 'Dias'
+  disabled: 'desabilitado'
+  enabled: 'ativado'
+  new: 'novo'
+  none: 'nenhum'
+  plain_link: '{{subst:plnk|url=%{url}|título=%{name}}}'
+  user: 'Usuário(a)'
+  user_link: '[[Usuário(a):%{name}|%{name}]]'

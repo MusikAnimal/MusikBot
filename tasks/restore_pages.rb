@@ -1,4 +1,4 @@
-$LOAD_PATH << '.'
+$LOAD_PATH << '..'
 
 module RestorePages
   require 'mediawiki-gateway'

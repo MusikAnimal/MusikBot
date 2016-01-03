@@ -1,19 +1,19 @@
-$LOAD_PATH << '.'
+$LOAD_PATH << '..'
 require 'musikbot'
 
 module TAFIDaily
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    last_run = @mb.parse_date(File.open('TAFIDaily_lastrun', 'r').read) rescue DateTime.new
+    last_run = @mb.parse_date(@mb.local_storage('TAFIDaily_lastrun', 'r').read) rescue DateTime.new
     rotation_expired = @mb.now > last_run + Rational(23, 24) || @mb.env == :test
 
     process_nomination_board
 
     if @mb.config['run']['rotate_nominations'] && rotation_expired
       rotate_nominations
-      run_file = File.open('TAFIDaily_lastrun', 'r+')
-      run_file.write(DateTime.now.to_s)
+      run_file = @mb.local_storage('TAFIDaily_lastrun', 'r+')
+      run_file.write(@mb.now.to_s)
       run_file.close
     end
   rescue => e
@@ -81,7 +81,7 @@ module TAFIDaily
       newest_timestamp = @mb.parse_date(timestamps.min { |a, b| @mb.parse_date(b) <=> @mb.parse_date(a) })
       should_archive = newest_timestamp + Rational(@mb.config['config']['archive_offset'], 24) < @mb.now
 
-      if newest_timestamp < @mb.today - 21
+      if newest_timestamp < @mb.today - @mb.config['config']['auto_unapprove_offset']
         unapproved_entires_count += 1
         text.gsub!(section, '')
         archive_entries << section.chomp('') + "\n{{unapproved}} (automated respone) No further input after 21 days ~~~~"

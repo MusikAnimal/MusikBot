@@ -1,13 +1,11 @@
-$LOAD_PATH << '.'
+$LOAD_PATH << '..'
 require 'musikbot'
 require 'mysql2'
-
-NUM_DAYS = 5
 
 module FilterMonitor
   def self.run
     @mb = MusikBot::Session.new(inspect)
-    un, pw, host, db, port = Auth.ef_db_credentials(eval(File.open('env').read), @mb.lang)
+    un, pw, host, db, port = Auth.ef_db_credentials(@mb.lang)
     @client = Mysql2::Client.new(
       host: host,
       username: un,
@@ -15,13 +13,12 @@ module FilterMonitor
       database: db,
       port: port
     )
-
-    @template_name = "#{i18n('User')}:MusikBot/FilterMonitor/#{i18n('Recent changes')}"
+    @template_name = "#{t('User')}:MusikBot/FilterMonitor/#{t('Recent changes')}"
 
     changes = filter_changes
     generate_report(changes) if changes.any?
   rescue => e
-    @mb.report_error(i18n('Fatal error'), e)
+    @mb.report_error(t('Fatal error'), e)
   end
 
   def self.filter_changes
@@ -60,12 +57,12 @@ module FilterMonitor
 
       changes['filter_id'] = current_filter['id']
       changes['lasteditor'] = current_filter['lasteditor']
-      changes['lastedittime'] = DateTime.parse(current_filter['lastedittime']).strftime('%H:%M, %e %B %Y (UTC)')
+      changes['lastedittime'] = @mb.wiki_date(current_filter['lastedittime'])
 
       if saved_filter.present?
         query("UPDATE filters SET #{update_sql.chomp(', ')} WHERE filter_id = #{id};")
       else
-        changes['new'] = i18n('new')
+        changes['new'] = t('new')
         insert(current_filter)
       end
 
@@ -98,44 +95,44 @@ module FilterMonitor
     content = new_templates.join("\n\n")
 
     unless write_template(@template_name, content, @edit_summaries)
-      @mb.report_error(i18n('Failed to write to template'))
+      @mb.report_error(t('Failed to write to template'))
     end
   end
 
   def self.template(data)
-    content = "'''[[#{i18n('Special:AbuseFilter')}/#{data['filter_id']}|#{i18n('Filter')} #{data['filter_id']}]]#{' (' + data['new'] + ')' if data['new']}''' &mdash; "
+    content = "'''[[#{t('Special:AbuseFilter')}/#{data['filter_id']}|#{t('Filter')} #{data['filter_id']}]]#{' (' + data['new'] + ')' if data['new']}''' &mdash; "
     @edit_summaries[data['filter_id']] = []
     %w(actions flags pattern).each do |prop|
       next if data[prop].blank? || prop == 'deleted'
 
       if prop == 'pattern'
-        content += "#{i18n('Pattern modified')}; "
+        content += "#{t('Pattern modified')}; "
       else
-        value = data[prop].sort.map { |v| i18n(v) }.join(',')
-        value.sub!(i18n('disallow'), "<span style='color:red;font-weight:bold'>#{i18n('disallow')}</span>")
-        value = value.blank? ? "(#{i18n('none')})" : value
-        content += "#{i18n(prop.capitalize_first)}: #{value}; "
+        value = data[prop].sort.map { |v| t(v) }.join(',')
+        value.sub!(t('disallow'), "<span style='color:red;font-weight:bold'>#{t('disallow')}</span>")
+        value = value.blank? ? "(#{t('none')})" : value
+        content += "#{t(prop.capitalize_first)}: #{value}; "
       end
-      @edit_summaries[data['filter_id']] << i18n(prop.uncapitalize)
+      @edit_summaries[data['filter_id']] << t(prop.uncapitalize)
     end
     content.chomp!('; ')
 
     return unless @mb.config['lasteditor'] || @mb.config['lastedittime']
 
-    content += "\n:#{i18n('Last changed')}"
-    content += " #{i18n('by')} {{no ping|#{data['lasteditor']}}}" if @mb.config['lasteditor']
-    content += " #{i18n('at')} #{data['lastedittime']}" if @mb.config['lastedittime']
+    content += "\n:#{t(:last_changed, id: data['filter_id'])}"
+    content += " #{t('by')} {{no ping|#{data['lasteditor']}}}" if @mb.config['lasteditor']
+    content += " #{t('at')} #{data['lastedittime']}" if @mb.config['lastedittime']
   end
 
   def self.parse_template(template)
     data = {}
-    data['filter_id'] = template.scan(/#{i18n('AbuseFilter')}\/(\d+)\|/).flatten[0]
+    data['filter_id'] = template.scan(/#{t('AbuseFilter')}\/(\d+)\|/).flatten[0]
     data['new'] = template.scan(/\((\w+)\)''' &mdash;/).flatten[0] rescue nil
-    data['pattern'] = template =~ /#{i18n('Pattern modified')}/ ? true : nil
+    data['pattern'] = template =~ /#{t('Pattern modified')}/ ? true : nil
     data['lasteditor'] = template.scan(/no ping\|(.*+)}}/).flatten[0] rescue nil
     data['lastedittime'] = template.scan(/(\d\d:\d\d.*\d{4} \(UTC\))/).flatten[0] rescue nil
-    data['actions'] = template.scan(/#{i18n('Actions')}: (.*?)[;\n]/).flatten[0].split(',') rescue []
-    data['flags'] = template.scan(/#{i18n('Flags')}: (.*?)[;\n]/).flatten[0].split(',') rescue []
+    data['actions'] = template.scan(/#{t('Actions')}: (.*?)[;\n]/).flatten[0].split(',') rescue []
+    data['flags'] = template.scan(/#{t('Flags')}: (.*?)[;\n]/).flatten[0].split(',') rescue []
 
     data
   end
@@ -195,17 +192,17 @@ module FilterMonitor
   # API methods
   def self.fetch_old_templates
     filters = @mb.get(@template_name).split(/^'''/).drop(1).map { |f| "'''#{f.rstrip}" }
-    filters.keep_if { |f| DateTime.parse(f.scan(/(\d\d:\d\d.*\d{4} \(UTC\))/).flatten[0]) > DateTime.now - NUM_DAYS }
+    filters.keep_if { |f| @mb.parse_date(f.scan(/(\d\d:\d\d.*\d{4} \(UTC\))/).flatten[0]) > @mb.now - @mb.config['days'] }
   end
 
   def self.write_template(page, content, summaries)
     edit_summary = ''
     summaries.keys.each do |f|
-      edit_summary += "[[#{i18n('Special:AbuseFilter')}/#{f}|#{f}]]" + (summaries[f].any? ? " (#{summaries[f].join(', ')})" : '') + '; '
+      edit_summary += "[[#{t('Special:AbuseFilter')}/#{f}|#{f}]]" + (summaries[f].any? ? " (#{summaries[f].join(', ')})" : '') + '; '
     end
 
     opts = {
-      summary: "#{i18n('Reporting recent changes to filters')} #{edit_summary.chomp('; ')}",
+      summary: "#{t('Reporting recent changes to filters')} #{edit_summary.chomp('; ')}",
       content: content,
       bot: false
     }
@@ -259,47 +256,6 @@ module FilterMonitor
     end
 
     data
-  end
-
-  # i18n
-  def self.i18n(str)
-    return str if @mb.lang == 'en'
-    res = i18n_hash[str.clone.capitalize_first]
-    str.capitalized? ? res.capitalize_first : res.uncapitalize
-  end
-
-  def self.i18n_hash
-    case @mb.lang
-    when 'pt'
-      {
-        'AbuseFilter' => 'Filtro de abusos',
-        'Actions' => 'Ações',
-        'At' => 'em',
-        'By' => 'por',
-        'Description' => 'Descrição',
-        'Disallow' => 'não autorizar',
-        'Disabled' => 'desabilitado',
-        'Enabled' => 'ativado',
-        'Failed to write to template' => 'Falha ao gravar no modelo',
-        'Fatal error' => 'Erro fatal',
-        'Filter' => 'Filtro',
-        'Flags' => 'Sinalizações',
-        'Last changed' => 'Última alteração',
-        'Modified' => 'modificada',
-        'New' => 'novo',
-        'None' => 'nenhum',
-        'Pattern' => 'Padrão',
-        'Pattern modified' => 'Padrão modificado',
-        'Privacy' => 'Privacidade',
-        'Recent changes' => 'Modificações recentes',
-        'Reporting recent changes to filters' => 'Relatórios recentes alterações para filtros',
-        'Special:AbuseFilter' => 'Especial:Filtro de abusos',
-        'Tag' => 'etiquetar',
-        'Throttle' => 'limitador',
-        'User' => 'Usuário(a)',
-        'Warn' => 'avisar'
-      }
-    end
   end
 end
 

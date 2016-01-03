@@ -18,6 +18,7 @@ GEM
     httparty (0.13.7)
       json (~> 1.8)
       multi_xml (>= 0.5.2)
+    i18n (0.7.0)
     json (1.8.3)
     method_source (0.8.2)
     mime-types (2.99)
@@ -47,6 +48,7 @@ PLATFORMS
 
 DEPENDENCIES
   httparty
+  i18n
   mediawiki-gateway!
   mysql2
   pry-byebug

@@ -1,0 +1,3 @@
+en:
+  plain_link: '{{plain link|url=%{url}|name=%{name}}}'
+  user_link: '[[User:%{name}|%{name}]]'
