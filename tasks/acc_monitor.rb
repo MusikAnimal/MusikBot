@@ -4,7 +4,7 @@ require 'httparty'
 
 module ACCMonitor
   def self.run
-    @mb = MusikBot::Session.new(inspect, true)
+    @mb = MusikBot::Session.new(inspect)
     @getter = HTTParty
 
     normal_header = "{| class='wikitable sortable'\n! Username\n! Total actions\n! style='min-width:100px' " \

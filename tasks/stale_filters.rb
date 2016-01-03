@@ -3,7 +3,7 @@ require 'musikbot'
 
 module StaleFilters
   def self.run
-    @mb = MusikBot::Session.new(inspect, true)
+    @mb = MusikBot::Session.new(inspect)
 
     @report_page = 'User:MusikBot/StaleFilters/Report'
     @total_page = 'User:MusikBot/StaleFilters/Total'
