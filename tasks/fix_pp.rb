@@ -7,7 +7,7 @@ module FixPP
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    pages = category_members
+    pages = ['Test'] # category_members
 
     pages.each do |page|
       page_obj = protect_info(page).first
@@ -261,7 +261,7 @@ module FixPP
   end
 
   def self.remove_pps
-    @content.gsub!(/(?:\<noinclude\>)?\s*\{\{\s*(?:Template\:)?(?:#{pp_hash.keys.flatten.join('|')}).*?\}\}\s*(?:\<\/noinclude\>)?\n?/i, '')
+    @content.gsub!(/(?:\<noinclude\>\s*)?\{\{\s*(?:Template\:)?(?:#{pp_hash.keys.flatten.join('|')}).*?\}\}(?:\s*\<\/noinclude\>)?/i, '')
   end
 
   def self.protections(page)
