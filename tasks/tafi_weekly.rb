@@ -1,4 +1,4 @@
-$LOAD_PATH << '.'
+$LOAD_PATH << '..'
 require 'musikbot'
 
 module TAFIWeekly
