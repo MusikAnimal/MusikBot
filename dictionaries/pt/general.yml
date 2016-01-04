@@ -1,6 +1,6 @@
 pt:
   days: 'Dias'
-  disabled: 'desabilitado'
+  disabled: 'desativado'
   enabled: 'ativado'
   new: 'novo'
   'no': 'não'
