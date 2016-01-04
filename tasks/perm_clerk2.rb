@@ -99,12 +99,11 @@ module PermClerk
     admin_backlog
 
     if @edit_summaries.any?
-      binding.pry
-      # @mb.edit(page_name,
-      #   content: @new_wikitext,
-      #   summary: perm_edit_summary,
-      #   conflicts: true
-      # )
+      @mb.edit(page_name,
+        content: @new_wikitext,
+        summary: perm_edit_summary,
+        conflicts: true
+      )
     else
       info('Nothing to do this time around')
     end
@@ -297,6 +296,10 @@ module PermClerk
     return unless config['run']['prerequisites'] && prereqs.present? && @permission != 'Confirmed' # && !@username.downcase.match(/bot$/)
     debug("  Checking if #{@username} meets configured prerequisites...")
 
+    if @mb.redis_client.get("mb-#{@username}-#{@permission}-qualified")
+      return debug('    Cache hit, user meets criteria')
+    end
+
     updating_prereq = @section.match(/\<!-- mb-\w*(?:Count|Age) --\>/)
 
     user_info = get_user_info(@username, prereqs.keys)
@@ -313,6 +316,7 @@ module PermClerk
         )
       elsif pass
         info('      User meets criteria')
+        @mb.redis_client.set("mb-#{@username}-#{@permission}-qualified", true)
       elsif updating_prereq
         prereq_count_regex = @section.scan(/(\<!-- mb-#{key} --\>(.*)\<!-- mb-#{key}-end --\>)/)
         prereq_text = prereq_count_regex.flatten[0]
@@ -488,19 +492,17 @@ module PermClerk
         info("    Attempting to write to page [[#{log_page_name}]]")
         log_page_wikitext = log_page.split('===')[0] + log_page_wikitext
 
-        binding.pry
-        # @mb.edit(log_page_name,
-        #   content: log_page_wikitext,
-        #   summary: "Adding entry for [[#{page_to_edit}]]"
-        # )
+        @mb.edit(log_page_name,
+          content: log_page_wikitext,
+          summary: "Adding entry for [[#{page_to_edit}]]"
+        )
       end
 
       info("  Attempting to write to page [[#{page_to_edit}]]")
-      binding.pry
-      # @mb.edit(page_to_edit,
-      #   content: new_wikitext,
-      #   summary: edit_summary
-      # )
+      @mb.edit(page_to_edit,
+        content: new_wikitext,
+        summary: edit_summary
+      )
     end
   end
 
@@ -611,11 +613,10 @@ module PermClerk
     run_status['report_errors'] = errors_digest
 
     info('Updating report...')
-    binding.pry
-    # @mb.edit('User:MusikBot/PermClerk/Report',
-    #   content: content,
-    #   summary: 'Updating [[User:MusikBot/PermClerk|PermClerk]] report'
-    # )
+    @mb.edit('User:MusikBot/PermClerk/Report',
+      content: content,
+      summary: 'Updating [[User:MusikBot/PermClerk|PermClerk]] report'
+    )
   end
 
   # Helpers
