@@ -7,7 +7,7 @@ module FixPP
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    pages = ['Test'] # category_members
+    pages = category_members
 
     pages.each do |page|
       page_obj = protect_info(page).first
@@ -329,6 +329,7 @@ module FixPP
     key = "mb-fixpp-#{page.attributes['pageid']}"
 
     if action == :set
+      # FIXME: consider caching expiries, and check if current time is after them and reprocess page
       @mb.redis_client.set(key, page.attributes['touched'])
       @mb.redis_client.expire(key, 3600) # 1 hour, was 3 hours = 10_800
     else
