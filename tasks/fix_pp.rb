@@ -262,6 +262,7 @@ module FixPP
 
   def self.remove_pps
     @content.gsub!(/(?:\<noinclude\>\s*)?\{\{\s*(?:Template\:)?(?:#{pp_hash.keys.flatten.join('|')}).*?\}\}(?:\s*\<\/noinclude\>)?/i, '')
+    @content.gsub!(/\A\n*/, '')
   end
 
   def self.protections(page)
