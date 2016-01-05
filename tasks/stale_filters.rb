@@ -76,7 +76,6 @@ module StaleFilters
 
   # Helpers
   def self.translate(str)
-    binding.pry
     str.split(',').map { |s| t(s) }.join(', ')
   end
 
