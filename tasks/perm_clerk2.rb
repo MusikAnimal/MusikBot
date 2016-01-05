@@ -582,7 +582,7 @@ module PermClerk
       @edit_summaries << :backlog
       info('{{WP:PERM/Backlog}}')
       @new_wikitext.sub!('{{WP:PERM/Backlog|none}}', '{{WP:PERM/Backlog}}')
-    elsif !backlogged
+    elsif backlogged
       @edit_summaries << :no_backlog
       info('{{WP:PERM/Backlog|none}}')
       @new_wikitext.sub!('{{WP:PERM/Backlog}}', '{{WP:PERM/Backlog|none}}')
