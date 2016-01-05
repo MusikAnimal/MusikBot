@@ -192,7 +192,7 @@ module FilterMonitor
   # API methods
   def self.fetch_old_templates
     filters = @mb.get(@template_name).split(/^'''/).drop(1).map { |f| "'''#{f.rstrip}" }
-    filters.keep_if { |f| @mb.parse_date(f.scan(/(\d\d:\d\d.*\d{4} \(UTC\))/).flatten[0]) > @mb.now - @mb.config['days'] }
+    filters.keep_if { |f| @mb.parse_date(f.scan(/(\d\d:\d\d.*\d{4} \(UTC\))/).flatten[0]) > @mb.now - @mb.config['offset'] }
   end
 
   def self.write_template(page, content, summaries)
