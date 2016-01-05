@@ -51,6 +51,8 @@ module PermClerk
     run_file = @mb.local_storage('lastrun', 'r+')
     run_file.write(run_status.inspect)
     run_file.close
+
+    info("#{'~' * 25} Task complete #{'~' * 25}")
   rescue => e
     @mb.report_error('Fatal error', e)
   end
@@ -107,8 +109,6 @@ module PermClerk
     else
       info('Nothing to do this time around')
     end
-
-    info("#{'~' * 25} Task complete #{'~' * 25}")
   rescue MediaWiki::APIError => e
     if throttle > 3
       @mb.report_error('Edit throttle hit', e)
