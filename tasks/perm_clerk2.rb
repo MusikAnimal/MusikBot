@@ -577,7 +577,7 @@ module PermClerk
 
     backlogged = @new_wikitext.include?('{{WP:PERM/Backlog}}')
 
-    if @num_open_requests > 0 && (@num_open_requests > min_num_requests || @mb.parse_date(oldest_timestamp) < @mb.today - config['adminbacklog_config']['offset'])
+    if @num_open_requests > 0 && (@num_open_requests >= min_num_requests || @mb.parse_date(oldest_timestamp) <= @mb.today - config['adminbacklog_config']['offset'])
       return if backlogged # no change
       @edit_summaries << :backlog
       info('{{WP:PERM/Backlog}}')
