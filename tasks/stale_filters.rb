@@ -76,7 +76,8 @@ module StaleFilters
 
   # Helpers
   def self.translate(str)
-    str.split(',').map(&:t).join(', ')
+    binding.pry
+    str.split(',').map { |s| t(s) }.join(', ')
   end
 
   def self.offset_date
