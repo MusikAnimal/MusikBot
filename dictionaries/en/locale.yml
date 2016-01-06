@@ -113,5 +113,5 @@ en:
       long: "%B %d, %Y %H:%M"
       reporting: "%Y-%m-%d %H:%M"
       short: "%d %b %H:%M"
-      wiki_time: "-%k:%M, %-d %B %Y (UTC)"
+      wiki_time: "%-k:%M, %-d %B %Y (UTC)"
     pm: pm
