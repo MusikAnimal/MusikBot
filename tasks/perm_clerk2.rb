@@ -64,7 +64,7 @@ module PermClerk
     old_wikitext = page_props(page_name)
     return unless formatting_check(old_wikitext)
 
-    last_run = @mb.parse_date(run_status[@permission]) rescue DateTime.new
+    last_run = @mb.parse_date(run_status[@permission])
 
     if prereqs # if prereqs enabled for this permission
       has_prereq_data = old_wikitext.match(/\<!-- mb-\w*(?:Count|Age) --\>/)
@@ -157,7 +157,7 @@ module PermClerk
 
     @should_update_prereq_data = should_update_prereq_data
 
-    if @section.match(/{{comment|Automated comment}}.*MusikBot/) && !@should_update_prereq_data
+    if @section.match(/{{comment\|Automated comment}}.*MusikBot/) && !@should_update_prereq_data
       info("  MusikBot has already commented on #{username}'s request and no prerequisite data to update")
       @new_wikitext << SPLIT_KEY + @section and return
     end
