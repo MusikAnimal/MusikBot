@@ -164,11 +164,11 @@ module PermClerk
       @new_wikitext << SPLIT_KEY + @section and return
     end
 
-    return queue_changes if autorespond
-
     # these tasks have already been ran if we're just updating prereq data
     unless @should_update_prereq_data
+      # autoformat first, especially the case for Confirmed where they have a malformed report and are already autoconfirmed
       autoformat
+      return queue_changes if autorespond
       fetch_declined
       check_revoked
     end
