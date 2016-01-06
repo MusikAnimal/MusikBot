@@ -777,8 +777,8 @@ module PermClerk
     summaries << 'found previously declined requests' if @edit_summaries.include?(:fetchdeclined)
     summaries << 'found previous revocations' if @edit_summaries.include?(:checkrevoked)
     summaries << 'unable to archive one or more requests' if @edit_summaries.include?(:noSaidPermission)
-    summaries << '{{admin backlog}}' if @edit_summaries.include?(:backlog)
-    summaries << '{{no admin backlog}}' if @edit_summaries.include?(:no_backlog)
+    summaries << '{{WP:PERM/Backlog}}' if @edit_summaries.include?(:backlog)
+    summaries << '{{WP:PERM/Backlog|none}}' if @edit_summaries.include?(:no_backlog)
 
     if @num_open_requests > 0
       request_count_msg = "#{@num_open_requests} open request#{'s' if @num_open_requests > 1} remaining"
