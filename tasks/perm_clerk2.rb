@@ -91,6 +91,7 @@ module PermClerk
     @new_wikitext << sections.shift
 
     @num_open_requests = 0
+    @open_timestamps = []
 
     sections.each do |section|
       process_section(section)
@@ -155,6 +156,7 @@ module PermClerk
       @new_wikitext << SPLIT_KEY + @section and return
     end
 
+    @open_timestamps << timestamps.min { |a, b| @mb.parse_date(a) <=> @mb.parse_date(b) }
     @should_update_prereq_data = should_update_prereq_data
 
     if @section.match(/{{comment\|Automated comment}}.*MusikBot/) && !@should_update_prereq_data
@@ -571,13 +573,13 @@ module PermClerk
     is_account_creator = @permission == 'Account creator'
     return unless config['run']['admin_backlog']
 
-    timestamps = @new_wikitext.scan(/(?<!\<!-- mbdate --\> )\d\d:\d\d.*\d{4} \(UTC\)/)
-    oldest_timestamp = timestamps.min { |a, b| @mb.parse_date(a) <=> @mb.parse_date(b) }
+    oldest_timestamp = @open_timestamps.min { |a, b| @mb.parse_date(a) <=> @mb.parse_date(b) }
     min_num_requests = is_account_creator ? 0 : config['adminbacklog_config']['requests']
+    has_old_requests = oldest_timestamp ? @mb.parse_date(oldest_timestamp) <= @mb.today - config['adminbacklog_config']['offset'] : false
 
     backlogged = @new_wikitext.include?('{{WP:PERM/Backlog}}')
 
-    if @num_open_requests > 0 && (@num_open_requests >= min_num_requests || @mb.parse_date(oldest_timestamp) <= @mb.today - config['adminbacklog_config']['offset'])
+    if @num_open_requests > 0 && (@num_open_requests >= min_num_requests || has_old_requests)
       return if backlogged # no change
       @edit_summaries << :backlog
       info('{{WP:PERM/Backlog}}')
