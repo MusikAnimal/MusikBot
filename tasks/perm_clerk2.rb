@@ -232,6 +232,7 @@ module PermClerk
   end
 
   def self.autorespond
+    # FIXME: run for every permission, but compare timestamp of when right was granted with the timestamp of the request
     # only runs for Confirmed and AWB
     return false unless config['run']['autorespond'] && %w(Confirmed AutoWikiBrowser).include?(@permission) && api_relevant_permission
     info("    User has permission #{@permission}")
