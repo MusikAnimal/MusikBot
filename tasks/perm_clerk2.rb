@@ -84,7 +84,7 @@ module PermClerk
     end
 
     # first make fixes to confirm to what SPLIT_KEY looks for
-    old_wikitext.gsub(/\=\=\=\=\s+\[\[User:/, '====[[User:')
+    old_wikitext.gsub!(/\=\=\=\=\s+\[\[User:/, '====[[User:')
 
     @new_wikitext = []
     sections = old_wikitext.split(SPLIT_KEY)
@@ -344,7 +344,7 @@ module PermClerk
   end
 
   def self.archiving(resolution, overriden_resolution, resolution_timestamp)
-    return false unless config['run']['archive'] && resolution
+    return false unless config['run']['archive'] && resolution.present?
     should_archive_now = @section.match(/\{\{User:MusikBot\/archivenow\}\}/)
 
     if resolution_timestamp.nil?
