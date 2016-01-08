@@ -125,6 +125,7 @@ module FilterMonitor
   end
 
   def self.parse_template(template)
+    # FIXME: should strip out "new" if it's not really new anymore
     data = {}
     data['filter_id'] = template.scan(/#{t('AbuseFilter')}\/(\d+)\|/).flatten[0]
     data['new'] = template.scan(/\((\w+)\)''' &mdash;/).flatten[0] rescue nil
@@ -192,6 +193,7 @@ module FilterMonitor
   # API methods
   def self.fetch_old_templates
     filters = @mb.get(@template_name).split(/^'''/).drop(1).map { |f| "'''#{f.rstrip}" }
+    # FIXME: needs to go off of locale!!!
     filters.keep_if { |f| @mb.parse_date(f.scan(/(\d\d:\d\d.*\d{4} \(UTC\))/).flatten[0]) > @mb.now - @mb.config['offset'] }
   end
 
