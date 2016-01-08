@@ -73,8 +73,8 @@ module PermClerk
       should_check_prereq_data = false
     end
 
-    # only process if there's data to update or the page has changed since the last run
-    if @mb.env == :production && !should_check_prereq_data && last_run > @last_edit
+    # only process if there's data to update, the page has changed since the last run, or 90 minutes has passed
+    if @mb.env == :production && !should_check_prereq_data && last_run > @last_edit && last_run + Rational(90, 1440) > @mb.now
       return info('  Less than 90 minutes since last run without changes, and no prerequisites to update')
     end
 
