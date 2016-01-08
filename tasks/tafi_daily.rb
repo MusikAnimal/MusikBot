@@ -84,7 +84,7 @@ module TAFIDaily
       if newest_timestamp < @mb.today - @mb.config['config']['auto_unapprove_offset']
         unapproved_entires_count += 1
         text.gsub!(section, '')
-        archive_entries << section.chomp('') + "\n{{unapproved}} (automated respone) No further input after 21 days ~~~~"
+        archive_entries << section.chomp('') + "\n{{unapproved}} (automated closure) No further input after 21 days ~~~~"
       elsif entry =~ /{{\s*approved\s*}}/i
         approved_entries << "# {{icon|#{assessment || 'unknown'}}} [[#{article}]]"
         text.gsub!(section, '')
@@ -147,7 +147,7 @@ module TAFIDaily
       index_content.sub!(year_line, '')
       index_content.sub!(/<!-- mb-break.*? -->/,
         "<!-- mb-break (do not remove comment) -->#{year_line}#{' &middot; ' if year_line.include?('[[')}" \
-        "[[/#{@mb.today.year}/#{@mb.today.month}|#{@mb.today.strftime('%b')}]]"
+        "[[/#{@mb.today.year}/#{@mb.today.month}|#{@mb.today.strftime('%b')}]]\n"
       )
       @mb.edit(index_page,
         content: index_content,
