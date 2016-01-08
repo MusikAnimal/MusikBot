@@ -119,9 +119,9 @@ module FilterMonitor
 
     return unless @mb.config['lasteditor'] || @mb.config['lastedittime']
 
-    content += "\n:#{t(:last_changed, id: data['filter_id'])}"
+    content += "\n:<!-- mb-date=#{data['lastedittime']} -->#{t(:last_changed, id: data['filter_id'])}"
     content += " #{t('by')} {{no ping|#{data['lasteditor']}}}" if @mb.config['lasteditor']
-    content += " #{t('at')} #{data['lastedittime']}" if @mb.config['lastedittime']
+    content += " #{t('at')} #{@mb.wiki_date(data['lastedittime'])}" if @mb.config['lastedittime']
   end
 
   def self.parse_template(template)
@@ -194,7 +194,7 @@ module FilterMonitor
   def self.fetch_old_templates
     filters = @mb.get(@template_name).split(/^'''/).drop(1).map { |f| "'''#{f.rstrip}" }
     # FIXME: needs to go off of locale!!!
-    filters.keep_if { |f| @mb.parse_date(f.scan(/(\d\d:\d\d.*\d{4} \(UTC\))/).flatten[0]) > @mb.now - @mb.config['offset'] }
+    filters.keep_if { |f| @mb.parse_date(f.scan(/\<!-- mb-date=(\d\d:\d\d.*?\d{4} \(UTC\)) --\>/).flatten[0]) > @mb.now - @mb.config['offset'] }
   end
 
   def self.write_template(page, content, summaries)
