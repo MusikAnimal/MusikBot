@@ -37,7 +37,6 @@ module PermClerk
 
       begin
         process_permission
-        run_status[permission] = @mb.now.to_s
         @total_user_count += @users_count
       rescue => e
         @mb.report_error("Failed to process #{permission}", e)
@@ -76,6 +75,8 @@ module PermClerk
     # only process if there's data to update, the page has changed since the last run, or 90 minutes has passed
     if @mb.env == :production && !should_check_prereq_data && last_run > @last_edit && last_run + Rational(90, 1440) > @mb.now
       return info('  Less than 90 minutes since last run without changes, and no prerequisites to update')
+    else
+      run_status[@permission] = @mb.now.to_s
     end
 
     if config['run']['autoformat']
@@ -147,6 +148,7 @@ module PermClerk
 
     @num_open_requests += 1 unless resolution
 
+    binding.pry
     # archiving has precedence; e.g. if we are archiving, we don't do anything else for this section
     return if archiving(resolution, overriden_resolution, resolution_timestamp)
 
@@ -927,10 +929,14 @@ module PermClerk
     error(opts[:log_message])
   end
 
-  def self.debug(msg); puts("#{@permission.upcase} : #{msg}"); end
-  def self.info(msg); puts("#{@permission.upcase} : #{msg}"); end
-  def self.warn(msg); puts("#{@permission.upcase} : #{msg}"); end
-  def self.error(msg); puts("#{@permission.upcase} : #{msg}"); end
+  def self.debug(msg); log("#{@permission.upcase} : #{msg}"); end
+  def self.info(msg); log("#{@permission.upcase} : #{msg}"); end
+  def self.warn(msg); log("#{@permission.upcase} : #{msg}", :warn); end
+  def self.error(msg); log("#{@permission.upcase} : #{msg}", :error); end
+  def self.log(message, type = nil)
+    log_type = type ? "#{type.upcase} | " : ''
+    puts(@mb.now.strftime("%e %b %H:%M:%S | #{log_type}#{message}"))
+  end
 end
 
 PermClerk.run
