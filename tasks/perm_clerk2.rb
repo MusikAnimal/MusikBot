@@ -949,8 +949,8 @@ module PermClerk
   end
 
   def self.info(msg); log("#{@permission.upcase} : #{msg}"); end
-  def self.warn(msg); log("#{@permission.upcase} | WARN : #{msg}", :warn); end
-  def self.error(msg); log("#{@permission.upcase} | ERROR : #{msg}", :error); end
+  def self.warn(msg); log("#{@permission.upcase} | WARN : #{msg}"); end
+  def self.error(msg); log("#{@permission.upcase} | ERROR : #{msg}"); end
   def self.log(message); puts(@mb.now.strftime("%e %b %H:%M:%S | #{message}")); end
 end
 
