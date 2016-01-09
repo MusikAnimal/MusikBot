@@ -668,7 +668,7 @@ module PermClerk
       ret = false
     end
 
-    if old_wikitext.scan(/REVISIONUSER|\{\{subst:/)
+    if old_wikitext.scan(/REVISIONUSER|\{\{subst:/).any?
       error('Possible unsubstituted or improperly substituted request')
       @errors[@permission] = @errors[@permission].to_a << {
         group: 'formatting',
