@@ -36,10 +36,20 @@ module PermClerk
       @users_count = 0
 
       begin
+        @flag_as_ran = false
         process_permission
-        @total_user_count += @users_count
+
+        if @flag_as_ran
+          @total_user_count += @users_count
+          run_status[@permission] = @mb.now.to_s
+        end
       rescue => e
         @mb.report_error("Failed to process #{permission}", e)
+        @errors[@permission] = @errors[@permission].to_a << {
+          group: 'fatal',
+          message: 'Failed for unknown reasons. Check the [[User:MusikBot/PermClerk/Error log|error log]] ' \
+            'and contact the [[User talk:MusikAnimal|bot operator]] if you are unable to resolve the issue.'
+        }
       end
     end
 
@@ -76,11 +86,11 @@ module PermClerk
     if @mb.env == :production && !should_check_prereq_data && last_run > @last_edit && last_run + Rational(90, 1440) > @mb.now
       return info('  Less than 90 minutes since last run without changes, and no prerequisites to update')
     else
-      run_status[@permission] = @mb.now.to_s
+      @flag_as_ran = true
     end
 
     if config['run']['autoformat']
-      debug('Checking for extraneous headers')
+      info('Checking for extraneous headers')
       old_wikitext = remove_headers(old_wikitext)
     end
 
@@ -148,7 +158,6 @@ module PermClerk
 
     @num_open_requests += 1 unless resolution
 
-    binding.pry
     # archiving has precedence; e.g. if we are archiving, we don't do anything else for this section
     return if archiving(resolution, overriden_resolution, resolution_timestamp)
 
@@ -181,7 +190,7 @@ module PermClerk
   # Core tasks
   def self.fetch_declined
     return if !config['run']['fetch_declined'] || @permission == 'Confirmed'
-    debug("  Searching for declined #{@permission} requests by #{@username}...")
+    info("  Searching for declined #{@permission} requests by #{@username}...")
 
     # cache for a day
     links = @mb.cache("mb-#{@username}-#{@permission}-declined", 86_400) do
@@ -210,7 +219,7 @@ module PermClerk
     dates_to_fetch.each do |date|
       key = "#{Date::MONTHNAMES[date.month]} #{date.year}"
       if @denied_cache[key]
-        debug("    Cache hit for #{key}")
+        info("    Cache hit for #{key}")
         page = @denied_cache[key]
       else
         page = @mb.get("Wikipedia:Requests for permissions/Denied/#{key}")
@@ -299,10 +308,10 @@ module PermClerk
 
   def self.prerequisites
     return unless config['run']['prerequisites'] && prereqs.present? && @permission != 'Confirmed' # && !@username.downcase.match(/bot$/)
-    debug("  Checking if #{@username} meets configured prerequisites...")
+    info("  Checking if #{@username} meets configured prerequisites...")
 
     if @mb.redis_client.get("mb-#{@username}-#{@permission}-qualified")
-      return debug('    Cache hit, user meets criteria')
+      return info('    Cache hit, user meets criteria')
     end
 
     updating_prereq = @section.match(/\<!-- mb-\w*(?:Count|Age) --\>/)
@@ -335,7 +344,7 @@ module PermClerk
           @request_changes << { type: :prerequisitesUpdated }
           @edit_summaries << :prerequisitesUpdated
         else
-          debug('      Update not needed')
+          info('      Update not needed')
         end
       elsif !pass
         info("      Found unmet prerequisite: #{key}")
@@ -606,7 +615,8 @@ module PermClerk
       @errors.keys.each do |permissionGroup|
         content += "\n;[[Wikipedia:Requests for permissions/#{permissionGroup}|#{permissionGroup}]]\n"
         @errors[permissionGroup].each do |error|
-          content += "* '''#{error[:group].capitalize}''': #{error[:message]}\n"
+          group = error[:group] == 'fatal' ? 'FATAL' : error[:group].capitalize
+          content += "* '''#{group}''': #{error[:message]}\n"
         end
       end
       content += '}}'
@@ -635,10 +645,10 @@ module PermClerk
       @prereq_signature = prereq_sig_regex.flatten[0]
       @prereq_timestamp = prereq_sig_regex.flatten[1]
       if @mb.now > @mb.parse_date(@prereq_timestamp) + Rational(PREREQ_EXPIRY, 1440)
-        debug('  Found expired prerequisite data')
+        info('  Found expired prerequisite data')
         return true
       else
-        debug("  Prerequisite data under #{PREREQ_EXPIRY} minutes old")
+        info("  Prerequisite data under #{PREREQ_EXPIRY} minutes old")
       end
     end
     false
@@ -654,6 +664,15 @@ module PermClerk
         group: 'formatting',
         message: "Unable to process page! A request heading is not on its own line:\n*:" \
           "<code style='color:red'><nowiki>#{split_key_match[0]}</nowiki></code><code><nowiki>#{SPLIT_KEY}#{split_key_match[1]}</nowiki></code>"
+      }
+      ret = false
+    end
+
+    if old_wikitext.scan(/REVISIONUSER|\{\{subst:/)
+      error('Possible unsubstituted or improperly substituted request')
+      @errors[@permission] = @errors[@permission].to_a << {
+        group: 'formatting',
+        message: 'Possible unsubstituted or improperly substituted request. Bot may be unable to parse the page.'
       }
       ret = false
     end
@@ -836,12 +855,12 @@ module PermClerk
 
     # return cache if there's nothing new to fetch
     if @user_info_cache[username] && data_attrs.all? { |da| @user_info_cache[username].keys.include?(da) }
-      debug("  cache hit for #{username}")
+      info("  cache hit for #{username}")
       return @user_info_cache[username]
     end
 
     data_fetch_str = data_attrs.join(', ')
-    debug("    Fetching data for: #{data_fetch_str.length > 0 ? data_fetch_str : 'basic info'}")
+    info("    Fetching data for: #{data_fetch_str.length > 0 ? data_fetch_str : 'basic info'}")
 
     # get basic info if we haven't already and query the repl database as needed for other info
     unless @user_info_cache[username] && @user_info_cache[username][:editCount]
@@ -929,14 +948,10 @@ module PermClerk
     error(opts[:log_message])
   end
 
-  def self.debug(msg); log("#{@permission.upcase} : #{msg}"); end
   def self.info(msg); log("#{@permission.upcase} : #{msg}"); end
-  def self.warn(msg); log("#{@permission.upcase} : #{msg}", :warn); end
-  def self.error(msg); log("#{@permission.upcase} : #{msg}", :error); end
-  def self.log(message, type = nil)
-    log_type = type ? "#{type.upcase} | " : ''
-    puts(@mb.now.strftime("%e %b %H:%M:%S | #{log_type}#{message}"))
-  end
+  def self.warn(msg); log("#{@permission.upcase} | WARN : #{msg}", :warn); end
+  def self.error(msg); log("#{@permission.upcase} | ERROR : #{msg}", :error); end
+  def self.log(message); puts(@mb.now.strftime("%e %b %H:%M:%S | #{message}")); end
 end
 
 PermClerk.run
