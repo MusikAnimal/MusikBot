@@ -71,8 +71,9 @@ module TAFIWeekly
   def self.create_schedule_page(article)
     page = "Wikipedia:Today's articles for improvement/#{new_schedule_date.year}/#{new_schedule_date.cweek}"
     content = "{{subst:Wikipedia:Today's articles for improvement/Schedule/Preload}}"
-    @mb.edit(page, content: content)
     @mb.edit(page + '/1', content: "[[#{article}]]")
+    @mb.edit(page, content: content)
+    @mb.gateway.purge("Wikipedia:Today's articles for improvement")
     @mb.gateway.purge("Wikipedia:Today's articles for improvement/Schedule")
     @mb.gateway.purge("Wikipedia talk:Today's articles for improvement")
   end
@@ -215,6 +216,11 @@ module TAFIWeekly
       reverts += 1 if revision.attributes['comment'] =~ /Reverted.*?edits?|Undid revision \d+/
     end
 
+    prose_data = @mb.wiki_tools(:article_analysis,
+      page: old_tafi.gsub(/ /, '_'),
+      revision: old_tafi_old_rev_id
+    )
+
     entry = "{{Wikipedia:Today's articles for improvement/Accomplishments/row" \
       "|YYYY = #{last_week.year}" \
       "|WW = #{last_week.cweek}" \
@@ -231,6 +237,8 @@ module TAFIWeekly
       "|reverts = #{reverts}" \
       "|size_before = #{old_tafi_old_rev.attributes['size']}" \
       "|size_after = #{old_tafi_new_rev.attributes['size']}" \
+      "|prose_before = #{prose_data['revision']['characters']}" \
+      "|prose_after = #{prose_data['characters']}" \
       '}}'
 
     update_accomplishments_page(entry)
