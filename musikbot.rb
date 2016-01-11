@@ -3,6 +3,7 @@ require 'i18n'
 require 'mediawiki-gateway'
 require 'auth'
 require 'redis'
+require 'httparty'
 require 'repl'
 require 'uri'
 require 'pry-byebug'
@@ -131,6 +132,13 @@ module MusikBot
       parse_date(date).strftime('%Y%m%d000000')
     end
 
+    # Wiki-tools
+    def wiki_tools(tool, query)
+      @getter ||= HTTParty
+      base_uri = "https://tools.wmflabs.org/musikanimal/api/#{tool}"
+      @getter.get(base_uri, query: query)
+    end
+
     # Database-related
     # FIXME: currently does enwiki-only
     def repl_client
@@ -139,7 +147,7 @@ module MusikBot
       @repl_client = Repl::Session.new(un, pw, host, db, port)
     end
 
-    # Redis-related
+    # Cache-related
     def redis_client
       @redis_client ||= Auth.redis
     end
