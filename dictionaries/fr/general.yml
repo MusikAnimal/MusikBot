@@ -1,0 +1,11 @@
+pt:
+  days: 'Jours'
+  disabled: 'désactivée'
+  enabled: 'permis'
+  new: 'nouveau'
+  'no': 'non'
+  none: 'aucun'
+  plain_link: '[%{url} %{name}]'
+  user: 'Utilisateur'
+  user_link: '[[Utilisateur:%{name}|%{name}]]'
+  'yes': 'oui'

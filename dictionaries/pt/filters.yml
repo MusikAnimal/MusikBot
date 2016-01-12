@@ -13,7 +13,6 @@ pt:
   'failed to write to template': 'Falha ao gravar na predefinição'
   'fatal error': 'Erro fatal'
   'filter': 'Filtro'
-  'enabled filters with no hits in %{num}': 'filtros ativados sem ocorrências em'
   'flags': 'Marcas'
   'last filter author': 'Último editor do filtro'
   'last filter edit': 'Última mudança no filtro'
