@@ -1,4 +1,4 @@
-pt:
+fr:
   edit_summary: 'Informando %{num} filtros de edição obsoletos'
   last_changed: 'Dernière [[ESpécial:Filtre_antiabus/history/%{id}|modification]]'
   summary: '%{num} filtres activés avec pas de résultats dans %{days} jours'
