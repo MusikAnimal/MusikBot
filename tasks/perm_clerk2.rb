@@ -281,6 +281,7 @@ module PermClerk
       actual_reason = @headers_removed[@username]
     else
       @section.gsub!(actual_reason, '')
+
       loop do
         frag_match = @section.match(fragmented_regex)
         if frag_match && frag_match[2] != '' && !(frag_match[2].include?('UTC') && !frag_match[2].include?(@username))
@@ -293,7 +294,13 @@ module PermClerk
       end
     end
 
-    @section.gsub!(fragmented_match.flatten[0], actual_reason.gsub(/^\n+/, '').gsub(/\n+$/, ''))
+    actual_reason = actual_reason.gsub(/^\s*\n+/, '').chomp('')
+
+    if @headers_removed[@username]
+      actual_reason = "#{@headers_removed[@username].strip}: #{actual_reason.strip}"
+    end
+
+    @section.gsub!(fragmented_match.flatten[0], actual_reason)
 
     duplicate_sig = @section.scan(/.*\(UTC\)(.*\(UTC\))/)
     if duplicate_sig.length > 0
@@ -695,6 +702,7 @@ module PermClerk
 
         old_wikitext.sub!(original_markup, rfp_links_part)
         header_text = original_markup.scan(/\=\=\s*([^\=]*)\s*\=\=/)[0][0]
+
         if level_two_text.length > header_text.length
           @headers_removed[name] = level_two_text.gsub(/^\n*/, '').gsub(/\n$/, '')
         else
