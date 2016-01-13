@@ -345,7 +345,7 @@ module PermClerk
 
         if !user_info[key.to_sym].nil? && user_info[key.to_sym].to_i > prereq_count && prereq_count > 0
           @section.gsub!(prereq_text, "<!-- mb-#{key} -->#{user_info[key.to_sym].to_i}<!-- mb-#{key}-end -->")
-          @section.gsub!(prereq_signature, '~~~~')
+          @section.gsub!(@prereq_signature, '~~~~')
 
           info('    Prerequisite data updated')
           @request_changes << { type: :prerequisitesUpdated }
