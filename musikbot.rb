@@ -265,7 +265,6 @@ module MusikBot
         summary: "Reporting #{@task} errors"
       }
       page = "User:MusikBot/#{@task}/Error log"
-      message = "\n*[~~~~~] #{message}"
 
       if e
         STDERR.puts "#{'>' * 20} #{DateTime.now.strftime('%Y-%m-%d %H:%M:%S')}"
@@ -274,8 +273,15 @@ module MusikBot
         message += " &mdash; in {{mono|#{e.backtrace_locations.first.label}}}: ''#{e.message}''"
       end
 
-      content = get(page) + message
-      @gateway.edit(page, content, opts) and return false
+      content = get(page)
+      content.sub!(content.scan(/.*\n/).first, '') if content.length > 10_000
+
+      unless content.split(/\[.*?\] /).last == message
+        message = "\n*[~~~~~] #{message}"
+        @gateway.edit(page, content + message, opts)
+      end
+
+      false
     end
   end
 end
