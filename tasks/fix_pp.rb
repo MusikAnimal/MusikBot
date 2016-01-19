@@ -13,8 +13,6 @@ module FixPP
       page_obj = protect_info(page).first
 
       # don't try endlessly to fix the same page
-      # if @mb.env == :production && cache_touched(page_obj, :get) >= @mb.parse_date(page_obj.attributes['touched'])
-      # FIXME: just going to not reprocess anything within an hour after last processing
       if @mb.env == :production && cache_touched(page_obj, :get)
         STDOUT.puts "cache hit for #{page_obj.attributes['title']}"
       elsif page_obj.elements['revisions'][0].attributes['user'] == 'MusikBot'
@@ -38,36 +36,21 @@ module FixPP
     # skip anything that may appear to automate usage of protection templates
     return if @content =~ /\{\{\s*PROTECTIONLEVEL/
 
-    if protected?(@page_obj)
-      new_pps = repair_pps
-      remove_pps # gets re-added
-
-      if new_pps.present?
-        if @is_template
-          @content = noinclude_pp(new_pps)
-        else
-          @content = new_pps + "\n" + @content
-        end
-      end
-    elsif @mb.config['run']['remove_all_if_expired']
-      # if there's no protection whatsoever, remove all templates, plain and simple
-      @edit_summaries << 'Removing protection templates from unprotected page' if remove_pps
-    end
+    remove_pps_as_necessary
 
     # if nothing changed, cache page title and touched time into redis to prevent redundant processing
     return cache_touched(@page_obj, :set) unless @edit_summaries.present?
 
-    if @mb.env == :test
-      binding.pry
-      puts '=' * 10
-    else
-      @mb.edit(@title,
-        content: @content,
-        conflicts: true,
-        summary: @edit_summaries.uniq.join(', '),
-        minor: true
-      )
+    if !protected?(@page_obj) && @mb.config['run']['remove_all_if_expired']
+      @edit_summaries = ['Removing protection templates from unprotected page']
     end
+
+    @mb.edit(@title,
+      content: @content,
+      conflicts: true,
+      summary: @edit_summaries.uniq.join(', '),
+      minor: true
+    )
   rescue MediaWiki::APIError => e
     if throttle > 3
       @mb.report_error('Edit throttle hit', e)
@@ -76,6 +59,55 @@ module FixPP
     else
       raise e
     end
+  end
+
+  def self.remove_pps_as_necessary
+    pp_hash.keys.each do |old_pp_type|
+      raw_code = @content.scan(/\n?\{\{\s*(?:Template\:)?#{old_pp_type}\s*(?:\|.*?\}\}|\}\})\n?/i).first
+      next unless raw_code.present?
+
+      pp_type = pp_hash[old_pp_type]
+      type = pp_protect_type[pp_type.to_sym]
+      expiry = get_expiry(@page_obj, type)
+
+      # generic pp template is handled differently
+      if pp_type == :pp && type.blank?
+        # try to figure out usage of generic {{pp}}
+        type = raw_code.scan(/\{\{\s*pp\s*(?:\|.*?action\s*\=\s*(.*?)(?:\||\}\}))/i).flatten.first
+
+        # if a type couldn't be parsed, assume it means edit-protection if it's pp-protected
+        if type.blank?
+          if old_pp_type == 'pp-protected' || !protected?(@page_obj)
+            type = 'edit'
+          else
+            # auto generate template task is disabled, just skip and try to repair subsequent ones accordingly
+            next
+          end
+        end
+
+        expiry = get_expiry(@page_obj, type)
+      end
+
+      next unless expiry.nil? || (expiry != 'indefinite' && @mb.parse_date(expiry) < @mb.now)
+
+      # check if there's corresponding protection for the pp template on page
+      # API response could be cached (protect info still there but it's expired)
+      human_type = type == 'flagged' ? 'pending changes' : type
+
+      if @mb.config['run']['remove_individual_if_expired']
+        @edit_summaries << "removing {{#{old_pp_type}}} as page is not #{human_type}-protected"
+        remove_pp(raw_code)
+      end
+    end
+  end
+
+  def self.remove_pp(code)
+    if code =~ /^\n/
+      code.sub!(/^\n/, '')
+    elsif code.count("\n") > 1
+      code.sub!(/\n$/, '')
+    end
+    @content.sub!(code, '')
   end
 
   def self.noinclude_pp(pps)
@@ -287,6 +319,10 @@ module FixPP
 
   # protection types
   def self.pp_hash
+    @pp_hash ||= eval(@mb.local_storage('pp_hash', 'r').read)
+  end
+
+  def self.regenerate_pp_hash
     return @pp_hash if @pp_hash
 
     # cache on disk for one week
@@ -332,7 +368,7 @@ module FixPP
     if action == :set
       # FIXME: consider caching expiries, and check if current time is after them and reprocess page
       @mb.redis_client.set(key, page.attributes['touched'])
-      @mb.redis_client.expire(key, 3600) # 1 hour, was 3 hours = 10_800
+      @mb.redis_client.expire(key, 1800) # 30 minutes, was 3 hours = 10_800
     else
       ret = @mb.redis_client.get(key)
       # ret.nil? ? @mb.now - 9999 : @mb.parse_date(ret)
