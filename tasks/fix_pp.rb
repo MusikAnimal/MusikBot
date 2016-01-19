@@ -14,9 +14,9 @@ module FixPP
 
       # don't try endlessly to fix the same page
       if @mb.env == :production && cache_touched(page_obj, :get)
-        STDOUT.puts "cache hit for #{page_obj.attributes['title']}"
+        log("cache hit for #{page_obj.attributes['title']}")
       elsif page_obj.elements['revisions'][0].attributes['user'] == 'MusikBot'
-        STDOUT.puts 'MusikBot was last to edit page'
+        log('MusikBot was last to edit page')
       else
         process_page(page_obj)
       end
@@ -405,6 +405,10 @@ module FixPP
       titles: title
     ).elements['pages'][0].elements['redirects']
     [title] + (ret ? ret.map { |r| r.attributes['title'] } : [])
+  end
+
+  def self.log(message)
+    puts(@mb.now.strftime("%e %b %H:%M:%S | #{message}"))
   end
 end
 
