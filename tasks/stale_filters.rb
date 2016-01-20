@@ -34,9 +34,9 @@ module StaleFilters
       extended_content += '| ' + [
         "[[#{t('Special:AbuseFilter')}/#{filter['af_id']}|#{filter['af_id']}]]",
         filter['af_public_comments'].force_encoding('utf-8'),
-        t(:plain_link, url: log(filter['af_id']), name: fdate(filter['afl_timestamp'])),
+        "data-sort-value=\"#{@mb.api_date(filter['afl_timestamp'])}\" | " + t(:plain_link, url: log(filter['af_id']), name: fdate(filter['afl_timestamp'])),
         t(:user_link, name: filter['af_user_text'].force_encoding('utf-8')),
-        "[[#{history(filter['af_id'])}|#{fdate(filter['af_timestamp'])}]]",
+        "data-sort-value=\"#{@mb.api_date(filter['af_timestamp'])}\" | [[#{history(filter['af_id'])}|#{fdate(filter['af_timestamp'])}]]",
         filter['af_hidden'] == 1 ? t('yes') : t('no'),
         translate(filter['af_actions'])
       ].join("\n| ") + "\n|-\n"
