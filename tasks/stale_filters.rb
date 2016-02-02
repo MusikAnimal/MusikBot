@@ -5,9 +5,9 @@ module StaleFilters
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    @report_page = 'User:MusikBot/StaleFilters/Report'
-    @total_page = 'User:MusikBot/StaleFilters/Total'
-    @offset_page = 'User:MusikBot/StaleFilters/Offset'
+    @report_page = "#{t('User')}:MusikBot/StaleFilters/Report"
+    @total_page = "#{t('User')}:MusikBot/StaleFilters/Total"
+    @offset_page = "#{t('User')}:MusikBot/StaleFilters/Offset"
 
     generate_report
   rescue => e
