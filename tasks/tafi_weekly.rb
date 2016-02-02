@@ -94,6 +94,7 @@ module TAFIWeekly
     content.sub!(identifier, "#{entry}\n\n#{identifier}")
 
     @mb.edit(page,
+      summary: "Archiving scheduled entry for week #{new_schedule_date.cweek}",
       content: content,
       section: 1
     )
