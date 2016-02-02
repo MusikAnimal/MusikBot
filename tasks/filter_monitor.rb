@@ -180,7 +180,7 @@ module FilterMonitor
     opts = {
       list: 'abusefilters',
       abfprop: 'id|description|actions|pattern|lasteditor|lastedittime|status|private',
-      abflimit: 1000
+      abflimit: @mb.bot? ? 1000 : 500
     }
 
     @current_filters = @mb.gateway.custom_query(opts).elements['abusefilters']
@@ -193,7 +193,6 @@ module FilterMonitor
   # API methods
   def self.fetch_old_templates
     filters = @mb.get(@template_name).split(/^'''/).drop(1).map { |f| "'''#{f.rstrip}" }
-    # FIXME: needs to go off of locale!!!
     filters.keep_if { |f| @mb.parse_date(f.scan(/\<!-- mb-date=(\d\d:\d\d.*?\d{4} \(UTC\)) --\>/).flatten[0]) > @mb.now - @mb.config['offset'] }
   end
 

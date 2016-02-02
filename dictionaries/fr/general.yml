@@ -1,7 +1,7 @@
 fr:
   days: 'Jours'
-  disabled: 'désactivée'
-  enabled: 'permis'
+  disabled: 'désactivé'
+  enabled: 'actif'
   new: 'nouveau'
   'no': 'non'
   none: 'aucun'
