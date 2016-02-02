@@ -1,7 +1,7 @@
 pt:
-  edit_summary: 'Informando %{num} filtros de edição obsoletos'
+  edit_summary: 'Informando %{num} filtro(s) de edição obsoletos'
   last_changed: 'Última [[Especial:Filtro de abusos/history/%{id}|alteração]]'
-  summary: '%{num} filtros de edição ativados sem ocorrências nos últimos %{days} dias'
+  summary: '%{num} {{plural:%{num}|filtro|filtros}} de edição ativados sem ocorrências nos últimos %{days} dias'
   title: 'Filtros de edição obsoletos em %{date}'
   'abuseFilter': 'Filtro de edições'
   'actions': 'Ações'

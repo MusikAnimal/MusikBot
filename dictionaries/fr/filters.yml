@@ -1,7 +1,7 @@
 fr:
-  edit_summary: 'Rapport sur %{num} filtres inactifs'
+  edit_summary: 'Rapport sur %{num} filtre(s) inactifs'
   last_changed: '[[Spécial:Filtre_antiabus/history/%{id}|Dernière modification]]'
-  summary: '%{num} filtres actifs sans détection dans les %{days} jours'
+  summary: '%{num} {{plural:%{num}|filtre|filtres}} actifs sans détection dans les %{days} jours'
   title: 'Filtres inactifs au %{date}'
   'abuseFilter': 'Gestion du filtre anti-erreur'
   'actions': 'Actions'
