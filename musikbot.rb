@@ -79,7 +79,7 @@ module MusikBot
       I18n.locale = @opts[:lang]
 
       @gateway = MediaWiki::Gateway.new("https://#{@opts[:project]}.org/w/api.php",
-        bot: true,
+        bot: bot?,
         retry_count: 5,
         user_agent: "MusikBot/1.1 (https://#{@opts[:project]}.org/wiki/User:MusikBot/)"
       )
@@ -97,6 +97,11 @@ module MusikBot
 
     def lang
       @opts[:lang]
+    end
+
+    def bot?
+      bot_blacklist = ['fr.wikipedia']
+      !bot_blacklist.include?(@opts[:project])
     end
 
     # Utilities
