@@ -142,7 +142,8 @@ module PermClerk
     info("Checking section for User:#{@username}...")
 
     timestamps = @section.scan(/(?<!\<!-- mbdate --\> )\d\d:\d\d.*\d{4} \(UTC\)/)
-    @newest_timestamp = timestamps.min { |a, b| @mb.parse_date(b) <=> @mb.parse_date(a) }
+    @newest_timestamp = @mb.parse_date(timestamps.min { |a, b| @mb.parse_date(b) <=> @mb.parse_date(a) })
+    @request_timestamp = @mb.parse_date(timestamps.min { |a, b| @mb.parse_date(a) <=> @mb.parse_date(b) })
     if overriden_resolution = @section.match(/\{\{User:MusikBot\/override\|d\}\}/i) ? 'done' : @section.match(/\{\{User:MusikBot\/override\|nd\}\}/i) ? 'notdone' : false
       info('  Resolution override found')
     end
@@ -153,7 +154,7 @@ module PermClerk
 
     # use newest timestamp when forcing resolution and no resolution template exists
     if resolution_timestamp.nil? && overriden_resolution
-      resolution_timestamp = @mb.parse_date(@newest_timestamp)
+      resolution_timestamp = @newest_timestamp
     end
 
     @num_open_requests += 1 unless resolution
@@ -179,7 +180,10 @@ module PermClerk
     unless @should_update_prereq_data
       # autoformat first, especially the case for Confirmed where they have a malformed report and are already autoconfirmed
       autoformat
-      return queue_changes if autorespond
+      if autorespond
+        @num_open_requests -= 1
+        return queue_changes
+      end
       fetch_declined
       check_revoked
     end
@@ -243,17 +247,41 @@ module PermClerk
   end
 
   def self.autorespond
-    # FIXME: run for every permission, but compare timestamp of when right was granted with the timestamp of the request
-    # only runs for Confirmed and AWB
-    return false unless config['run']['autorespond'] && %w(Confirmed AutoWikiBrowser).include?(@permission) && api_relevant_permission
+    return false unless config['run']['autorespond'] && api_relevant_permission
     info("    User has permission #{@permission}")
 
+    if sysop? || @permission == 'AutoWikiBrowser'
+      # if sysop, no need to do other checks
+      # for AWB just say "already done" as it's too expensive to figure out when they were added
+      time_granted = @request_timestamp
+    else
+      event = fetch_last_granted
+      time_granted = @mb.parse_date(event.attributes['timestamp'])
+    end
+
+    if time_granted <= @request_timestamp
+      request_change = {
+        type: :autorespond,
+        resolution: '{{already done}}'
+      }
+    elsif @mb.now > time_granted
+      info('      Admin apparently forgot to respond to the request')
+      request_change = {
+        type: :autorespond_admin_forgot,
+        resolution: '{{already done}}',
+        admin: event.attributes['user']
+      }
+    else
+      info('      Admin has not responded to request yet')
+      # return true to skip other checks, as they've already got the right
+      return true
+    end
+
     @request_changes << {
-      type: :autorespond,
       permission: api_relevant_permission,
-      resolution: '{{already done}}',
       sysop: sysop?
-    }
+    }.merge(request_change)
+
     @num_open_requests -= 1
     @edit_summaries << :autorespond
     true
@@ -375,7 +403,7 @@ module PermClerk
     end
 
     # not time to archive
-    unless should_archive_now || @mb.parse_date(@newest_timestamp) + Rational(config['archive_config']['offset'].to_i, 24) < @mb.now
+    unless should_archive_now || @newest_timestamp + Rational(config['archive_config']['offset'].to_i, 24) < @mb.now
       return false
     end
 
@@ -728,6 +756,8 @@ module PermClerk
       'An extraneous header or other inappropriate text was removed from this request'
     when :autorespond
       "#{'is a sysop and' if params[:sysop]} already has #{params[:permission] == 'AutoWikiBrowser' ? 'AutoWikiBrowser access' : "the \"#{params[:permission]}\" user right"}"
+    when :autorespond_admin_forgot
+      "by {{no ping|#{params[:admin]}}}"
     when :checkrevoked
       "has had this permission revoked in the past #{config['checkrevoked_config']['offset']} days (#{params[:revokedLinks]})"
     when :editCount
@@ -770,7 +800,9 @@ module PermClerk
     end
 
     if index = requestData.index { |obj| obj[:type] == :autorespond }
-      str += "\n::#{requestData[index][:resolution]} (automated response): This user "
+      str += "#{COMMENT_INDENT}#{requestData[index][:resolution]} (automated response): This user "
+    elsif index = requestData.index { |obj| obj[:type] == :autorespond_admin_forgot }
+      str += "#{COMMENT_INDENT}#{requestData[index][:resolution]} (automated response) "
     else
       str += COMMENT_INDENT + COMMENT_PREFIX + 'This user '
     end
@@ -890,6 +922,16 @@ module PermClerk
       }
     end
 
+    if data_attrs.include?('rights_log')
+      @user_info_cache[username][:rights_log] = @mb.gateway.custom_query(
+        list: 'logevents',
+        letype: 'rights',
+        letitle: "User:#{username}",
+        leprop: 'user|timestamp|details'
+      ).elements['logevents'].to_a
+      return @user_info_cache[username]
+    end
+
     # don't start any queries gone wild
     unless @user_info_cache[username][:editCount] > 50_000
       data_attrs.each do |dataAttr|
@@ -914,6 +956,19 @@ module PermClerk
     end
 
     @user_info_cache[username]
+  end
+
+  def self.fetch_last_granted
+    logevents = get_user_info(@username, 'rights_log')[:rights_log]
+    normalized_perm = /#{PERMISSION_KEYS[@permission]}/
+
+    # should fetch the latest as the API returns it by date in ascending order
+    logevents.each do |event|
+      in_old = event.elements['params/oldgroups'].collect(&:text).grep(normalized_perm).any?
+      in_new = event.elements['params/newgroups'].collect(&:text).grep(normalized_perm).any?
+
+      return event if !in_old && in_new
+    end
   end
 
   def self.page_props(page)
