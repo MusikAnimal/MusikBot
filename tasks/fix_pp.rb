@@ -7,9 +7,7 @@ module FixPP
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    pages = category_members
-
-    pages.each do |page|
+    category_members.each do |page|
       page_obj = protect_info(page).first
 
       # don't try endlessly to fix the same page
@@ -107,7 +105,11 @@ module FixPP
     elsif code.count("\n") > 1
       code.sub!(/\n$/, '')
     end
-    @content.sub!(code, '')
+    if @content =~ /(?:\<noinclude\>\s*)#{Regexp.escape(code)}(?:\s*\<\/noinclude\>)/
+      @content.sub!(/(?:\<noinclude\>\s*)#{Regexp.escape(code)}(?:\s*\<\/noinclude\>)/, '')
+    else
+      @content.sub!(code, '')
+    end
   end
 
   def self.noinclude_pp(pps)
@@ -126,7 +128,7 @@ module FixPP
 
     # FIXME: check to make sure it's not already in a noinclude and the bot just isn't able to figure out what to fix
     if @content.scan(/\A\<noinclude\>.*?\<\/noinclude\>/).any?
-      @content.sub(/\A\<noinclude\>/, "<noinclude>#{pps}")
+      @content.sub!(/\A\<noinclude\>/, "<noinclude>#{pps}")
     else
       "<noinclude>#{pps}</noinclude>\n" + @content
     end
