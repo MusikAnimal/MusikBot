@@ -14,7 +14,7 @@ module PermClerk
     'Confirmed' => '(?=>auto)?confirmed',
     'File mover' => 'filemover',
     'Mass message sender' => 'massmessage-sender',
-    'Pending changes reviewer' => 'reviewer',
+    'Pending changes reviewer' => '\breviewer',
     'Rollback' => 'rollbacker',
     'Template editor' => 'templateeditor'
   }
@@ -247,7 +247,7 @@ module PermClerk
   end
 
   def self.autorespond
-    return false unless config['run']['autorespond'] && api_relevant_permission
+    return false unless true && api_relevant_permission #config['run']['autorespond'] && api_relevant_permission
     info("    User has permission #{@permission}")
 
     if sysop? || @permission == 'AutoWikiBrowser'
@@ -589,8 +589,8 @@ module PermClerk
     normalized_perm = PERMISSION_KEYS[@permission]
 
     logevents.each do |event|
-      in_old = event.elements['params/oldgroups'].collect(&:text).include?(normalized_perm)
-      in_new = event.elements['params/newgroups'].collect(&:text).include?(normalized_perm)
+      in_old = event.elements['params/oldgroups'].collect(&:text).grep(normalized_perm).any?
+      in_new = event.elements['params/newgroups'].collect(&:text).grep(normalized_perm).any?
       timestamp = event.attributes['timestamp']
 
       next unless in_old && !in_new && @mb.parse_date(timestamp) > @mb.today - @mb.config['checkrevoked_config']['offset']
