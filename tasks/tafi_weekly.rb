@@ -152,7 +152,7 @@ module TAFIWeekly
   end
 
   def self.add_former_tafi(throttle = 0)
-    content = "{{Former TAFI|date=#{last_week.strftime('%e %B %Y')}|page=#{old_tafi}|oldid2=#{old_tafi_new_rev_id}"
+    content = "{{Former TAFI|date=#{last_week.strftime('%e %B %Y')}|page={{PAGENAME}}|oldid2=#{old_tafi_new_rev_id}"
     content += "|oldid1=#{old_tafi_old_rev_id}"
 
     if old_tafi_old_class != old_tafi_new_class && old_tafi_old_class.present? && old_tafi_new_class.present?
@@ -180,7 +180,8 @@ module TAFIWeekly
   def self.message_project_members
     spamlist = "Wikipedia:Today's articles for improvement/Members/Notifications"
     subject = "This week's [[Wikipedia:Today's articles for improvement|article for improvement]] (week #{@mb.today.cweek}, #{@mb.today.year})"
-    sig = "<span style=\"font-family:sans-serif\"><b>[[User:MusikBot|<span style=\"color:black; font-style:italic\">MusikBot</span>]] <sup>[[User talk:MusikAnimal|<span style=\"color:green\">talk</span>]]</sup></b></span>"
+    sig = "<span style=\"font-family:sans-serif\"><b>[[User:MusikBot|<span style=\"color:black; font-style:italic\">MusikBot</span>]] " \
+      "<sup>[[User talk:MusikAnimal|<span style=\"color:green\">talk</span>]]</sup></b></span>"
     message = "{{subst:TAFI weekly selection notice|1=#{sig} ~~~~~ using ~~~ on behalf of WikiProject TAFI}}"
     @mb.gateway.mass_message(spamlist, subject, message)
   end
@@ -320,11 +321,13 @@ module TAFIWeekly
   def self.old_tafi
     return @old_tafi if @old_tafi
     old_tafi_page_name = "Wikipedia:Today's articles for improvement/#{last_week.year}/#{last_week.cweek}/1"
-    @old_tafi = @mb.get(old_tafi_page_name).scan(/\[\[(.*)\]\]/).flatten[0]
+    @old_tafi = resolve_redirect(@mb.get(old_tafi_page_name).scan(/\[\[(.*)\]\]/).flatten[0])
   end
 
   def self.new_tafi
-    @new_tafi ||= @mb.get("Wikipedia:Today's articles for improvement/#{@mb.today.year}/#{@mb.today.cweek}/1").scan(/\[\[(.*)\]\]/).flatten[0]
+    @new_tafi ||= resolve_redirect(
+      @mb.get("Wikipedia:Today's articles for improvement/#{@mb.today.year}/#{@mb.today.cweek}/1").scan(/\[\[(.*)\]\]/).flatten[0]
+    )
   end
 
   def self.new_schedule_date
@@ -341,6 +344,10 @@ module TAFIWeekly
 
   def self.last_week
     @mb.today - 7
+  end
+
+  def self.resolve_redirect(page)
+    @mb.gateway.custom_query(titles: page, prop: 'info', redirects: 1).elements['pages'][0].attributes['title']
   end
 
   # API-related
