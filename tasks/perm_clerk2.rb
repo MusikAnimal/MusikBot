@@ -247,7 +247,7 @@ module PermClerk
   end
 
   def self.autorespond
-    return false unless true && api_relevant_permission #config['run']['autorespond'] && api_relevant_permission
+    return false unless config['run']['autorespond'] && api_relevant_permission
     info("    User has permission #{@permission}")
 
     if sysop? || @permission == 'AutoWikiBrowser'
@@ -264,7 +264,7 @@ module PermClerk
         type: :autorespond,
         resolution: '{{already done}}'
       }
-    elsif @mb.now > time_granted
+    elsif @mb.now > time_granted + Rational(config['autorespond_config']['offset'].to_i, 24)
       info('      Admin apparently forgot to respond to the request')
       request_change = {
         type: :autorespond_admin_forgot,
