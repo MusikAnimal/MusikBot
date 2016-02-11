@@ -83,7 +83,11 @@ module MusikBot
         retry_count: 5,
         user_agent: "MusikBot/1.1 (https://#{@opts[:project]}.org/wiki/User:MusikBot/)"
       )
-      Auth.login(@gateway)
+      begin
+        Auth.login(@gateway)
+      rescue => e
+        raise unless e.message =~ /action\=login/
+      end
 
       unless @task == 'Console' || @opts[:prodonly] || @env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
         report_error("#{@task} disabled")
