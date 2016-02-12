@@ -81,13 +81,10 @@ module MusikBot
       @gateway = MediaWiki::Gateway.new("https://#{@opts[:project]}.org/w/api.php",
         bot: bot?,
         retry_count: 5,
-        user_agent: "MusikBot/1.1 (https://#{@opts[:project]}.org/wiki/User:MusikBot/)"
+        user_agent: "MusikBot/1.1 (https://#{@opts[:project]}.org/wiki/User:MusikBot/)",
+        ignorewarnings: true
       )
-      begin
-        Auth.login(@gateway)
-      rescue => e
-        raise unless e.message =~ /action\=login/
-      end
+      Auth.login(@gateway)
 
       unless @task == 'Console' || @opts[:prodonly] || @env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
         report_error("#{@task} disabled")
