@@ -114,9 +114,26 @@ module MusikBot
       now.to_date
     end
 
+    def delocalize_wiki_date(str)
+      if lang == :en
+        str
+      else
+        str.scan(/#{I18n.t('time.formats.wiki_time_regex', lang)}/).flatten.join
+      end
+    end
+
     def parse_date(obj, convert = false)
       if obj.is_a?(String)
-        DateTime.parse(obj).new_offset(0)
+        begin
+          DateTime.parse(obj).new_offset(0)
+        rescue => e
+          # try as if i18n wiki date
+          if e.message == 'invalid date'
+            DateTime.parse(delocalize_wiki_date(obj))
+          else
+            raise e
+          end
+        end
       elsif obj.is_a?(DateTime)
         obj.new_offset(0)
       elsif convert
