@@ -11,7 +11,7 @@ module FixPP
       page_obj = protect_info(page).first
 
       # don't try endlessly to fix the same page
-      if @mb.env == :production && cache_touched(page_obj, :get)
+      if false #@mb.env == :production && cache_touched(page_obj, :get)
         log("cache hit for #{page_obj.attributes['title']}")
       elsif page_obj.elements['revisions'][0].attributes['user'] == 'MusikBot'
         log('MusikBot was last to edit page')
