@@ -120,5 +120,5 @@ pt:
       long: "%A, %d de %B de %Y, %H:%Mh"
       reporting: "%Y-%m-%d %Hh%Mmin"
       short: "%d/%m, %H:%M hs"
-      wiki_time: "%Hh:%Mmin de %-d de %B de %Y (UTC)"
+      wiki_time: "%Hh%Mmin de %-d de %B de %Y (UTC)"
     pm: pm
