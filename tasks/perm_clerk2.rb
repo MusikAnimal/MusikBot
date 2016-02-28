@@ -609,7 +609,7 @@ module PermClerk
     ) rescue nil
 
     if old_awb_content && old_awb_content =~ /\n\*\s*#{@username}\s*\n/ && !(awb_checkpage_content =~ /\n\*\s*#{@username}\s*\n/)
-      return ["#{@mb.gateway.wiki_url.chomp('/api.php')}index.php?title=#{AWB_CHECKPAGE}&action=history"]
+      return ["#{@mb.gateway.wiki_url.chomp('api.php')}index.php?title=#{AWB_CHECKPAGE}&action=history"]
     else
       return []
     end
