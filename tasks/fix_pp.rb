@@ -75,7 +75,7 @@ module FixPP
 
         # if a type couldn't be parsed, assume it means edit-protection if it's pp-protected
         if type.blank?
-          if old_pp_type == 'pp-protected' || !protected?(@page_obj)
+          if old_pp_type == 'pp-protected' || !protected?(@page_obj) || protection_by_type(@page_obj, 'edit').nil?
             type = 'edit'
           else
             # auto generate template task is disabled, just skip and try to repair subsequent ones accordingly
