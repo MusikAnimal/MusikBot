@@ -11,7 +11,8 @@ module PermClerk
   PERMISSION_KEYS = {
     'Account creator' => 'accountcreator',
     'Autopatrolled' => 'autoreviewer',
-    'Confirmed' => '(?=>auto)?confirmed',
+    'Confirmed' => '\b(?=>auto)?confirmed',
+    'Extended confirmed' => 'extendedconfirmed',
     'File mover' => 'filemover',
     'Mass message sender' => 'massmessage-sender',
     'Pending changes reviewer' => '\breviewer',
@@ -854,20 +855,6 @@ module PermClerk
   # Config-related
   def self.run_status
     @run_status ||= eval(@mb.local_storage('lastrun', 'r').read) rescue {}
-  end
-
-  def self.permissions
-    {
-      'Account creator' => 'accountcreator',
-      'Autopatrolled' => 'autoreviewer',
-      'AutoWikiBrowser' => 'awb',
-      'Confirmed' => '(?=>auto)?confirmed',
-      'File mover' => 'filemover',
-      'Mass message sender' => 'massmessage-sender',
-      'Pending changes reviewer' => 'reviewer',
-      'Rollback' => 'rollbacker',
-      'Template editor' => 'templateeditor'
-    }
   end
 
   def self.prereqs
