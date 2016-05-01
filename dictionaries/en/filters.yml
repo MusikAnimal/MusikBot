@@ -1,5 +1,6 @@
 en:
   edit_summary: 'Reporting %{num} stale filter(s)'
   last_changed: 'Last [[Special:AbuseFilter/history/%{id}|changed]]'
+  purging: "Purging will force the bot to update the report on it's next run. Otherwise the report is only updated if there is a change in the data."
   summary: '%{num} enabled {{plural:%{num}|filter|filters}} with no hits in %{days} days'
   title: 'Stale filters as of %{date}'

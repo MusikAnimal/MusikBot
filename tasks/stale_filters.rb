@@ -5,17 +5,40 @@ module StaleFilters
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
+    run_status = eval(@mb.local_storage('StaleFilters_lastrun', 'r').read)
+    local_status = run_status[@mb.lang]
+
     @report_page = "#{t('User')}:MusikBot/StaleFilters/Report"
     @total_page = "#{t('User')}:MusikBot/StaleFilters/Total"
     @offset_page = "#{t('User')}:MusikBot/StaleFilters/Offset"
 
+    new_hash = Digest::MD5.hexdigest(stale_filters.join)
+
+    touched = @mb.parse_date(@mb.gateway.custom_query(
+      titles: @report_page,
+      prop: 'info'
+    ).elements['pages'][0].attributes['touched'])
+
+    # abort unless we have new data to report or the page was touched
+    return unless new_hash != local_status[:hash] || touched > @mb.parse_date(local_status[:time])
+
     generate_report
+
+    run_status[@mb.lang] = {
+      hash: new_hash,
+      time: @mb.now.to_s
+    }
+
+    run_file = @mb.local_storage('StaleFilters_lastrun', 'r+')
+    run_file.write(run_status.inspect)
+    run_file.close
   rescue => e
     @mb.report_error('Fatal error', e)
   end
 
   def self.generate_report
-    extended_content = "<div style='font-size:24px'>#{t(:title, date: I18n.l(@mb.today, format: :heading))}</div>\n" +
+    extended_content = "<div style='font-size:24px'>#{t(:title, date: I18n.l(@mb.today, format: :heading))} <sup>(#{t(:purge_link)})</sup></div>\n\n" \
+      "<small>#{t(:purging)}</small>\n\n" +
       t(:summary, num: stale_filters.length, days: offset) +
       "\n\n{| class='wikitable sortable'\n! " +
       [
@@ -58,7 +81,6 @@ module StaleFilters
     )
   end
 
-  # FIXME: use https://github.com/michaelfairley/method_decorators !!!!
   def self.stale_filters
     return @stale_filters if @stale_filters
 

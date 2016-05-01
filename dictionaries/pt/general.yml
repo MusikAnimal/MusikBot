@@ -6,6 +6,7 @@ pt:
   'no': 'não'
   none: 'nenhuma'
   plain_link: '{{subst:plnk|url=%{url}|título=%{name}}}'
+  purge_link: '{{purgar|purgar}}'
   user: 'Usuário(a)'
   user_link: '[[Usuário(a):%{name}|%{name}]]'
   'yes': 'sim'
