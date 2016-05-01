@@ -57,7 +57,7 @@ module FilterMonitor
 
       changes['filter_id'] = current_filter['id']
       changes['lasteditor'] = current_filter['lasteditor']
-      changes['lastedittime'] = @mb.wiki_date(current_filter['lastedittime'])
+      changes['lastedittime'] = current_filter['lastedittime']
 
       if saved_filter.present?
         query("UPDATE filters SET #{update_sql.chomp(', ')} WHERE filter_id = #{id};")
@@ -119,7 +119,7 @@ module FilterMonitor
 
     return unless @mb.config['lasteditor'] || @mb.config['lastedittime']
 
-    content += "\n:<!-- mb-date=#{data['lastedittime']} -->#{t(:last_changed, id: data['filter_id'])}"
+    content += "\n:<!-- mb-date=#{@mb.wiki_date(data['lastedittime'], :en)} -->#{t(:last_changed, id: data['filter_id'])}"
     content += " #{t('by')} {{no ping|#{data['lasteditor']}}}" if @mb.config['lasteditor']
     content += " #{t('at')} #{@mb.wiki_date(data['lastedittime'])}" if @mb.config['lastedittime']
   end
@@ -141,7 +141,7 @@ module FilterMonitor
   def self.keyword_from_value(prop, value)
     case prop
     when 'actions'
-      value.blank? ? '(none)' : value
+      value.blank? ? 'none' : value
     when 'pattern'
       value
     when 'description'
@@ -158,7 +158,7 @@ module FilterMonitor
   def self.value_from_keyword(prop, value)
     case prop
     when 'actions'
-      value == '(none)' ? '' : value
+      value == 'none' ? '' : value
     when 'description'
       value
     when 'enabled'

@@ -75,7 +75,7 @@ module MusikBot
       @opts[:lang] = @env == :test ? :en : @opts[:project].scan(/^\w\w/).first.to_sym
       I18n.load_path = Dir["#{PROJECT_ROOT}/dictionaries/*/*.yml"]
       I18n.backend.load_translations
-      I18n.config.available_locales = @opts[:lang]
+      I18n.config.available_locales = [:en, :fr, :pt]
       I18n.locale = @opts[:lang]
 
       @gateway = MediaWiki::Gateway.new("https://#{@opts[:project]}.org/w/api.php",
@@ -143,8 +143,11 @@ module MusikBot
       end
     end
 
-    def wiki_date(date)
-      I18n.l(parse_date(date, true), format: :wiki_time)
+    def wiki_date(date, locale = @opts[:lang])
+      I18n.l(parse_date(date, true),
+        format: :wiki_time,
+        locale: locale
+      )
     end
 
     def api_date(date)
