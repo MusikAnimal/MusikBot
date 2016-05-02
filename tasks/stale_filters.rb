@@ -37,8 +37,8 @@ module StaleFilters
   end
 
   def self.generate_report
-    extended_content = "<div style='font-size:24px'>#{t(:title, date: I18n.l(@mb.today, format: :heading))} <sup>(#{t(:purge_link)})</sup></div>\n\n" \
-      "<small>#{t(:purging)}</small>\n\n" +
+    extended_content = "<div style='font-size:24px'>#{t(:title, date: I18n.l(@mb.today, format: :heading))} <sup>(#{I18n.t(:purge_link)})</sup></div>\n\n" \
+      "<small>#{I18n.t(:purging)}</small>\n\n" +
       t(:summary, num: stale_filters.length, days: offset) +
       "\n\n{| class='wikitable sortable'\n! " +
       [
