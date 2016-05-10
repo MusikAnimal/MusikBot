@@ -238,7 +238,7 @@ module PermClerk
         day_number = declineDay.scan(/^(\d+)\s*==/).flatten[0].to_i
         next if day_number == 0
         decline_day_date = @mb.parse_date("#{date.year}-#{date.month}-#{day_number}")
-        if decline_day_date >= target_date && match = declineDay.scan(/\{\{Usercheck.*\|#{@username.gsub('_', ' ')}}}.*#{@permission}\]\].*(https?:\/\/.*)\s+link\]/i)[0]
+        if decline_day_date >= target_date && match = declineDay.scan(/\{\{Usercheck.*\|#{Regexp.escape(@username).gsub('_', ' ')}}}.*#{@permission}\]\].*(https?:\/\/.*)\s+link\]/i)[0]
           links << match.flatten[0]
         end
       end
@@ -415,11 +415,11 @@ module PermClerk
     end
 
     # if we're archiving as done, check if they have the said permission and act accordingly (skip if overriding resolution)
-    if resolution == 'done' && !overriden_resolution
+    if resolution == 'done' && !overriden_resolution && !api_relevant_permission
       if @section.include?('><!-- mbNoPerm -->')
         warn("    MusikBot already reported that #{@username} does not have the permission #{@permission}")
-        @new_wikitext << SPLIT_KEY + @section and return false
-      elsif !api_relevant_permission
+        @new_wikitext << SPLIT_KEY + @section and return true
+      else
         @request_changes << {
           type: :noSaidPermission,
           permission: @permission.downcase
@@ -609,7 +609,7 @@ module PermClerk
       @mb.today - @mb.config['checkrevoked_config']['offset']
     ) rescue nil
 
-    if old_awb_content && old_awb_content =~ /\n\*\s*#{@username}\s*\n/ && !(awb_checkpage_content =~ /\n\*\s*#{@username}\s*\n/)
+    if old_awb_content && old_awb_content =~ /\n\*\s*#{Regexp.escape(@username)}\s*\n/ && !(awb_checkpage_content =~ /\n\*\s*#{Regexp.escape(@username)}\s*\n/)
       return ["#{@mb.gateway.wiki_url.chomp('api.php')}index.php?title=#{AWB_CHECKPAGE}&action=history"]
     else
       return []
@@ -867,7 +867,7 @@ module PermClerk
     return @permission if sysop?
 
     if @permission == 'AutoWikiBrowser'
-      awb_checkpage_content =~ /\n\*\s*#{@username}\s*\n/ ? 'AutoWikiBrowser' : nil
+      awb_checkpage_content =~ /\n\*\s*#{Regexp.escape(@username)}\s*\n/ ? 'AutoWikiBrowser' : nil
     else
       get_user_info(@username)[:userGroups].grep(/#{PERMISSION_KEYS[@permission]}/).first
     end
