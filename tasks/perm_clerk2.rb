@@ -15,6 +15,7 @@ module PermClerk
     'Extended confirmed' => 'extendedconfirmed',
     'File mover' => 'filemover',
     'Mass message sender' => 'massmessage-sender',
+    'Page mover' => 'extendedmover',
     'Pending changes reviewer' => '\breviewer',
     'Rollback' => 'rollbacker',
     'Template editor' => 'templateeditor'
