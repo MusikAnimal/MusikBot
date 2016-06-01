@@ -22,9 +22,12 @@ GEM
     json (1.8.3)
     method_source (0.8.2)
     mime-types (2.99)
+    mini_portile (0.5.1)
     multi_xml (0.5.5)
     mysql2 (0.4.2)
     netrc (0.11.0)
+    nokogiri (1.6.0)
+      mini_portile (~> 0.5.0)
     pry (0.10.3)
       coderay (~> 1.1.0)
       method_source (~> 0.8.1)
@@ -51,9 +54,7 @@ DEPENDENCIES
   i18n
   mediawiki-gateway!
   mysql2
+  nokogiri
   pry-byebug
   redis
   unicode
-
-BUNDLED WITH
-   1.10.6

@@ -1,5 +1,6 @@
 $LOAD_PATH << '..'
 require 'musikbot'
+require 'nokogiri'
 
 module TAFIWeekly
   def self.run
@@ -191,7 +192,7 @@ module TAFIWeekly
       rvsection: 0,
       rvparse: true
     )
-    wikiprojects = talk_text.scan(%r{\"\/wiki\/Wikipedia:(WikiProject_.*?)(?:#|\/|\")}).flatten.uniq - wikiproject_exclusions
+    wikiprojects = Nokogiri::HTML(talk_text).css('.mbox-text b a').collect(&:content).select{ |text| text =~ /^WikiProject/ }
     content = '{{subst:TAFI project notice|no_heading=yes}}'
     wikiprojects.each do |wikiproject|
       @mb.edit("Wikipedia talk:#{wikiproject}",
