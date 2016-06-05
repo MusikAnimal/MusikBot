@@ -302,7 +302,8 @@ module MusikBot
       content = get(page)
       content.sub!(content.scan(/.*\n/).first, '') if content.length > 10_000
 
-      unless content.split(/\[.*?\] /).last == message
+      last_timestamp, last_message = content.split(/\[(.*?)\] /).last(2)
+      if last_message != message || parse_date(last_timestamp) < today - 1
         message = "\n*[~~~~~] #{message}"
         @gateway.edit(page, content + message, opts)
       end

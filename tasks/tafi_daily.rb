@@ -79,6 +79,8 @@ module TAFIDaily
 
       timestamps = section.scan(/(?<!&lt;!-- mbdate --&gt; )\d\d:\d\d.*\d{4} \(UTC\)/)
       newest_timestamp = @mb.parse_date(timestamps.min { |a, b| @mb.parse_date(b) <=> @mb.parse_date(a) })
+      next unless newest_timestamp
+
       should_archive = newest_timestamp + Rational(@mb.config['config']['archive_offset'], 24) < @mb.now
 
       if newest_timestamp < @mb.today - @mb.config['config']['auto_unapprove_offset']
