@@ -32,8 +32,8 @@ module StaleDrafts
         revisions = revisions >= 50 ? '50+' : revisions
         hist_link = "{{ plainlink | url={{fullurl:Draft:#{page['page_title']}|action=history}} | name=#{revisions} }}"
 
-        content += "| [[Draft:#{title}]] \n| #{page['page_len']}\n| #{hist_link}\n| #{date}\n" \
-          "| [[Special:Whatlinkshere/Draft:#{page['page_title']}|#{links}]]\n| #{templated}\n| [[#{title}]]\n|-\n"
+        content += "| [[:Draft:#{title}]] \n| #{page['page_len']}\n| #{hist_link}\n| #{date}\n" \
+          "| [[Special:Whatlinkshere/Draft:#{page['page_title']}|#{links}]]\n| #{templated}\n| [[:#{title}]]\n|-\n"
       rescue => e
         puts "Error checking page #{page}: #{e.message}"
       end
@@ -79,7 +79,7 @@ module StaleDrafts
 
       puts title if @env == :test
 
-      inner_content += "| [[Draft:#{title}]] (#{hist_link}) | [[Special:Whatlinkshere/Draft:#{page['page_title']}|#{links}]])\n| #{date}\n|-\n"
+      inner_content += "| [[:Draft:#{title}]] (#{hist_link}) | [[Special:Whatlinkshere/Draft:#{page['page_title']}|#{links}]])\n| #{date}\n|-\n"
     end
 
     content = "== Redirects ==\n#{pages.length} redirects with 0 backlinks since #{@mb.wiki_date(end_date)}\n\n" \
