@@ -86,7 +86,7 @@ module MusikBot
       )
       Auth.login(@gateway)
 
-      unless @task == 'Console' || @opts[:prodonly] || @env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
+      unless @task =~ /Console|SoundSearch/ || @opts[:prodonly] || @env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
         report_error("#{@task} disabled")
         exit 1
       end

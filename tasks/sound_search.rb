@@ -1,45 +1,46 @@
 $LOAD_PATH << '..'
-
-require 'mediawiki-gateway'
-require 'auth.rb'
-require 'httparty'
+require 'musikbot'
 require 'logger'
-require 'pry'
-
-MediaWiki::Gateway.default_user_agent = 'MusikBot/1.1 (https://en.wikipedia.org/wiki/User:MusikBot/)'
 
 module SoundSearch
-  @enwiki_mw = MediaWiki::Gateway.new('https://en.wikipedia.org/w/api.php', bot: true)
-  Auth.login(@enwiki_mw)
 
   def self.run
+    @mb = MusikBot::Session.new(inspect)
+
     # first get list of all sound file in list pages
-    sound_list_pages = [
-      'A',
-      'Ba',
-      'Bb–Bz',
-      'C',
-      'D–G',
-      'H',
-      'I–L',
-      'M',
-      'N–Q',
-      'R',
-      'S',
-      'T–Z'
-    ].collect { |p| 'Wikipedia:Sound/list/' + p }
+    # sound_list_pages = [
+    #   'A',
+    #   'Baa–Bac',
+    #   'Bac–Baz',
+    #   'Bba–Bee',
+    #   'Bef–Bzz',
+    #   'C',
+    #   'D–E',
+    #   'F-G',
+    #   'H',
+    #   'I–L',
+    #   'M',
+    #   'N–Q',
+    #   'R',
+    #   'S',
+    #   'T–Z'
+    # ].collect { |p| 'Wikipedia:Sound/list/' + p }
 
     sound_list = []
 
+    sound_list_pages = HTTParty.get('https://en.wikipedia.org/w/api.php?action=opensearch&search=Wikipedia:Sound/list/&profile=strict&limit=100')[1]
+
     sound_list_pages.each do |sound_list_page|
-      sound_list_source = @enwiki_mw.get(sound_list_page)
-      sound_list += sound_list_source.scan(/\[\[media:\s*(.*?.(?:ogg|flac|midi))/i).flatten
+      sound_list_source = @mb.get(sound_list_page)
+      sound_list += sound_list_source.scan(/(?:(?:media|File)\s*:|filename\s*=)\s*(.*?\.(?:ogg|flac|midi?))/i).flatten.uniq
     end
+
+    binding.pry
 
     search_endpoint = 'http://localhost:9292/musikanimal/api/sound_search'
 
     composer_list_page = 'List of composers by name'
-    composer_list_source = @enwiki_mw.get(composer_list_page)
+    composer_list_source = @mb.get(composer_list_page)
     composer_files = {}
 
     composer_list_source.split(/==\w+==/).drop(1).each_with_index do |composerSet, index| # /
@@ -120,16 +121,15 @@ module SoundSearch
 
     sleep(throttle * 5)
 
-    opts = {
-      contentformat: 'text/x-wiki',
-      section: section,
-      summary: "Listing unused files for #{composer_string}",
-      text: content
-    }
-
     begin
-      @enwiki_mw.edit('User:MusikBot/SoundSearch/List2', CGI.unescapeHTML(content), opts)
-    rescue MediaWiki::APIError
+      @mb.edit('User:MusikBot/SoundSearch/List',
+        content: CGI.unescapeHTML(content),
+        section: section,
+        summary: "Listing unused files for #{composer_string}",
+        text: content
+      )
+    rescue MediaWiki::APIError => e
+      binding.pry
       return write_to_list(content, section, composer_string, throttle + 1)
     end
 
