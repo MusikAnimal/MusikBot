@@ -11,7 +11,7 @@ module PermClerk
   PERMISSION_KEYS = {
     'Account creator' => 'accountcreator',
     'Autopatrolled' => 'autoreviewer',
-    'Confirmed' => '\b(?=>auto)?confirmed',
+    'Confirmed' => '\b(?:auto)?confirmed',
     'Extended confirmed' => 'extendedconfirmed',
     'File mover' => 'filemover',
     'Mass message sender' => 'massmessage-sender',
