@@ -36,7 +36,7 @@ module TAFIWeekly
       conflicts: true
     )
 
-    return @mb.get(page).scan(/icon\|\w+}} \[\[(.*?)\]\].*?mbdate.*?#{@mb.today.day} #{@mb.today.strftime('%B')}/).flatten.last
+    return @mb.get(page).scan(/icon\|(?:\w+|\?)}} \[\[(.*?)\]\].*?mbdate.*?#{@mb.today.day} #{@mb.today.strftime('%B')}/).flatten.last
   rescue MediaWiki::APIError => e
     if throttle > 3
       @mb.report_error('Edit throttle hit', e)
