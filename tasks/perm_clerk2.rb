@@ -256,6 +256,9 @@ module PermClerk
       # if sysop, no need to do other checks
       # for AWB just say "already done" as it's too expensive to figure out when they were added
       time_granted = @request_timestamp
+    elsif api_relevant_permission == 'autoconfirmed'
+      # make time_granted earlier than request_timestamp to force marking as done
+      time_granted = @request_timestamp - 1
     else
       event = fetch_last_granted
       time_granted = @mb.parse_date(event.attributes['timestamp'])
