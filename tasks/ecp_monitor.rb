@@ -41,8 +41,7 @@ module ECPMonitor
   end
 
   def self.generate_report(pages)
-    protect_pages_link = 'https://en.wikipedia.org/w/index.php?title=Special:ProtectedPages' \
-      '&namespace=&type=edit&level=extendedconfirmed'
+    protect_pages_link = 'https://en.wikipedia.org/w/index.php?title=Special:ProtectedPages&type=edit&level=extendedconfirmed'
 
     markup = "{| class='wikitable sortable'" \
       "\n!colspan='4' | Pages recently put under [[WP:30/500|extended confirmed protection]] " \
