@@ -1,0 +1,9 @@
+Metrics/LineLength:
+  Max: 120
+
+Metrics/MethodLength:
+  CountComments: false
+  Max: 50
+
+Documentation:
+  Enabled: false
