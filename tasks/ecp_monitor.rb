@@ -43,9 +43,11 @@ module ECPMonitor
   def self.generate_report(pages)
     protect_pages_link = 'https://en.wikipedia.org/w/index.php?title=Special:ProtectedPages&type=edit&level=extendedconfirmed'
 
-    markup = "{| class='wikitable sortable'" \
+    markup = "{| class='wikitable sortable' style='position:relative'" \
       "\n!colspan='4' | Pages recently put under [[WP:30/500|extended confirmed protection]] " \
-        "(#{pages.length} out of [#{protect_pages_link} #{ecp_total} total])" \
+        "(#{pages.length} out of [#{protect_pages_link} #{ecp_total} total]) <sup>({{purge}})</sup>" \
+        "<div style='position:absolute; left:5px; top:3px; font-size:9px'>{{plainlink|url=//en.wikipedia.org/w/" \
+        'index.php?title=User:MusikBot/ECPMonitor/Report&action=watch|name=WATCH}}</div>' \
       "\n|-" \
       "\n!Page" \
       "\n!Expiry" \
@@ -56,7 +58,7 @@ module ECPMonitor
       markup += "\n|-" \
         "\n|[[#{page['log_title'].tr('_', ' ')}]]" \
         "\n|#{@mb.wiki_date(page['log_timestamp'])}" \
-        "\n|#{page['log_comment']}" \
+        "\n|style='max-width:400px' |#{page['log_comment']}" \
         "\n|{{noping|#{page['log_user_text']}}}"
     end
 
