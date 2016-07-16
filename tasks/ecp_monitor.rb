@@ -62,7 +62,8 @@ module ECPMonitor
 
     markup += "\n|}"
 
-    summary = 'Reporting recent extended confirmed page protections'
+    summary = "Reporting #{pages.length} pages recently put under [[WP:30/500|extended confirmed protection]] " \
+      "(#{ecp_total} total pages)"
     opts = {
       summary: summary,
       content: markup,
