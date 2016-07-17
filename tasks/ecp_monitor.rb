@@ -57,7 +57,7 @@ module ECPMonitor
     pages.each do |page|
       markup += "\n|-" \
         "\n|[[#{page['log_title'].tr('_', ' ')}]]" \
-        "\n|#{@mb.wiki_date(page['log_timestamp'])}" \
+        "\n|#{parse_date(page['pr_expiry'])}" \
         "\n|style='max-width:400px' |#{page['log_comment']}" \
         "\n|{{noping|#{page['log_user_text']}}}"
     end
@@ -76,6 +76,10 @@ module ECPMonitor
       summary: summary,
       content: ecp_total
     )
+  end
+
+  def self.parse_date(date)
+    date == 'infinity' ? 'indefinite' : @mb.wiki_date(date)
   end
 
   def self.offset
