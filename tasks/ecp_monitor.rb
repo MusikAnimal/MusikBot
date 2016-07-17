@@ -44,12 +44,13 @@ module ECPMonitor
     protect_pages_link = 'https://en.wikipedia.org/w/index.php?title=Special:ProtectedPages&type=edit&level=extendedconfirmed'
 
     markup = "{| class='wikitable sortable' style='position:relative'" \
-      "\n!colspan='4' | Pages recently put under [[WP:30/500|extended confirmed protection]] " \
+      "\n!colspan='5' | Pages recently put under [[WP:30/500|extended confirmed protection]] " \
         "(#{pages.length} out of [#{protect_pages_link} #{ecp_total} total]) <sup>({{purge}})</sup>" \
         "<div style='position:absolute; left:5px; top:3px; font-size:9px'>{{plainlink|url=//en.wikipedia.org/w/" \
         'index.php?title=User:MusikBot/ECPMonitor/Report&action=watch|name=WATCH}}</div>' \
       "\n|-" \
       "\n!Page" \
+      "\n!Protected" \
       "\n!Expiry" \
       "\n!Summary" \
       "\n!Admin"
@@ -57,7 +58,8 @@ module ECPMonitor
     pages.each do |page|
       markup += "\n|-" \
         "\n|[[#{page['log_title'].tr('_', ' ')}]]" \
-        "\n|#{parse_date(page['pr_expiry'])}" \
+        "\n|style='white-space:nowrap' |#{parse_date(page['log_timestamp'])}" \
+        "\n|style='white-space:nowrap' |#{parse_date(page['pr_expiry'])}" \
         "\n|style='max-width:400px' |#{page['log_comment']}" \
         "\n|{{noping|#{page['log_user_text']}}}"
     end
@@ -79,7 +81,7 @@ module ECPMonitor
   end
 
   def self.parse_date(date)
-    date == 'infinity' ? 'indefinite' : @mb.wiki_date(date)
+    date == 'infinity' ? 'indefinite' : @mb.parse_date(date).strftime('%Y-%m-%d %H:%M')
   end
 
   def self.offset
