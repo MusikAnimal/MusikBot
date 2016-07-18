@@ -2,13 +2,15 @@ $LOAD_PATH << '..'
 require 'musikbot'
 require 'mysql2'
 
-REPORT_PAGE = 'User:MusikBot/ECPMonitor/Report'.freeze
+REPORT_PAGE = 'User:MusikBot/ECPMonitor/Report2'.freeze
 TOTAL_PAGE = 'User:MusikBot/ECPMonitor/Total'.freeze
 OFFSET_PAGE = 'User:MusikBot/ECPMonitor/Offset'.freeze
 
 module ECPMonitor
   def self.run
     @mb = MusikBot::Session.new(inspect)
+
+    last_run = @mb.parse_date(@mb.local_storage('ECPMonitor_lastrun', 'r').read)
 
     un, pw, host, db, port = Auth.db_credentials(@mb.lang)
     @client = Mysql2::Client.new(
@@ -20,7 +22,18 @@ module ECPMonitor
     )
 
     changes = ecp_changes
-    generate_report(changes)
+
+    if changes.any? { |page| @mb.parse_date(page['log_timestamp']) > last_run }
+      generate_report(changes)
+      run_file = @mb.local_storage('ECPMonitor_lastrun', 'r+')
+      run_file.write(@mb.now.to_s)
+      run_file.close
+    end
+
+    @mb.edit(TOTAL_PAGE,
+      summary: "Updating number of pages under [[WP:30/500|extended confirmed protection]] (#{ecp_total})",
+      content: ecp_total
+    )
   rescue => e
     @mb.report_error(t('Fatal error'), e)
   end
@@ -74,10 +87,6 @@ module ECPMonitor
       bot: false
     }
     @mb.edit(REPORT_PAGE, opts)
-    @mb.edit(TOTAL_PAGE,
-      summary: summary,
-      content: ecp_total
-    )
   end
 
   def self.parse_date(date)
