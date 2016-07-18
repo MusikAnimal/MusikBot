@@ -2,7 +2,7 @@ $LOAD_PATH << '..'
 require 'musikbot'
 require 'mysql2'
 
-REPORT_PAGE = 'User:MusikBot/ECPMonitor/Report2'.freeze
+REPORT_PAGE = 'User:MusikBot/ECPMonitor/Report'.freeze
 TOTAL_PAGE = 'User:MusikBot/ECPMonitor/Total'.freeze
 OFFSET_PAGE = 'User:MusikBot/ECPMonitor/Offset'.freeze
 
