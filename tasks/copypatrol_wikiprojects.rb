@@ -6,6 +6,7 @@ module CopyPatrolWikiProjects
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
+    # this ID represents the id of the last record we processed in copyright_diffs
     last_id = @mb.local_storage('CopyPatrol_lastid', 'r').read.to_i
 
     un, pw, host, db, port = Auth.copyright_p_credentials
@@ -17,19 +18,28 @@ module CopyPatrolWikiProjects
       port: port
     )
 
+    # get the all the CopyPatrol records since the last run
     records = fetch_records(last_id)
+
+    # loop through and fetch WikiProjects as needed
     records.each do |record|
+      # don't re-fetch WikiProjects - for now, that is
       next if wikiprojects?(record['page_title'])
+
       wikiprojects = parse_wikiprojects(record['page_title'])
+
+      # save to database
       write_wikiprojects(wikiprojects, record)
     end
 
+    # update the ID of the last run
     if records.any?
       run_file = @mb.local_storage('CopyPatrol_lastid', 'r+')
       run_file.write(records.last['id'])
       run_file.close
     end
   rescue => e
+    # gets logged to User:MusikBot/CopyPatrolWikiProjects/Error_log
     @mb.report_error('Fatal error', e)
   end
 
@@ -43,18 +53,21 @@ module CopyPatrolWikiProjects
 
   def self.write_wikiprojects(wikiprojects, record)
     wikiprojects.each do |wikiproject|
-      normalized_wp = wikiproject.sub(/^WikiProject_/, '').tr(' ', '_')
+      # use underscores instead of spaces, to be consistent
       query('INSERT INTO wikiprojects VALUES(NULL, ?, ?)',
-        record['page_title'], normalized_wp
+        record['page_title'], wikiproject.tr(' ', '_')
       )
     end
   end
 
   def self.parse_wikiprojects(page_title)
+    # mw:API:Revisions
     talk_text = @mb.get("Talk:#{page_title}",
       rvsection: 0,
       rvparse: true
     )
+
+    # uses XML query selectors to identify the WikiProject links, looking inside the 'header' of each WikiProject banner
     Nokogiri::HTML(talk_text).css('.wpb-header a').collect(&:content).select { |text| text =~ /^WikiProject/ }
   end
 
