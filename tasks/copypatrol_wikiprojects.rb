@@ -67,7 +67,11 @@ module CopyPatrolWikiProjects
       rvparse: true
     )
 
-    # uses XML query selectors to identify the WikiProject links, looking inside the 'header' of each WikiProject banner
+    # Uses XML query selectors to identify the WikiProject links, removing any sub-wikiprojects
+    wp_links = Nokogiri::HTML(talk_text).css('.wpb-header a, .mbox-text b a')
+      .collect { |a| a.attributes['href'].value.sub('/wiki/', '') }.uniq
+      .select { |link| !link.include?('/') }
+
     Nokogiri::HTML(talk_text).css('.wpb-header a').collect(&:content).select { |text| text =~ /^WikiProject/ }
   end
 
