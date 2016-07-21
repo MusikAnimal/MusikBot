@@ -67,12 +67,12 @@ module CopyPatrolWikiProjects
       rvparse: true
     )
 
+    # Parses the talk page of the given article to find WikiProjects.
     # Uses XML query selectors to identify the WikiProject links, removing any sub-wikiprojects
-    wp_links = Nokogiri::HTML(talk_text).css('.wpb-header a, .mbox-text b a')
-      .collect { |a| a.attributes['href'].value.sub('/wiki/', '') }.uniq
-      .select { |link| !link.include?('/') }
-
-    Nokogiri::HTML(talk_text).css('.wpb-header a').collect(&:content).select { |text| text =~ /^WikiProject/ }
+    #   and the Wikipedia: prefix
+    Nokogiri::HTML(talk_text).css('.wpb-header a, .mbox-text b a')
+      .collect { |link| link.attributes['href'].value.sub('/wiki/Wikipedia:', '') }.uniq
+      .select { |link| link =~ /^WikiProject/ && !link.include?('/') }
   end
 
   def self.query(sql, *values)
