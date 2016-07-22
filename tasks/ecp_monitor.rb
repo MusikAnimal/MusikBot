@@ -40,10 +40,11 @@ module ECPMonitor
 
   def self.ecp_changes
     offset_date = (@mb.now - offset).strftime('%Y%m%d%H%M%S')
-    query('SELECT log_timestamp, log_user_text, log_title, log_comment, pr_expiry FROM logging ' \
+    query('SELECT log_timestamp, log_user_text, log_namespace, log_title, log_comment, pr_expiry FROM logging ' \
       'INNER JOIN page_restrictions WHERE log_page = pr_page ' \
       "AND (log_action = 'protect' OR log_action = 'modify') AND pr_type = 'edit' " \
-      "AND pr_level = 'extendedconfirmed' AND log_timestamp > '#{offset_date}'" \
+      "AND pr_level = 'extendedconfirmed' AND log_timestamp > '#{offset_date}' " \
+      'GROUP BY log_title ' \
       'ORDER BY log_timestamp DESC').to_a
   end
 
@@ -69,8 +70,9 @@ module ECPMonitor
       "\n!Admin"
 
     pages.each do |page|
+      page_title = "#{namespace(page['log_namespace'])}#{page['log_title'].tr('_', ' ')}"
       markup += "\n|-" \
-        "\n|[[#{page['log_title'].tr('_', ' ')}]]" \
+        "\n|[[#{page_title}]]" \
         "\n|style='white-space:nowrap' |#{parse_date(page['log_timestamp'])}" \
         "\n|style='white-space:nowrap' |#{parse_date(page['pr_expiry'])}" \
         "\n|style='max-width:400px' |#{page['log_comment']}" \
@@ -100,6 +102,44 @@ module ECPMonitor
   def self.query(sql)
     puts sql
     @client.query(sql)
+  end
+
+  def self.namespace(value)
+    {
+      0 => '',
+      1 => 'Talk:',
+      2 => 'User:',
+      3 => 'User talk:',
+      4 => 'Wikipedia:',
+      5 => 'Wikipedia talk:',
+      6 => 'File:',
+      7 => 'File talk:',
+      8 => 'MediaWiki:',
+      9 => 'MediaWiki talk:',
+      10 => 'Template:',
+      11 => 'Template talk:',
+      12 => 'Help:',
+      13 => 'Help talk:',
+      14 => 'Category:',
+      15 => 'Category talk:',
+      100 => 'Portal:',
+      101 => 'Portal talk:',
+      108 => 'Book:',
+      109 => 'Book talk:',
+      118 => 'Draft:',
+      119 => 'Draft talk:',
+      446 => 'Education:',
+      447 => 'Program Education Program talk:',
+      710 => 'TimedText:',
+      711 => 'TimedText talk:',
+      828 => 'Module:',
+      829 => 'Module talk:',
+      2300 => 'Gadget:',
+      2301 => 'Gadget talk:',
+      2302 => 'Gadget:',
+      2303 => 'definition Gadget definition talk:',
+      2600 => 'Topic:'
+    }[value]
   end
 end
 
