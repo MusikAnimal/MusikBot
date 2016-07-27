@@ -2,11 +2,11 @@ $LOAD_PATH << '..'
 require 'musikbot'
 
 module PermClerk
-  COMMENT_INDENT = "\n::"
-  COMMENT_PREFIX = '{{comment|Automated comment}} '
-  SPLIT_KEY = '====[[User:'
+  COMMENT_INDENT = "\n::".freeze
+  COMMENT_PREFIX = '{{comment|Automated comment}} '.freeze
+  SPLIT_KEY = '====[[User:'.freeze
   PREREQ_EXPIRY = 90
-  AWB_CHECKPAGE = 'Wikipedia:AutoWikiBrowser/CheckPage'
+  AWB_CHECKPAGE = 'Wikipedia:AutoWikiBrowser/CheckPage'.freeze
 
   PERMISSION_KEYS = {
     'Account creator' => 'accountcreator',
@@ -19,7 +19,7 @@ module PermClerk
     'Pending changes reviewer' => '\breviewer',
     'Rollback' => 'rollbacker',
     'Template editor' => 'templateeditor'
-  }
+  }.freeze
 
   def self.run
     @mb = MusikBot::Session.new(inspect)
@@ -925,9 +925,9 @@ module PermClerk
 
     # don't start any queries gone wild
     unless @user_info_cache[username][:editCount] > 50_000
-      data_attrs.each do |dataAttr|
+      data_attrs.each do |data_attr|
         count =
-          case dataAttr.downcase
+          case data_attr.downcase
           when 'articlecount'
             @mb.repl_client.count_articles_created(username)
           when 'modulespacecount'
@@ -942,7 +942,7 @@ module PermClerk
             @mb.repl_client.count_namespace_edits(username, [10, 828])
         end
 
-        @user_info_cache[username].store(dataAttr.to_sym, count) if count
+        @user_info_cache[username].store(data_attr.to_sym, count) if count
       end
     end
 

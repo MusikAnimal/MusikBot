@@ -25,7 +25,7 @@ module ECPMonitor
     titles = ecp_titles
     titles.map { |title| title['type'] = 'create' }
 
-    if changes.any? # { |page| @mb.parse_date(page['log_timestamp']) > last_run }
+    if (changes + titles).any? { |page| @mb.parse_date(page['timestamp']) > last_run }
       changes = group_changes(changes)
       generate_report(changes + titles)
       run_file = @mb.local_storage('ECPMonitor_lastrun', 'r+')
