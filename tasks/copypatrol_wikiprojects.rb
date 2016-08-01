@@ -1,6 +1,7 @@
 $LOAD_PATH << '..'
 require 'musikbot'
 require 'nokogiri'
+require 'uri'
 
 module CopyPatrolWikiProjects
   def self.run
@@ -71,8 +72,8 @@ module CopyPatrolWikiProjects
     # Uses XML query selectors to identify the WikiProject links, removing any sub-wikiprojects
     #   and the Wikipedia: prefix
     Nokogiri::HTML(talk_text).css('.wpb-header a, .mbox-text b a')
-      .collect { |link| link.attributes['href'].value.sub('/wiki/Wikipedia:', '') }.uniq
-      .select { |link| link =~ /^WikiProject/ && !link.include?('/') }
+      .collect { |link| URI.decode(link.attributes['href'].value.sub('/wiki/Wikipedia:', '')) }.uniq
+      .select { |link| link =~ /^WikiProject/ && !link.include?('/') && !link.include?('#') }
   end
 
   def self.query(sql, *values)
