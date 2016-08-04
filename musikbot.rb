@@ -83,7 +83,7 @@ module MusikBot
         retry_count: 5,
         user_agent: "MusikBot/1.1 (https://#{@opts[:project]}.org/wiki/User:MusikBot/)",
         ignorewarnings: true,
-        logdevice: 'STDOUT'
+        logdevice: STDOUT
       )
       Auth.login(@gateway)
 
