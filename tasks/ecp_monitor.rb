@@ -21,6 +21,11 @@ module ECPMonitor
       port: port
     )
 
+    @mb.edit(TOTAL_PAGE,
+      summary: "Updating number of pages under [[WP:30/500|extended confirmed protection]] (#{ecp_total})",
+      content: ecp_total
+    )
+
     changes = ecp_changes
     titles = ecp_titles
     titles.map { |title| title['type'] = 'create' }
@@ -32,11 +37,6 @@ module ECPMonitor
       run_file.write(@mb.now.to_s)
       run_file.close
     end
-
-    @mb.edit(TOTAL_PAGE,
-      summary: "Updating number of pages under [[WP:30/500|extended confirmed protection]] (#{ecp_total})",
-      content: ecp_total
-    )
   rescue => e
     @mb.report_error(t('Fatal error'), e)
   end
