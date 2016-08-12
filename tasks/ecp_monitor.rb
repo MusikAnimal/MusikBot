@@ -2,7 +2,7 @@ $LOAD_PATH << '..'
 require 'musikbot'
 require 'mysql2'
 
-REPORT_PAGE = 'User:MusikBot/ECPMonitor/Report2'.freeze
+REPORT_PAGE = 'User:MusikBot/ECPMonitor/Report'.freeze
 TOTAL_PAGE = 'User:MusikBot/ECPMonitor/Total'.freeze
 OFFSET_PAGE = 'User:MusikBot/ECPMonitor/Offset'.freeze
 
@@ -34,8 +34,6 @@ module ECPMonitor
       .select { |page| @mb.parse_date(page['timestamp']) > last_run }
       .map { |page| page['title'].tr('_', ' ') }
       .uniq
-
-    binding.pry
 
     if new_pages.any?
       changes = group_changes(changes)
