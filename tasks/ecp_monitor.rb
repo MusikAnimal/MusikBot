@@ -2,7 +2,7 @@ $LOAD_PATH << '..'
 require 'musikbot'
 require 'mysql2'
 
-REPORT_PAGE = 'User:MusikBot/ECPMonitor/Report'.freeze
+REPORT_PAGE = 'User:MusikBot/ECPMonitor/Report2'.freeze
 TOTAL_PAGE = 'User:MusikBot/ECPMonitor/Total'.freeze
 OFFSET_PAGE = 'User:MusikBot/ECPMonitor/Offset'.freeze
 
@@ -30,7 +30,12 @@ module ECPMonitor
     titles = ecp_titles
     titles.map { |title| title['type'] = 'create' }
 
-    new_pages = (changes + titles).select { |page| @mb.parse_date(page['timestamp']) > last_run }
+    new_pages = (changes + titles)
+      .select { |page| @mb.parse_date(page['timestamp']) > last_run }
+      .map { |page| page['title'].tr('_', ' ') }
+      .uniq
+
+    binding.pry
 
     if new_pages.any?
       changes = group_changes(changes)
@@ -123,7 +128,7 @@ module ECPMonitor
     markup += "\n|}"
 
     plural = new_pages.length > 1 ? 's' : ''
-    linked_new_pages = new_pages.map { |page| "[[#{page['title'].tr('_', ' ')}]]" }.join(' / ')
+    linked_new_pages = new_pages.map { |page| "[[#{page}]]" }.join(' / ')
 
     summary = "Reporting #{new_pages.length} new page#{plural} put under [[WP:30/500|extended confirmed protection]] " \
       "(#{ecp_total} total): #{linked_new_pages}"
