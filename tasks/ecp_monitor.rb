@@ -30,9 +30,11 @@ module ECPMonitor
     titles = ecp_titles
     titles.map { |title| title['type'] = 'create' }
 
-    if (changes + titles).any? { |page| @mb.parse_date(page['timestamp']) > last_run }
+    new_pages = (changes + titles).select { |page| @mb.parse_date(page['timestamp']) > last_run }
+
+    if new_pages.any?
       changes = group_changes(changes)
-      generate_report(changes + titles)
+      generate_report(changes + titles, new_pages)
       run_file = @mb.local_storage('ECPMonitor_lastrun', 'r+')
       run_file.write(@mb.now.to_s)
       run_file.close
@@ -86,7 +88,7 @@ module ECPMonitor
     grouped_changes
   end
 
-  def self.generate_report(changes)
+  def self.generate_report(changes, new_pages)
     protect_pages_link = 'https://en.wikipedia.org/w/index.php?title=Special:ProtectedPages&type=edit&level=extendedconfirmed'
 
     # changes includes protected titles, so re-sort by log timestamp
@@ -120,8 +122,11 @@ module ECPMonitor
 
     markup += "\n|}"
 
-    summary = "Reporting #{changes.length} pages recently put under [[WP:30/500|extended confirmed protection]] " \
-      "(#{ecp_total} total pages)"
+    plural = new_pages.length > 1 ? 's' : ''
+    linked_new_pages = new_pages.map { |page| "[[#{page['title'].tr('_', ' ')}]]" }.join(' / ')
+
+    summary = "Reporting #{new_pages.length} new page#{plural} put under [[WP:30/500|extended confirmed protection]] " \
+      "(#{ecp_total} total): #{linked_new_pages}"
     opts = {
       summary: summary,
       content: markup,
