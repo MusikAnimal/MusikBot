@@ -7,6 +7,9 @@ module CopyPatrolWikiProjects
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
+    # double accepted REXML response size to hanlde *really* large talk pages
+    REXML::Document.entity_expansion_text_limit = 20_480
+
     # this ID represents the id of the last record we processed in copyright_diffs
     last_id = @mb.local_storage('CopyPatrol_lastid', 'r').read.to_i
 
