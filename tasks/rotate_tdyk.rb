@@ -2,12 +2,12 @@ $LOAD_PATH << '..'
 require 'musikbot'
 
 module RotateTDYK
-  TEMPLATE_PAGE = 'Template talk:Did you know'
+  TEMPLATE_PAGE = 'Template talk:Did you know'.freeze
 
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    @num_days = @mb.get('User:MusikBot/RotateTDYK/Offset').to_i rescue 7
+    @num_days = @mb.get('User:MusikBot/RotateTDYK/Offset').to_i
 
     process_page
   rescue => e

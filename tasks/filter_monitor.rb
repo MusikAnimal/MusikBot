@@ -226,7 +226,7 @@ module FilterMonitor
   def self.insert(obj)
     # id, filter_id, description, actions, pattern, lasteditor, lastedittime, enabled, deleted, private
     query("INSERT INTO filters VALUES(NULL, #{obj['id']}, '#{obj['description']}', '#{obj['actions']}', " \
-      "'#{obj['pattern']}', '#{obj['lasteditor']}', '#{obj['lastedittime'].gsub('Z', '')}', "\
+      "'#{obj['pattern']}', '#{obj['lasteditor']}', '#{obj['lastedittime'].delete('Z')}', " \
       "'#{attr_value(obj['enabled'])}', '#{attr_value(obj['deleted'])}', '#{attr_value(obj['private'])}');")
   end
 

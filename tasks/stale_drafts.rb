@@ -18,7 +18,7 @@ module StaleDrafts
 
     pages.each_with_index do |page, index|
       begin
-        title = page['page_title'].gsub(/_/, ' ')
+        title = page['page_title'].descore
         date = Date.parse(page['rev_timestamp']).strftime('%Y-%m-%d')
         api_data = get_api_data(page['page_title'])
 
@@ -68,13 +68,13 @@ module StaleDrafts
         prop: 'linkshere',
         lhprop: 'pageid',
         lhlimit: 50
-      ).elements['pages'][0].elements rescue nil
+      ).elements['pages'][0].elements
 
       links = api_data['linkshere'].elements.to_a.reject { |lh| lh.attributes['pageid'] == '48447733' }.length rescue 0
       next if links > 0
 
       date = Date.parse(page['rev_timestamp']).strftime('%Y-%m-%d')
-      title = page['page_title'].gsub(/_/, ' ')
+      title = page['page_title'].descore
       hist_link = "{{ plainlink | url={{fullurl:Draft:#{page['page_title']}|action=history}} | name=hist }}"
 
       puts title if @env == :test

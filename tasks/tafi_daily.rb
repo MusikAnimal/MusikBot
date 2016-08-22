@@ -5,16 +5,16 @@ module TAFIDaily
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    last_run = @mb.parse_date(@mb.local_storage('TAFIDaily_lastrun', 'r').read) rescue DateTime.new
+    last_run = @mb.parse_date(
+      @mb.local_storage['last_run']
+    )
     rotation_expired = @mb.now > last_run + Rational(23, 24) || @mb.env == :test
 
     process_nomination_board
 
     if @mb.config['run']['rotate_nominations'] && rotation_expired
       rotate_nominations
-      run_file = @mb.local_storage('TAFIDaily_lastrun', 'r+')
-      run_file.write(@mb.now.to_s)
-      run_file.close
+      @mb.local_storage('last_run' => @mb.now.to_s)
     end
   rescue => e
     @mb.report_error("Fatal error: #{e.message}")

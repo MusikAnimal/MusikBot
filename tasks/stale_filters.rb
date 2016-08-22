@@ -5,8 +5,8 @@ module StaleFilters
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    run_status = eval(@mb.local_storage('StaleFilters_lastrun', 'r').read)
-    local_status = run_status[@mb.lang]
+    run_status = @mb.local_storage
+    local_status = run_status[@mb.lang.to_s]
 
     @report_page = "#{t('User')}:MusikBot/StaleFilters/Report"
     @total_page = "#{t('User')}:MusikBot/StaleFilters/Total"
@@ -20,18 +20,16 @@ module StaleFilters
     ).elements['pages'][0].attributes['touched'])
 
     # abort unless we have new data to report or the page was touched
-    return unless new_hash != local_status[:hash] || touched > @mb.parse_date(local_status[:time])
+    return unless new_hash != local_status['hash'] || touched > @mb.parse_date(local_status['time'])
 
     generate_report
 
-    run_status[@mb.lang] = {
+    run_status[@mb.lang.to_s] = {
       hash: new_hash,
       time: @mb.now.to_s
     }
 
-    run_file = @mb.local_storage('StaleFilters_lastrun', 'r+')
-    run_file.write(run_status.inspect)
-    run_file.close
+    @mb.local_storage(run_status)
   rescue => e
     @mb.report_error('Fatal error', e)
   end

@@ -3,15 +3,15 @@ require 'musikbot'
 require 'nokogiri'
 require 'uri'
 
-module CopyPatrolWikiProjects
+module CopyPatrol
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    # double accepted REXML response size to hanlde *really* large talk pages
+    # double accepted REXML response size to handle *really* large talk pages
     REXML::Document.entity_expansion_text_limit = 20_480
 
     # this ID represents the id of the last record we processed in copyright_diffs
-    last_id = @mb.local_storage('CopyPatrol_lastid', 'r').read.to_i
+    last_id = @mb.local_storage['last_id']
 
     un, pw, host, db, port = Auth.copyright_p_credentials
     @client = Mysql2::Client.new(
@@ -37,13 +37,9 @@ module CopyPatrolWikiProjects
     end
 
     # update the ID of the last run
-    if records.any?
-      run_file = @mb.local_storage('CopyPatrol_lastid', 'r+')
-      run_file.write(records.last['id'])
-      run_file.close
-    end
+    @mb.local_storage('last_id' => records.last['id']) if records.any?
   rescue => e
-    # gets logged to User:MusikBot/CopyPatrolWikiProjects/Error_log
+    # gets logged to User:MusikBot/CopyPatrol/Error_log
     @mb.report_error('Fatal error', e)
   end
 
@@ -86,4 +82,4 @@ module CopyPatrolWikiProjects
   end
 end
 
-CopyPatrolWikiProjects.run
+CopyPatrol.run

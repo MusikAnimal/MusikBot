@@ -40,6 +40,14 @@ class String
     self[0, 1].uppercase?
   end
 
+  def score
+    tr(' ', '_')
+  end
+
+  def descore
+    tr('_', ' ')
+  end
+
   def translate(opts = {})
     I18n.t(self, opts)
   end
@@ -61,10 +69,9 @@ module MusikBot
   class Session
     def initialize(task, prodonly = false)
       @task = task
-      @env = eval(File.open("#{PROJECT_ROOT}/env").read)
       @opts = {
         prodonly: prodonly,
-        project: @env == :test && !prodonly ? 'test.wikipedia' : 'en.wikipedia'
+        project: env == 'test' && !prodonly ? 'test.wikipedia' : 'en.wikipedia'
       }
       OptionParser.new do |args|
         args.banner = 'Usage: script.rb [options]'
@@ -72,7 +79,7 @@ module MusikBot
         args.on('-p', '--project PROJECT', 'Project name (en.wikipedia)') { |v| @opts[:project] = v }
       end.parse!
 
-      @opts[:lang] = @env == :test ? :en : @opts[:project].scan(/^\w\w/).first.to_sym
+      @opts[:lang] = env == 'test' ? :en : @opts[:project].scan(/^\w\w/).first.to_sym
       I18n.load_path = Dir["#{PROJECT_ROOT}/dictionaries/*/*.yml"]
       I18n.backend.load_translations
       I18n.config.available_locales = [:en, :fr, :pt]
@@ -86,15 +93,22 @@ module MusikBot
       )
       Auth.login(@gateway)
 
-      unless @task =~ /Console|SoundSearch/ || @opts[:prodonly] || @env == :test || get("User:MusikBot/#{@task}/Run") == 'true'
+      unless @task =~ /Console|SoundSearch/ || @opts[:prodonly] || env == 'test' || get("User:MusikBot/#{@task}/Run") == 'true'
         report_error("#{@task} disabled")
         exit 1
       end
     end
     attr_reader :opts
-    attr_reader :env
     attr_reader :gateway
     attr_reader :task
+
+    def env
+      if @env.present?
+        @env
+      else
+        @env = File.open("#{PROJECT_ROOT}/env").read.strip
+      end
+    end
 
     def lang
       @opts[:lang]
@@ -127,12 +141,9 @@ module MusikBot
         begin
           DateTime.parse(obj).new_offset(0)
         rescue => e
+          raise e unless e.message == 'invalid date'
           # try as if i18n wiki date
-          if e.message == 'invalid date'
-            DateTime.parse(delocalize_wiki_date(obj))
-          else
-            raise e
-          end
+          DateTime.parse(delocalize_wiki_date(obj))
         end
       elsif obj.is_a?(DateTime)
         obj.new_offset(0)
@@ -178,34 +189,45 @@ module MusikBot
       @redis_client ||= Auth.redis
     end
 
-    def cache(base_key, time = 3600, &res)
+    def cache(base_key, time = 3600)
       key = "ma-#{Digest::MD5.hexdigest(base_key.to_s)}"
 
       unless ret = redis_client.get(key)
-        @redis_client.set(key, ret = res.call)
+        @redis_client.set(key, ret = yield)
         @redis_client.expire(key, time)
       end
 
       ret
     end
 
-    def disk_cache(filename, time = 3600, &res)
-      filename = "#{PROJECT_ROOT}/disk_cache/#{filename}"
+    def disk_cache(filename, time = 3600)
+      filename = "#{PROJECT_ROOT}/disk_cache/#{filename}.yml"
+
       if File.mtime(filename) < Time.now.utc - time
-        ret = res.call
+        ret = yield
 
         cache_file = File.open(filename, 'r+')
-        cache_file.write(ret.inspect)
+        cache_file.write(
+          YAML.dump(ret)
+        )
         cache_file.close
       else
-        ret = eval(File.open(filename).read)
+        ret = YAML.load(File.open(filename).read)
       end
 
       ret
     end
 
-    def local_storage(filename, opts)
-      File.open("#{PROJECT_ROOT}/disk_cache/#{filename}", opts)
+    def local_storage(data = nil)
+      if data
+        file = File.open("#{PROJECT_ROOT}/disk_cache/#{@task}.yml", 'r+')
+        file.write(YAML.dump(data))
+        file.close
+      else
+        YAML.load(
+          File.open("#{PROJECT_ROOT}/disk_cache/#{@task}.yml", 'r').read
+        )
+      end
     end
 
     # API-related
@@ -226,7 +248,7 @@ module MusikBot
     end
 
     def config
-      @config ||= JSON.parse(CGI.unescapeHTML(get("User:MusikBot/#{@task}/config.js")))
+      @config ||= JSON.parse(CGI.unescapeHTML(get("User:MusikBot/#{@task}/config")))
     end
 
     def get_revision_at_date(page, date, opts = {})
@@ -284,7 +306,7 @@ module MusikBot
     attr_reader :start_timestamp
 
     def report_error(message, e = nil)
-      return fail if @env == :test
+      return raise if env == 'test'
 
       opts = {
         contentformat: 'text/x-wiki',

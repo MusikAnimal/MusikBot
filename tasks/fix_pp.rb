@@ -1,7 +1,7 @@
 $LOAD_PATH << '..'
 require 'musikbot'
 
-CATEGORY = 'Category:Wikipedia pages with incorrect protection templates'
+CATEGORY = 'Category:Wikipedia pages with incorrect protection templates'.freeze
 
 module FixPP
   def self.run
@@ -10,10 +10,7 @@ module FixPP
     category_members.each do |page|
       page_obj = protect_info(page).first
 
-      # don't try endlessly to fix the same page
-      if false #@mb.env == :production && cache_touched(page_obj, :get)
-        log("cache hit for #{page_obj.attributes['title']}")
-      elsif page_obj.elements['revisions'][0].attributes['user'] == 'MusikBot'
+      if page_obj.elements['revisions'][0].attributes['user'] == 'MusikBot'
         log('MusikBot was last to edit page')
       else
         process_page(page_obj)
@@ -65,11 +62,11 @@ module FixPP
       next unless raw_code.present?
 
       pp_type = pp_hash[old_pp_type]
-      type = pp_protect_type[pp_type.to_sym]
+      type = pp_protect_type[pp_type]
       expiry = get_expiry(@page_obj, type)
 
       # generic pp template is handled differently
-      if pp_type == :pp && type.blank?
+      if pp_type == 'pp' && type.blank?
         # try to figure out usage of generic {{pp}}
         type = raw_code.scan(/\{\{\s*pp\s*(?:\|.*?action\s*\=\s*(.*?)(?:\||\}\}))/i).flatten.first
 
@@ -147,13 +144,13 @@ module FixPP
       opts = {
         raw_code: raw_code,
         pp_type: pp_type = pp_hash[old_pp_type],
-        type: type = pp_protect_type[pp_type.to_sym],
+        type: type = pp_protect_type[pp_type],
         expiry: get_expiry(@page_obj, type),
-        small: !!(raw_code =~ /\|\s*small\s*=\s*(?:#{small_values})\s*(?:\||}})/)
+        small: raw_code =~ /\|\s*small\s*=\s*(?:#{small_values})\s*(?:\||}})/ ? true : false
       }
 
       # generic pp template is handled differently
-      if opts[:pp_type] == :pp && opts[:type].blank?
+      if opts[:pp_type] == 'pp' && opts[:type].blank?
         # try to figure out usage of generic {{pp}}
         opts[:type] = opts[:raw_code].scan(/\{\{\s*pp\s*(?:\|.*?action\s*\=\s*(.*?)(?:\||\}\}))/i).flatten.first
 
@@ -229,28 +226,27 @@ module FixPP
     protection_obj = protection_by_type(page, type)
     expiry_key = type == 'flagged' ? 'protection_expiry' : 'expiry'
 
-    if protection_obj
-      expiry = protection_obj[expiry_key]
-      expiry == 'infinity' ? 'indefinite' : expiry
-    else
-      return nil
-    end
+    return nil unless protection_obj
+
+    expiry = protection_obj[expiry_key]
+    expiry == 'infinity' ? 'indefinite' : expiry
   end
 
   def self.auto_pps(existing_types = [])
     new_pps = ''
     (%w(edit move flagged) - existing_types).each do |type|
-      next unless settings = protection_by_type(@page_obj, type)
+      settings = protection_by_type(@page_obj, type)
+      next unless settings
 
-      if type == 'flagged'
-        pp_type = "pp-pc#{settings['level'].to_i + 1}"
-      elsif type == 'move'
-        pp_type = 'pp-move'
-      elsif @is_template
-        pp_type = 'pp-template'
-      else
-        pp_type = 'pp'
-      end
+      pp_type = if type == 'flagged'
+                  "pp-pc#{settings['level'].to_i + 1}"
+                elsif type == 'move'
+                  'pp-move'
+                elsif @is_template
+                  'pp-template'
+                else
+                  'pp'
+                end
 
       expiry_key = type == 'flagged' ? 'protection_expiry' : 'expiry'
       new_pps += build_pp_template(
@@ -321,10 +317,6 @@ module FixPP
 
   # protection types
   def self.pp_hash
-    @pp_hash ||= eval(@mb.local_storage('pp_hash', 'r').read)
-  end
-
-  def self.regenerate_pp_hash
     return @pp_hash if @pp_hash
 
     # cache on disk for one week
@@ -332,7 +324,9 @@ module FixPP
       @pp_hash = {}
 
       pp_types.each do |pp_type|
-        redirects("Template:#{pp_type}").each { |r| @pp_hash[r.sub(/^Template:/, '').downcase] = pp_type }
+        redirects("Template:#{pp_type}").each do |r|
+          @pp_hash[r.sub(/^Template:/, '').downcase] = pp_type
+        end
       end
 
       @pp_hash
@@ -340,23 +334,7 @@ module FixPP
   end
 
   def self.pp_protect_type
-    {
-      'pp': '',
-      'pp-move': 'move',
-      'pp-pc1': 'flagged',
-      'pp-pc2': 'flagged',
-      'pp-dispute': 'edit',
-      'pp-move-dispute': 'move',
-      'pp-office': 'edit',
-      'pp-blp': 'edit',
-      'pp-sock': 'edit',
-      'pp-template': 'edit',
-      'pp-usertalk': 'edit',
-      'pp-vandalism': 'edit',
-      'pp-move-vandalism': 'move',
-      'pp-semi-indef': 'edit',
-      'pp-move-indef': 'move'
-    }
+    @mb.config['base_protection_templates']
   end
 
   def self.pp_types

@@ -10,7 +10,9 @@ module ECPMonitor
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    last_run = @mb.parse_date(@mb.local_storage('ECPMonitor_lastrun', 'r').read)
+    last_run = @mb.parse_date(
+      @mb.local_storage['last_run']
+    )
 
     un, pw, host, db, port = Auth.db_credentials(@mb.lang)
     @client = Mysql2::Client.new(
@@ -38,9 +40,7 @@ module ECPMonitor
     if new_pages.any?
       changes = group_changes(changes)
       generate_report(changes + titles, new_pages)
-      run_file = @mb.local_storage('ECPMonitor_lastrun', 'r+')
-      run_file.write(@mb.now.to_s)
-      run_file.close
+      @mb.local_storage('last_run' => @mb.now.to_s)
     end
   rescue => e
     @mb.report_error(t('Fatal error'), e)

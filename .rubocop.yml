@@ -1,3 +1,6 @@
+AllCops:
+  TargetRubyVersion: 2.3
+
 Metrics/LineLength:
   Enabled: false
 
@@ -16,6 +19,12 @@ Style/MultilineMethodCallBraceLayout:
 
 Style/AlignParameters:
   EnforcedStyle: with_fixed_indentation
+
+Style/FrozenStringLiteralComment:
+  Enabled: false
+
+Style/RegexpLiteral:
+  Enabled: false
 
 Metrics/CyclomaticComplexity:
   Enabled: false
