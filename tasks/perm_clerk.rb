@@ -139,6 +139,7 @@ module PermClerk
 
     return SPLIT_KEY + @section unless username = @section.scan(/{{(?:template\:)?rfplinks\|1=(.*?)}}/i).flatten[0]
     username[0] = username[0].capitalize
+    username.strip!
     @username = username.gsub('_', ' ')
 
     info("Checking section for User:#{@username}...")
