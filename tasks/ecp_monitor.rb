@@ -34,7 +34,7 @@ module ECPMonitor
 
     new_pages = (changes + titles)
       .select { |page| @mb.parse_date(page['timestamp']) > last_run }
-      .map { |page| page['title'].tr('_', ' ') }
+      .map { |page| namespace(page['namespace']) + page['title'].tr('_', ' ') }
       .uniq
 
     if new_pages.any?
