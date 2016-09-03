@@ -366,7 +366,7 @@ module PermClerk
     user_info = get_user_info(@username, prereqs.keys)
 
     prereqs.each do |key, value|
-      pass = user_info[key.to_sym] >= value
+      pass = user_info[key.to_sym] >= value rescue nil
       next if pass.nil? && user_info && user_info[:editCount] > 50_000
 
       if pass.nil?
