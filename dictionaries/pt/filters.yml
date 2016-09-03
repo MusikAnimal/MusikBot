@@ -1,4 +1,6 @@
 pt:
+  count_edit_summary: 'Reporting %{num} enabled filter(s)'
+  count: 'Contagem'
   edit_summary: 'Informando %{num} filtro(s) de edição obsoletos'
   last_changed: 'Última [[Especial:Filtro de abusos/history/%{id}|alteração]]'
   purging: 'Purgar forçará o robô a atualizar o relatório em sua próxima execução. Caso contrário o relatório só será atualizado se houver alguma alteração nos dados.'

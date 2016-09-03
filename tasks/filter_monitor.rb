@@ -14,6 +14,14 @@ module FilterMonitor
       port: port
     )
     @template_name = "#{t('User')}:MusikBot/FilterMonitor/#{t('Recent changes')}"
+    @total_count_name = "#{t('User')}:MusikBot/FilterMonitor/#{t('Count')}"
+
+    enabled_count = current_filters.to_a.select { |ef| ef.attributes['enabled'] }.length
+    @mb.edit(
+      @total_count_name,
+      content: enabled_count,
+      summary: t(:count_edit_summary, num: enabled_count)
+    )
 
     changes = filter_changes
     generate_report(changes) if changes.any?
