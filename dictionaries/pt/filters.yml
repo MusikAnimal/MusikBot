@@ -1,5 +1,5 @@
 pt:
-  count_edit_summary: 'Reporting %{num} enabled filter(s)'
+  count_edit_summary: 'Informando %{num} filtro(s) ativado(s)'
   count: 'Contagem'
   edit_summary: 'Informando %{num} filtro(s) de edição obsoletos'
   last_changed: 'Última [[Especial:Filtro de abusos/history/%{id}|alteração]]'
