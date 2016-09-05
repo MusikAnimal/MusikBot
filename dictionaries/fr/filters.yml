@@ -1,7 +1,7 @@
 fr:
-  count_edit_summary: 'Reporting %{num} enabled filter(s)'
-  count: 'Compter'
-  edit_summary: 'Rapport sur %{num} filtre(s) inactifs'
+  count_edit_summary: 'Rapport sur %{num} filtre(s) actif(s)'
+  count: 'Décompte'
+  edit_summary: 'Rapport sur %{num} filtre(s) inactif(s)'
   last_changed: '[[Spécial:Filtre_antiabus/history/%{id}|Dernière modification]]'
   purging: "Purging will force the bot to update the report on it's next run. Otherwise the report is only updated if there is a change in the data."
   summary: '%{num} {{plural:%{num}|filtre|filtres}} actifs sans détection dans les %{days} jours'
