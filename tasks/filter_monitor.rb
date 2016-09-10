@@ -123,7 +123,7 @@ module FilterMonitor
       end
       @edit_summaries[data['filter_id']] << t(prop.uncapitalize)
     end
-    content.chomp!('; ')
+    content.chomp!('&mdash;').chomp!('; ')
 
     return unless @mb.config['lasteditor'] || @mb.config['lastedittime']
 
