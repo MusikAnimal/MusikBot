@@ -25,8 +25,8 @@ module StaleFilters
     generate_report
 
     run_status[@mb.lang.to_s] = {
-      hash: new_hash,
-      time: @mb.now.to_s
+      'hash' => new_hash,
+      'time' => @mb.now.to_s
     }
 
     @mb.local_storage(run_status)
