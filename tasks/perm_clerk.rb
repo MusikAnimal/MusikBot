@@ -145,9 +145,12 @@ module PermClerk
 
     done_regex = @mb.config['archive_config']['done']
     notdone_regex = @mb.config['archive_config']['notdone']
+    revoked_regex = @mb.config['archive_config']['revoked']
 
     resolution = if overriden_resolution
                    overriden_resolution
+                 elsif @section =~ /(?:#{revoked_regex})/i
+                   'revoked'
                  elsif @section =~ /(?:#{done_regex})/i
                    'done'
                  elsif @section =~ /(?:#{notdone_regex})/i
@@ -455,9 +458,38 @@ module PermClerk
       end
 
       return true
+    elsif resolution == 'revoked' && !overriden_resolution && api_relevant_permission
+      if @section.include?('<!-- mbHasPerm -->')
+        warn("    MusikBot already reported that #{@username} still has the permission #{@permission}")
+        @new_wikitext << SPLIT_KEY + @section
+      else
+        @request_changes << {
+          type: :saidPermission,
+          permission: @permission.downcase
+        }
+        @edit_summaries << :saidPermission
+
+        queue_changes
+
+        message = if @permission == 'AutoWikiBrowser'
+                    "has not been added to the [[#{AWB_CHECKPAGE}|check page]]"
+                  else
+                    "does not have the permission #{@permission}"
+                  end
+
+        record_error(
+          group: 'archive',
+          message: "User:#{@username} #{message}. " \
+            'Use <code><nowiki>{{subst:User:MusikBot/override|d}}</nowiki></code> to archive as approved or ' \
+            '<code><nowiki>{{subst:User:MusikBot/override|nd}}</nowiki></code> to archive as declined',
+          log_message: "    #{@username} #{message}"
+        )
+      end
+
+      return true
     end
 
-    resolution_page_name = resolution == 'done' ? 'Approved' : 'Denied'
+    resolution_page_name = resolution == 'done' || resolution == 'revoked' ? 'Approved' : 'Denied'
     info("    archiving as #{resolution_page_name.upcase}")
     archive_key = "#{resolution_page_name}/#{Date::MONTHNAMES[resolution_timestamp.month]} #{resolution_timestamp.year}"
     archive_set = @archive_changes[archive_key].to_a << {
@@ -800,6 +832,12 @@ module PermClerk
       else
         "does not appear to have the permission <tt>#{params[:permission]}</tt><!-- mbNoPerm -->"
       end
+    when :saidPermission
+      if params[:permission] == 'autowikibrowser'
+        "is still one the [[#{AWB_CHECKPAGE}|CheckPage]]<!-- mbHasPerm -->"
+      else
+        "still holds the <tt>#{params[:permission]} right</tt><!-- mbHasPerm -->"
+      end
     when :templateSpaceCount
       "has <!-- mb-templateSpaceCount -->#{params[:templateSpaceCount]}<!-- mb-templateSpaceCount-end --> " \
         "edit#{'s' if params[:templateSpaceCount] != 1} in the [[WP:TMP|template namespace]]"
@@ -857,7 +895,7 @@ module PermClerk
     summaries << 'unmet prerequisites' if @edit_summaries.include?(:prerequisites)
     summaries << 'found previously declined requests' if @edit_summaries.include?(:fetchdeclined)
     summaries << 'found previous revocations' if @edit_summaries.include?(:checkrevoked)
-    summaries << 'unable to archive one or more requests' if @edit_summaries.include?(:noSaidPermission)
+    summaries << 'unable to archive one or more requests' if @edit_summaries.include?(:noSaidPermission) || @edit_summaries.include?(:saidPermission)
     summaries << '{{WP:PERM/Backlog}}' if @edit_summaries.include?(:backlog)
     summaries << '{{WP:PERM/Backlog|none}}' if @edit_summaries.include?(:no_backlog)
 
