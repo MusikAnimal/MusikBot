@@ -56,7 +56,7 @@ module ECPMonitor
   end
 
   def self.ecp_titles
-    query('SELECT pt_namespace AS namesapce, pt_title AS title, pt_timestamp AS timestamp, pt_expiry AS expiry, ' \
+    query('SELECT pt_namespace AS namespace, pt_title AS title, pt_timestamp AS timestamp, pt_expiry AS expiry, ' \
       'pt_reason AS summary, user_name AS admin FROM protected_titles ' \
       "INNER JOIN user ON pt_user = user_id WHERE pt_create_perm = 'extendedconfirmed'").to_a
   end
