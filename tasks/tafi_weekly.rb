@@ -219,7 +219,7 @@ module TAFIWeekly
       reverts += 1 if revision.attributes['comment'] =~ /Reverted.*?edits?|Undid revision \d+/
     end
 
-    prose_data = @mb.wiki_tools(:article_analysis,
+    prose_data = @mb.wiki_tools('article_analysis/word_count'),
       page: old_tafi.gsub(/ /, '_'),
       revision: old_tafi_old_rev_id
     )
