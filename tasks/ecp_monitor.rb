@@ -58,7 +58,8 @@ module ECPMonitor
   def self.ecp_titles
     query('SELECT pt_namespace AS namespace, pt_title AS title, pt_timestamp AS timestamp, pt_expiry AS expiry, ' \
       'pt_reason AS summary, user_name AS admin FROM protected_titles ' \
-      "INNER JOIN user ON pt_user = user_id WHERE pt_create_perm = 'extendedconfirmed'").to_a
+      "INNER JOIN user ON pt_user = user_id WHERE pt_create_perm = 'extendedconfirmed' " \
+      "AND pt_timestamp > '#{offset_date}'").to_a
   end
 
   def self.ecp_total
