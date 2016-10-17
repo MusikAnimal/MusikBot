@@ -44,25 +44,25 @@ module CopyPatrol
   end
 
   def self.fetch_records(last_id)
-    query("SELECT id, page_title FROM #{copyright_table} WHERE id > ?", last_id).to_a
+    query("SELECT id, page_title FROM copyright_diffs WHERE lang = '#{@mb.lang}' AND id > ?", last_id).to_a
   end
 
   # Are there any wikiprojects for this title?
   def self.wikiprojects?(page_title)
-    query("SELECT COUNT(*) AS count FROM #{wikiproject_table} WHERE wp_page_title = ?", page_title).to_a.first['count'] > 0
+    query("SELECT COUNT(*) AS count FROM wikiprojects " \
+      "WHERE wp_lang = '#{@mb.lang}' AND wp_page_title = ?", page_title).to_a.first['count'] > 0
   end
 
   def self.write_wikiprojects(wikiprojects, record)
     wikiprojects.each do |wikiproject|
       # use underscores instead of spaces, to be consistent
-      query("INSERT INTO #{wikiproject_table} VALUES(NULL, ?, ?)",
-        record['page_title'], wikiproject.tr(' ', '_')
+      query("INSERT INTO wikiprojects VALUES(NULL, ?, ?, ?)",
+        record['page_title'], wikiproject.tr(' ', '_'), @mb.lang
       )
     end
   end
 
   def self.parse_wikiprojects(page_title)
-
     # mw:API:Revisions, and convert to Nokogiri markup
     talk_markup = Nokogiri::HTML(
       # Talk: namespace is always normalized to whatever it is for the given wiki
@@ -84,23 +84,8 @@ module CopyPatrol
         talk_markup.css('td b a')
           .collect { |link| link.attributes['href'].value.sub('/wiki/', '') }
           .select { |link| link =~ /^Projet:/ && !link.include?('/') && !link.include?('#') }
+          .map { |link| link.sub(/^Projet:/, '') }
     end
-  end
-
-  # get the wikiprojects table name for the given wiki
-  def self.wikiproject_table
-    {
-      'en.wikipedia' => 'wikiprojects',
-      'fr.wikipedia' => 'wikiprojects_frwiki'
-    }[@mb.opts[:project]]
-  end
-
-  # get the EranBot table name for the given wiki
-  def self.copyright_table
-    {
-      'en.wikipedia' => 'copyright_diffs',
-      'fr.wikipedia' => 'copyright_diffs_frwiki'
-    }[@mb.opts[:project]]
   end
 
   def self.query(sql, *values)
