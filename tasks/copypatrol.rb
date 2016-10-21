@@ -57,7 +57,7 @@ module CopyPatrol
     wikiprojects.each do |wikiproject|
       # use underscores instead of spaces, to be consistent
       query("INSERT INTO wikiprojects VALUES(NULL, ?, ?, ?)",
-        record['page_title'], wikiproject.tr(' ', '_'), @mb.lang
+        record['page_title'], wikiproject.tr(' ', '_'), @mb.lang.to_s
       )
     end
   end
