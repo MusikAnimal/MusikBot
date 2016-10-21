@@ -80,6 +80,7 @@ module CopyPatrol
         talk_markup.css('.wpb-header a, .mbox-text b a')
           .collect { |link| URI.decode(link.attributes['href'].value.sub('/wiki/Wikipedia:', '')) }.uniq
           .select { |link| link =~ /^WikiProject/ && !link.include?('/') && !link.include?('#') }
+          .map { |link| link.sub(/^WikiProject_/, '') }
       when 'fr.wikipedia'
         talk_markup.css('td b a')
           .collect { |link| link.attributes['href'].value.sub('/wiki/', '') }
