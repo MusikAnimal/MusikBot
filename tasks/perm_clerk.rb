@@ -386,7 +386,7 @@ module PermClerk
         prereq_text = prereq_count_regex.flatten[0]
         prereq_count = prereq_text.nil? ? 0 : prereq_count_regex.flatten[1].to_i
 
-        if !user_info[key.to_sym].nil? && user_info[key.to_sym].to_i > prereq_count && prereq_count > 0
+        if !user_info[key.to_sym].nil? && user_info[key.to_sym].to_i > prereq_count && prereq_count.positive?
           @section.gsub!(prereq_text, "<!-- mb-#{key} -->#{user_info[key.to_sym].to_i}<!-- mb-#{key}-end -->")
           @section.gsub!(@prereq_signature, '~~~~')
 
@@ -957,7 +957,8 @@ module PermClerk
       registration_date = user_info['registration'] ? @mb.parse_date(user_info['registration']) : nil
 
       @user_info_cache[username] = {
-        accountAge: registration_date ? (@mb.today - registration_date).to_i : 0,
+        # use 1,000,000 for account age if it is nil, since that usually means a really old account
+        accountAge: registration_date ? (@mb.today - registration_date).to_i : 1_000_000,
         editCount: user_info['editcount'].to_i,
         registration: registration_date,
         userGroups: api_obj.elements['groups'].to_a.collect { |g| g[0].to_s },
