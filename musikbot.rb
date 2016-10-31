@@ -178,8 +178,8 @@ module MusikBot
 
     # Database-related
     # FIXME: currently does enwiki-only
-    def repl_client
-      return @repl_client if @repl_client
+    def repl_client(reload = false)
+      return @repl_client if @repl_client && !reload
       un, pw, host, db, port = Auth.db_credentials(lang)
       @repl_client = Repl::Session.new(un, pw, host, db, port)
     end
@@ -219,13 +219,15 @@ module MusikBot
     end
 
     def local_storage(data = nil)
+      path = "#{PROJECT_ROOT}/disk_cache/#{@task}.yml"
+
       if data
-        file = File.open("#{PROJECT_ROOT}/disk_cache/#{@task}.yml", 'r+')
+        file = File.open(path, 'r+')
         file.write(YAML.dump(data))
         file.close
       else
         YAML.load(
-          File.open("#{PROJECT_ROOT}/disk_cache/#{@task}.yml", 'r').read
+          File.open(path, 'r').read
         )
       end
     end
