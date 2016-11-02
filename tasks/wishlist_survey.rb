@@ -3,7 +3,9 @@ require 'musikbot'
 require 'httparty'
 
 # WishlistSurvey task
-# boot with: `ruby wishlist_survey.rb --project meta.wikimedia --lang en --nobot`
+# boot with:
+#   ruby wishlist_survey.rb --edition 3 --project meta.wikimedia --lang en --nobot
+# --edition 3 instructs to use the 3 set of credentials, in this case for Community_Tech_bot
 # --nobot is necessary unless the account has the bot flag
 module WishlistSurvey
   SURVEY_ROOT = '2016 Community Wishlist Survey/Sandbox'
@@ -40,13 +42,16 @@ module WishlistSurvey
         .select { |page| !page.sub(CATEGORY_ROOT + '/', '').include?('/') }
   end
 
+  # get usernames of editors to given category page
   def self.get_editors(category)
     sql = 'SELECT DISTINCT(rev_user_text) AS editor ' \
         "FROM metawiki_p.revision WHERE rev_page = #{page_id(category)}"
     @mb.repl.query(sql).to_a.collect { |row| row['editor'] }
   end
 
+  # get number of proposals to given category page
   def self.num_proposals(category)
+    # considers any level 2 heading as a proposal
     @mb.get(category).scan(/\n==[^=]/).size
   end
 
