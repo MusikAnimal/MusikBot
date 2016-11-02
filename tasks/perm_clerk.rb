@@ -17,8 +17,8 @@ module PermClerk
     @errors = {}
     @total_user_count = 0
 
-    @mb.config['pages'].keys.each do |permission|
-      @permission = permission
+    @mb.config[:pages].keys.each do |permission|
+      @permission = permission.to_s
       @edit_summaries = []
       @headers_removed = {}
       @users_count = 0
@@ -75,7 +75,7 @@ module PermClerk
       @flag_as_ran = true
     end
 
-    if @mb.config['run']['autoformat']
+    if @mb.config[:run][:autoformat]
       info('Checking for extraneous headers')
       old_wikitext = remove_headers(old_wikitext)
     end
@@ -143,9 +143,9 @@ module PermClerk
 
     info('  Resolution override found') if overriden_resolution
 
-    done_regex = @mb.config['archive_config']['done']
-    notdone_regex = @mb.config['archive_config']['notdone']
-    revoked_regex = @mb.config['archive_config']['revoked']
+    done_regex = @mb.config[:archive_config][:done]
+    notdone_regex = @mb.config[:archive_config][:notdone]
+    revoked_regex = @mb.config[:archive_config][:revoked]
 
     resolution = if overriden_resolution
                    overriden_resolution
@@ -160,8 +160,8 @@ module PermClerk
                  end
 
     resolution_timestamp = @mb.parse_date(
-      @section.scan(/(?:#{@mb.config['archive_config'][resolution.to_s]}).*(\d\d:\d\d, \d+ \w+ \d{4} \(UTC\))/i).flatten.drop(1).last
-    )
+      @section.scan(/(?:#{@mb.config[:archive_config][resolution.to_sym]}).*(\d\d:\d\d, \d+ \w+ \d{4} \(UTC\))/i).flatten.drop(1).last
+    ) if resolution
 
     # use newest timestamp when forcing resolution and no resolution template exists
     if resolution_timestamp.nil? && overriden_resolution
@@ -206,7 +206,7 @@ module PermClerk
 
   # Core tasks
   def self.fetch_declined
-    return if !@mb.config['run']['fetch_declined'] || @permission == 'Confirmed'
+    return if !@mb.config[:run][:fetch_declined] || @permission == 'Confirmed'
     info("  Searching for declined #{@permission} requests by #{@username}...")
 
     # cache for a day
@@ -229,7 +229,7 @@ module PermClerk
   end
 
   def self.find_links
-    target_date = @mb.today - @mb.config['fetchdeclined_config']['offset']
+    target_date = @mb.today - @mb.config[:fetchdeclined_config][:offset]
     links = []
     dates_to_fetch = (target_date..@mb.today).select { |d| d.day == target_date.day || d.day == @mb.today.day }.uniq(&:month)
 
@@ -259,7 +259,7 @@ module PermClerk
   end
 
   def self.autorespond
-    return false unless @mb.config['run']['autorespond'] && api_relevant_permission
+    return false unless @mb.config[:run][:autorespond] && api_relevant_permission
     info("    User has permission #{@permission}")
 
     if sysop? || @permission == 'AutoWikiBrowser'
@@ -279,7 +279,7 @@ module PermClerk
         type: :autorespond,
         resolution: '{{already done}}'
       }
-    elsif @mb.now > time_granted + Rational(@mb.config['autorespond_config']['offset'].to_i, 24)
+    elsif @mb.now > time_granted + Rational(@mb.config[:autorespond_config][:offset].to_i, 24)
       info('      Admin apparently forgot to respond to the request')
       request_change = {
         type: :autorespond_admin_forgot,
@@ -303,7 +303,7 @@ module PermClerk
   end
 
   def self.autoformat
-    return unless @mb.config['run']['autoformat']
+    return unless @mb.config[:run][:autoformat]
 
     # FIXME: make this work for AutoWikiBrowser (might work with |access) or rather it is auto-removed by the template
     fragmented_regex = /\{\{rfplinks.*\}\}\n:(Reason for requesting (?:#{@permission.downcase}) (?:rights|access)) .*\(UTC\)(?m:(.*?)(?:\n\=\=|\z))/
@@ -357,7 +357,7 @@ module PermClerk
   end
 
   def self.prerequisites
-    return unless @mb.config['run']['prerequisites'] && prereqs.present? && @permission != 'Confirmed' # && !@username.downcase.match(/bot$/)
+    return unless @mb.config[:run][:prerequisites] && prereqs.present? && @permission != 'Confirmed' # && !@username.downcase.match(/bot$/)
     info("  Checking if #{@username} meets configured prerequisites...")
 
     if @mb.redis_client.get("mb-#{@username}-#{@permission}-qualified")
@@ -369,7 +369,7 @@ module PermClerk
     user_info = get_user_info(@username, prereqs.keys)
 
     prereqs.each do |key, value|
-      pass = user_info[key.to_sym] >= value rescue nil
+      pass = user_info[key] >= value rescue nil
       next if pass.nil? && user_info && user_info[:editCount] > 50_000
 
       if pass.nil?
@@ -405,7 +405,7 @@ module PermClerk
   end
 
   def self.archiving(resolution, overriden_resolution, resolution_timestamp)
-    return false unless @mb.config['run']['archive'] && resolution.present?
+    return false unless @mb.config[:run][:archive] && resolution.present?
     should_archive_now = @section.match(/\{\{User:MusikBot\/archivenow\}\}/)
 
     if resolution_timestamp.nil?
@@ -418,7 +418,7 @@ module PermClerk
     end
 
     # not time to archive
-    unless should_archive_now || @newest_timestamp + Rational(@mb.config['archive_config']['offset'].to_i, 24) < @mb.now
+    unless should_archive_now || @newest_timestamp + Rational(@mb.config[:archive_config][:offset].to_i, 24) < @mb.now
       return false
     end
 
@@ -603,7 +603,7 @@ module PermClerk
   end
 
   def self.check_revoked
-    return unless @mb.config['run']['checkrevoked']
+    return unless @mb.config[:run][:checkrevoked]
 
     info("  Checking revocations of #{@permission} for #{@username}...")
 
@@ -633,14 +633,14 @@ module PermClerk
       leprop: 'timestamp|details'
     ).elements['logevents'].to_a
 
-    normalized_perm = @mb.config['pages'][@permission]
+    normalized_perm = @mb.config[:pages][@permission.to_sym]
 
     logevents.each do |event|
       in_old = event.elements['params/oldgroups'].collect(&:text).grep(normalized_perm).any?
       in_new = event.elements['params/newgroups'].collect(&:text).grep(normalized_perm).any?
       timestamp = @mb.parse_date(event.attributes['timestamp'])
 
-      next unless in_old && !in_new && timestamp > @mb.today - @mb.config['checkrevoked_config']['offset']
+      next unless in_old && !in_new && timestamp > @mb.today - @mb.config[:checkrevoked_config][:offset]
 
       # offset by 1 second since it will show everything _before_ the given timestamp
       log_timestamp = timestamp.strftime('%Y%m%d%H%M') + (timestamp.second + 1).to_s
@@ -655,7 +655,7 @@ module PermClerk
   def self.check_revoked_awb
     old_awb_content = @mb.get_revision_at_date(
       AWB_CHECKPAGE,
-      @mb.today - @mb.config['checkrevoked_config']['offset']
+      @mb.today - @mb.config[:checkrevoked_config][:offset]
     ) rescue nil
 
     if old_awb_content && old_awb_content =~ /\n\*\s*#{Regexp.escape(@username)}\s*\n/ && !(awb_checkpage_content =~ /\n\*\s*#{Regexp.escape(@username)}\s*\n/)
@@ -668,11 +668,11 @@ module PermClerk
   def self.admin_backlog
     # always update for Account creator
     is_account_creator = @permission == 'Account creator'
-    return unless @mb.config['run']['admin_backlog']
+    return unless @mb.config[:run][:admin_backlog]
 
     oldest_timestamp = @open_timestamps.min { |a, b| @mb.parse_date(a) <=> @mb.parse_date(b) }
-    min_num_requests = is_account_creator ? 0 : @mb.config['adminbacklog_config']['requests']
-    has_old_requests = oldest_timestamp ? @mb.parse_date(oldest_timestamp) <= @mb.today - @mb.config['adminbacklog_config']['offset'] : false
+    min_num_requests = is_account_creator ? 0 : @mb.config[:adminbacklog_config][:requests]
+    has_old_requests = oldest_timestamp ? @mb.parse_date(oldest_timestamp) <= @mb.today - @mb.config[:adminbacklog_config][:offset] : false
 
     backlogged = @new_wikitext.include?('{{WP:PERM/Backlog}}')
 
@@ -729,11 +729,11 @@ module PermClerk
       prereq_sig_regex = @section.scan(/(\<!-- mbsig --\>.*\<!-- mbdate --\> (\d\d:\d\d.*\d{4} \(UTC\)))/)
       @prereq_signature = prereq_sig_regex.flatten[0]
       @prereq_timestamp = prereq_sig_regex.flatten[1]
-      if @mb.now > @mb.parse_date(@prereq_timestamp) + Rational(@mb.config['prerequisites_config']['offset'], 1440)
+      if @mb.now > @mb.parse_date(@prereq_timestamp) + Rational(@mb.config[:prerequisites_config][:offset], 1440)
         info('  Found expired prerequisite data')
         return true
       else
-        info("  Prerequisite data under #{@mb.config['prerequisites_config']['offset']} minutes old")
+        info("  Prerequisite data under #{@mb.config[:prerequisites_config][:offset]} minutes old")
       end
     end
     false
@@ -810,12 +810,12 @@ module PermClerk
     when :autorespond_admin_forgot
       "by {{no ping|#{params[:admin]}}}"
     when :checkrevoked
-      "has had this permission revoked in the past #{@mb.config['checkrevoked_config']['offset']} days (#{params[:revokedLinks]})"
+      "has had this permission revoked in the past #{@mb.config[:checkrevoked_config][:offset]} days (#{params[:revokedLinks]})"
     when :editCount
       "has <!-- mb-editCount -->#{params[:editCount]}<!-- mb-editCount-end --> total edits"
     when :fetchdeclined
       "has had #{params[:numDeclined]} request#{'s' if params[:numDeclined].to_i > 1} for #{@permission.downcase} " \
-        "declined in the past #{@mb.config['fetchdeclined_config']['offset']} days (#{params[:declinedLinks]})"
+        "declined in the past #{@mb.config[:fetchdeclined_config][:offset]} days (#{params[:declinedLinks]})"
     when :mainSpaceCount
       "has <!-- mb-mainSpaceCount -->#{params[:mainSpaceCount]}<!-- mb-mainSpaceCount-end --> " \
         "edit#{'s' if params[:mainSpaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
@@ -914,7 +914,7 @@ module PermClerk
   end
 
   def self.prereqs
-    @mb.config['run']['prerequisites'] ? @mb.config['prerequisites_config'][@permission] : nil
+    @mb.config[:run][:prerequisites] ? @mb.config[:prerequisites_config][@permission.to_sym] : nil
   end
 
   # API-related
@@ -925,7 +925,7 @@ module PermClerk
     if @permission == 'AutoWikiBrowser'
       awb_checkpage_content =~ /\n\*\s*#{Regexp.escape(@username)}\s*\n/ ? 'AutoWikiBrowser' : nil
     else
-      get_user_info(@username)[:userGroups].grep(/#{@mb.config['pages'][@permission]}/).first
+      get_user_info(@username)[:userGroups].grep(/#{@mb.config[:pages][@permission.to_sym]}/).first
     end
   end
 
@@ -966,7 +966,7 @@ module PermClerk
       }
     end
 
-    if data_attrs.include?('rights_log')
+    if data_attrs.include?(:rights_log)
       @user_info_cache[username][:rights_log] = @mb.gateway.custom_query(
         list: 'logevents',
         letype: 'rights',
@@ -981,21 +981,21 @@ module PermClerk
       data_attrs.each do |data_attr|
         count =
           case data_attr.downcase
-          when 'articlecount'
+          when :articlecount
             @mb.repl_client.count_articles_created(username)
-          when 'modulespacecount'
+          when :modulespacecount
             @mb.repl_client.count_namespace_edits(username, 828)
-          when 'mainspacecount'
+          when :mainspacecount
             @mb.repl_client.count_namespace_edits(username, 0)
-          when 'manualmainspacecount'
+          when :manualmainspacecount
             @mb.repl_client.count_nonautomated_namespace_edits(username, 0)
-          when 'templatespacecount'
+          when :templatespacecount
             @mb.repl_client.count_namespace_edits(username, 10)
-          when 'templateandmodulespacecount'
+          when :templateandmodulespacecount
             @mb.repl_client.count_namespace_edits(username, [10, 828])
           end
 
-        @user_info_cache[username].store(data_attr.to_sym, count) if count
+        @user_info_cache[username].store(data_attr, count) if count
       end
     end
 
@@ -1003,8 +1003,8 @@ module PermClerk
   end
 
   def self.fetch_last_granted
-    logevents = get_user_info(@username, 'rights_log')[:rights_log]
-    normalized_perm = /#{@mb.config['pages'][@permission]}/
+    logevents = get_user_info(@username, :rights_log)[:rights_log]
+    normalized_perm = /#{@mb.config[:pages][@permission.to_sym]}/
 
     # should fetch the latest as the API returns it by date in ascending order
     logevents.each do |event|

@@ -3,15 +3,10 @@ module Repl
     require 'mysql2'
     require 'httparty'
 
-    def initialize(username, password, host, db, port)
-      @client = Mysql2::Client.new(
-        host: host,
-        username: username,
-        password: password,
-        database: db,
-        port: port
-      )
-      @db = db
+    def initialize(opts)
+      @logging = opts.delete(:log)
+      @client = Mysql2::Client.new(opts)
+      @db = opts[:db]
       @getter = HTTParty
       @base_uri = 'https://tools.wmflabs.org/musikanimal/api/nonautomated_edits'
     end
@@ -61,8 +56,13 @@ module Repl
     end
 
     def query(sql)
-      puts sql
+      puts sql if @logging
       @client.query(sql)
+    end
+
+    def prepare(sql)
+      puts sql if @logging
+      @client.prepare(sql)
     end
 
     private

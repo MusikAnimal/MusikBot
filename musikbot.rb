@@ -1,69 +1,13 @@
 require 'optparse'
 require 'i18n'
 require 'mediawiki-gateway'
-require 'auth'
 require 'redis'
-require 'httparty'
+require 'mysql2'
 require 'repl'
+require 'httparty'
+require 'core_extensions'
 require 'uri'
 require 'pry-byebug'
-
-class Object
-  def present?
-    !blank?
-  end
-
-  def blank?
-    respond_to?(:empty?) ? empty? : !self
-  end
-end
-
-class String
-  def capitalize_first
-    self[0] = self[0].capitalize
-    self
-  end
-
-  def uncapitalize
-    self[0, 1].downcase + self[1..-1]
-  end
-
-  def uppercase?
-    match(/\p{Upper}/).present?
-  end
-
-  def lowercase?
-    !uppercase?
-  end
-
-  def capitalized?
-    self[0, 1].uppercase?
-  end
-
-  def score
-    tr(' ', '_')
-  end
-
-  def descore
-    tr('_', ' ')
-  end
-
-  def translate(opts = {})
-    I18n.t(self, opts)
-  end
-  alias_method :t, :translate
-end
-
-def t(key, opts = {})
-  if I18n.locale == :en && opts.blank?
-    key
-  elsif key.is_a?(Symbol)
-    I18n.t(key, opts)
-  else
-    res = key.clone.uncapitalize.translate(opts)
-    key.capitalized? ? res.capitalize_first : res.uncapitalize
-  end
-end
 
 module MusikBot
   class Session
@@ -71,44 +15,43 @@ module MusikBot
       @task = task
       @opts = {
         prodonly: prodonly,
-        project: env == 'test' && !prodonly ? 'test.wikipedia' : 'en.wikipedia'
+        project: env == 'test' && !prodonly ? 'test.wikipedia' : 'en.wikipedia',
+        edition: 1
       }
       OptionParser.new do |args|
         args.banner = 'Usage: script.rb [options]'
 
         args.on('-p', '--project PROJECT', 'Project name (en.wikipedia)') { |v| @opts[:project] = v }
+        args.on('-l', '--lang LANGUAGE', 'Language code (en)') { |v| @opts[:lang] = v.to_sym }
+        args.on('-b', '--nobot', 'Don\'t assert as bot') { @opts[:nobot] = true }
+        args.on('-e', '--env ENVIRONMENT', 'production to use specified wiki, or test to use testwiki')
+        args.on('-f', '--edition EDITION', '1 for MusikBot, 2 for MusikBot II, etc.') { |v| @opts[:edition] = v }
+        args.on('-d', '--dry', 'pass to disable all editing and instead invoke debugger') { @opts[:dry] = true }
       end.parse!
 
-      @opts[:lang] = env == 'test' ? :en : @opts[:project].scan(/^\w\w/).first.to_sym
-      I18n.load_path = Dir["#{PROJECT_ROOT}/dictionaries/*/*.yml"]
+      unless @opts[:lang]
+        @opts[:lang] = env == 'test' ? :en : @opts[:project].scan(/^\w\w/).first.to_sym
+      end
+
+      I18n.load_path = Dir[dir('dictionaries/*/*.yml')]
       I18n.backend.load_translations
       I18n.config.available_locales = [:en, :fr, :pt]
       I18n.locale = @opts[:lang]
 
-      @gateway = MediaWiki::Gateway.new("https://#{@opts[:project]}.org/w/api.php",
-        bot: bot?,
-        retry_count: 5,
-        user_agent: "MusikBot/1.1 (https://#{@opts[:project]}.org/wiki/User:MusikBot/)",
-        ignorewarnings: true
-      )
-      Auth.login(@gateway)
+      login
 
-      unless @task =~ /Console|SoundSearch/ || @opts[:prodonly] || env == 'test' || get("User:MusikBot/#{@task}/Run") == 'true'
+      unless @task =~ /Console|SoundSearch/ || @opts[:prodonly] || env == 'test' || get("User:#{username}/#{@task}/Run") == 'true'
         report_error("#{@task} disabled")
         exit 1
       end
     end
     attr_reader :opts
-    attr_reader :gateway
     attr_reader :task
 
-    def env
-      if @env.present?
-        @env
-      else
-        @env = File.open("#{PROJECT_ROOT}/env").read.strip
-      end
+    def environment
+      @environment ||= app_config[:environment]
     end
+    alias_method :env, :environment
 
     def lang
       @opts[:lang]
@@ -116,7 +59,7 @@ module MusikBot
 
     def bot?
       bot_blacklist = ['fr.wikipedia']
-      !bot_blacklist.include?(@opts[:project])
+      !bot_blacklist.include?(@opts[:project]) && !@opts[:nobot]
     end
 
     # Utilities
@@ -177,16 +120,40 @@ module MusikBot
     end
 
     # Database-related
-    # FIXME: currently does enwiki-only
-    def repl_client(reload = false)
-      return @repl_client if @repl_client && !reload
-      un, pw, host, db, port = Auth.db_credentials(lang)
-      @repl_client = Repl::Session.new(un, pw, host, db, port)
+    def repl_client(opts = {})
+      opts = {
+        reload: false,
+        database: nil,
+        credentials: :replica,
+        log: true
+      }.merge(opts)
+      return @repl_client if @repl_client && !opts.delete(:reload)
+      @repl_client = Repl::Session.new(
+        { database: opts[:database] || db + '_p' }.merge(app_config[opts[:credentials]])
+      )
+    end
+    alias_method :repl, :repl_client
+
+    def local_client(db, reload = false)
+      return @local_client if @local_client && !reload
+      @local_client = Mysql2::Client.new(
+        app_config[:local].merge(database: db)
+      )
+    end
+
+    def site_map
+      @site_map ||= YAML.load(
+        File.open(dir('config/site_map.yml')).read
+      )
+    end
+
+    def db
+      site_map[@opts[:project]]
     end
 
     # Cache-related
     def redis_client
-      @redis_client ||= Auth.redis
+      @redis_client ||= Redis.new(app_config[:redis])
     end
 
     def cache(base_key, time = 3600)
@@ -201,7 +168,7 @@ module MusikBot
     end
 
     def disk_cache(filename, time = 3600)
-      filename = "#{PROJECT_ROOT}/disk_cache/#{filename}.yml"
+      filename = dir("disk_cache/#{filename}.yml")
 
       if File.mtime(filename) < Time.now.utc - time
         ret = yield
@@ -219,25 +186,35 @@ module MusikBot
     end
 
     def local_storage(data = nil)
-      path = "#{PROJECT_ROOT}/disk_cache/#{@task}.yml"
+      filename = dir("disk_cache/#{@task}.yml")
 
       if data
-        file = File.open(path, 'r+')
+        file = File.open(filename, 'r+')
         file.write(YAML.dump(data))
         file.close
       else
         YAML.load(
-          File.open(path, 'r').read
+          File.open(filename, 'r').read
         )
       end
     end
 
     # API-related
+    def gateway
+      @gateway ||= MediaWiki::Gateway.new("https://#{@opts[:project]}.org/w/api.php",
+        bot: bot?,
+        retry_count: 5,
+        user_agent: "#{username}/1.1 (https://#{@opts[:project]}.org/wiki/User:#{username}/)",
+        ignorewarnings: true
+      )
+    end
+
     def get(page, opts = {})
-      @gateway.get(page, opts)
+      gateway.get(page, opts)
     end
 
     def edit(page, opts = {})
+      return binding.pry if @opts[:dry]
       opts.merge(contentformat: 'text/x-wiki')
       if opts.delete(:conflicts)
         opts.merge(
@@ -246,11 +223,11 @@ module MusikBot
         )
       end
 
-      @gateway.edit(page, opts.delete(:content), opts)
+      gateway.edit(page, opts.delete(:content), opts)
     end
 
     def config
-      @config ||= JSON.parse(CGI.unescapeHTML(get("User:MusikBot/#{@task}/config")))
+      @config ||= JSON.parse(CGI.unescapeHTML(get("User:#{username}/#{@task}/config"))).symbolize_keys
     end
 
     def get_revision_at_date(page, date, opts = {})
@@ -264,7 +241,7 @@ module MusikBot
         rvlimit: 1
       }.merge(opts)
 
-      page_obj = @gateway.custom_query(opts).elements['pages'][0]
+      page_obj = gateway.custom_query(opts).elements['pages'][0]
 
       return nil if page_obj.nil?
 
@@ -288,7 +265,7 @@ module MusikBot
         titles: page
       }.merge(opts)
 
-      page_obj = @gateway.custom_query(opts).elements['pages'][0]
+      page_obj = gateway.custom_query(opts).elements['pages'][0]
       unless page_obj.elements['revisions']
         report_error("Unable to fetch properties of [[#{page}]] - page does not exist!")
       end
@@ -314,7 +291,7 @@ module MusikBot
         contentformat: 'text/x-wiki',
         summary: "Reporting #{@task} errors"
       }
-      page = "User:MusikBot/#{@task}/Error log"
+      page = "User:#{username}/#{@task}/Error log"
 
       if e
         STDERR.puts "#{'>' * 20} #{DateTime.now.strftime('%Y-%m-%d %H:%M:%S')}"
@@ -329,10 +306,39 @@ module MusikBot
       last_timestamp, last_message = content.split(/\[(.*?)\] /).last(2)
       if last_message != message || parse_date(last_timestamp) < today - 1
         message = "\n*[~~~~~] #{message}"
-        @gateway.edit(page, content + message, opts)
+        gateway.edit(page, content + message, opts)
       end
 
       false
+    end
+
+    def username
+      app_config[:api][:"edition_#{@opts[:edition]}"][:wiki_user]
+    end
+
+    private
+
+    def dir(path = '')
+      File.dirname(__FILE__) + '/' + path
+    end
+
+    def app_config
+      @app_config ||= YAML.load(
+        File.open(
+          dir('config/application.yml')
+        ).read
+      ).symbolize_keys
+    end
+
+    def login(throttle = 0)
+      return if throttle > 5
+      sleep throttle * 5
+      gateway.login(
+        app_config[:api][:"edition_#{@opts[:edition]}"][:username],
+        app_config[:api][:"edition_#{@opts[:edition]}"][:password]
+      )
+    rescue MediaWiki::APIError
+      mw.login(throttle + 1)
     end
   end
 end

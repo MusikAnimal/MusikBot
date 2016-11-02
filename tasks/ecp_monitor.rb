@@ -14,15 +14,6 @@ module ECPMonitor
       @mb.local_storage['last_run']
     )
 
-    un, pw, host, db, port = Auth.db_credentials(@mb.lang)
-    @client = Mysql2::Client.new(
-      host: host,
-      username: un,
-      password: pw,
-      database: db,
-      port: port
-    )
-
     @mb.edit(TOTAL_PAGE,
       summary: "Updating number of pages under [[WP:30/500|extended confirmed protection]] (#{ecp_total})",
       content: ecp_total
@@ -47,7 +38,7 @@ module ECPMonitor
   end
 
   def self.ecp_changes
-    query('SELECT log_namespace AS namespace, log_title AS title, log_timestamp AS timestamp, pr_expiry AS expiry, ' \
+    @mb.repl.query('SELECT log_namespace AS namespace, log_title AS title, log_timestamp AS timestamp, pr_expiry AS expiry, ' \
       'pr_type AS type, log_comment AS summary, log_user_text AS admin FROM logging ' \
       'INNER JOIN page_restrictions ON log_page = pr_page ' \
       "WHERE (log_action = 'protect' OR log_action = 'modify') " \
@@ -56,14 +47,14 @@ module ECPMonitor
   end
 
   def self.ecp_titles
-    query('SELECT pt_namespace AS namespace, pt_title AS title, pt_timestamp AS timestamp, pt_expiry AS expiry, ' \
+    @mb.repl.query('SELECT pt_namespace AS namespace, pt_title AS title, pt_timestamp AS timestamp, pt_expiry AS expiry, ' \
       'pt_reason AS summary, user_name AS admin FROM protected_titles ' \
       "INNER JOIN user ON pt_user = user_id WHERE pt_create_perm = 'extendedconfirmed' " \
       "AND pt_timestamp > '#{offset_date}'").to_a
   end
 
   def self.ecp_total
-    @ecp_total ||= query(
+    @ecp_total ||= @mb.repl.query(
       "SELECT COUNT(*) AS count FROM page_restrictions WHERE pr_type = 'edit' AND pr_level = 'extendedconfirmed'"
     ).to_a[0]['count']
   end
@@ -149,11 +140,6 @@ module ECPMonitor
 
   def self.offset_date
     (@mb.now - offset).strftime('%Y%m%d%H%M%S')
-  end
-
-  def self.query(sql)
-    puts sql
-    @client.query(sql)
   end
 
   def self.namespace(value)

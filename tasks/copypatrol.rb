@@ -6,21 +6,15 @@ require 'uri'
 module CopyPatrol
   def self.run
     @mb = MusikBot::Session.new(inspect)
+    # credentials option is by default :replica, we have our copypatrol-specific
+    #   credentials for the s51306__copyright_p database in application.yml under the :copypatrol hash
+    @client = @mb.repl_client(credentials: :copypatrol, log: false)
 
     # double accepted REXML response size to handle *really* large talk pages
     REXML::Document.entity_expansion_text_limit = 20_480
 
     # this ID represents the id of the last record we processed in copyright_diffs
     last_id = @mb.local_storage[@mb.opts[:project]]
-
-    un, pw, host, db, port = Auth.copyright_p_credentials
-    @client = Mysql2::Client.new(
-      host: host,
-      username: un,
-      password: pw,
-      database: db,
-      port: port
-    )
 
     # get the all the CopyPatrol records since the last run
     records = fetch_records(last_id)

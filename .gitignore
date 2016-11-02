@@ -6,3 +6,4 @@ env
 .bundle
 .ruby-version
 disk_cache
+application.yml

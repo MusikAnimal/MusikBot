@@ -6,19 +6,19 @@ module TAFIWeekly
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    scheduled_article = add_new_scheduled_selection if @mb.config['run']['add_new_scheduled_selection']
-    remove_entry_from_afi(scheduled_article) if @mb.config['run']['remove_entry_from_afi']
-    create_schedule_page(scheduled_article) if @mb.config['run']['prepare_scheduled_selection']
-    archive_schedule if @mb.config['run']['archive_scheduled_entries']
+    scheduled_article = add_new_scheduled_selection if @mb.config[:run][:add_new_scheduled_selection]
+    remove_entry_from_afi(scheduled_article) if @mb.config[:run][:remove_entry_from_afi]
+    create_schedule_page(scheduled_article) if @mb.config[:run][:prepare_scheduled_selection]
+    archive_schedule if @mb.config[:run][:archive_scheduled_entries]
 
-    tag_new_tafi if @mb.config['run']['tag_new_tafi']
-    detag_old_tafi if @mb.config['run']['detag_old_tafi']
-    add_former_tafi if @mb.config['run']['add_former_tafi']
+    tag_new_tafi if @mb.config[:run][:tag_new_tafi]
+    detag_old_tafi if @mb.config[:run][:detag_old_tafi]
+    add_former_tafi if @mb.config[:run][:add_former_tafi]
 
-    message_project_members if @mb.config['run']['message_project_members']
-    notify_wikiprojects if @mb.config['run']['notify_wikiprojects']
+    message_project_members if @mb.config[:run][:message_project_members]
+    notify_wikiprojects if @mb.config[:run][:notify_wikiprojects]
 
-    add_accomplishments if @mb.config['run']['add_accomplishments']
+    add_accomplishments if @mb.config[:run][:add_accomplishments]
   rescue => e
     @mb.report_error('Fatal error', e)
   end
@@ -340,7 +340,7 @@ module TAFIWeekly
   end
 
   def self.wikiproject_exclusions
-    @mb.config['config']['wikiproject_exclusions']
+    @mb.config[:config][:wikiproject_exclusions]
   end
 
   def self.last_week
@@ -350,8 +350,6 @@ module TAFIWeekly
   def self.resolve_redirect(page)
     @mb.gateway.custom_query(titles: page, prop: 'info', redirects: 1).elements['pages'][0].attributes['title']
   end
-
-  # API-related
 end
 
 TAFIWeekly.run

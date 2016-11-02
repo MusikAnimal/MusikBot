@@ -1,0 +1,24 @@
+# Application configuration
+# To set up ports for the replica and redis, consider using SSH tunnels:
+#   ssh -L 4711:enwiki.labsdb:3306 -L 4712:tools-redis:6379 username@tools-dev.wmflabs.org
+environment: production # or 'test' which uses test.wikipedia
+api:
+  edition_1: # for MusikBot
+    username: username
+    password: password
+  edition_2: # for MusikBot II
+    username: username
+    password: password
+repl:
+  host: 127.0.0.1
+  port: 4711
+  username: username
+  password: password
+local_db:
+  host: 127.0.0.1
+  port: 3306
+  username: username
+  password: password
+redis:
+  host: 127.0.0.1
+  port: 4712

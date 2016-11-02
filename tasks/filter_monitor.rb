@@ -1,20 +1,12 @@
 $LOAD_PATH << '..'
 require 'musikbot'
-require 'mysql2'
 
 module FilterMonitor
   def self.run
     @mb = MusikBot::Session.new(inspect)
-    un, pw, host, db, port = Auth.ef_db_credentials(@mb.lang)
-    @client = Mysql2::Client.new(
-      host: host,
-      username: un,
-      password: pw,
-      database: db,
-      port: port
-    )
-    @template_name = "#{t('User')}:MusikBot/FilterMonitor/#{t('Recent changes')}"
-    @total_count_name = "#{t('User')}:MusikBot/FilterMonitor/#{t('Count')}"
+
+    @template_name = "#{t('User')}:#{@mb.username}/FilterMonitor/#{t('Recent changes')}"
+    @total_count_name = "#{t('User')}:#{@mb.username}/FilterMonitor/#{t('Count')}"
 
     enabled_count = current_filters.to_a.select { |ef| ef.attributes['enabled'] }.length
     @mb.edit(
@@ -74,7 +66,7 @@ module FilterMonitor
         insert(current_filter)
       end
 
-      net_changes << changes unless current_filter['private'] == '1' && @mb.config['private'] == false
+      net_changes << changes unless current_filter['private'] == '1' && @mb.config[:private] == false
     end
 
     net_changes
@@ -126,11 +118,11 @@ module FilterMonitor
     content.chomp!('&mdash;')
     content.chomp!('; ')
 
-    return unless @mb.config['lasteditor'] || @mb.config['lastedittime']
+    return unless @mb.config[:lasteditor] || @mb.config[:lastedittime]
 
     content += "\n:<!-- mb-date=#{@mb.wiki_date(data['lastedittime'], :en)} -->#{t(:last_changed, id: data['filter_id'])}"
-    content += " #{t('by')} {{no ping|#{data['lasteditor']}}}" if @mb.config['lasteditor']
-    content += " #{t('at')} #{@mb.wiki_date(data['lastedittime'])}" if @mb.config['lastedittime']
+    content += " #{t('by')} {{no ping|#{data['lasteditor']}}}" if @mb.config[:lasteditor]
+    content += " #{t('at')} #{@mb.wiki_date(data['lastedittime'])}" if @mb.config[:lastedittime]
   end
 
   def self.parse_template(template)
@@ -180,7 +172,7 @@ module FilterMonitor
   end
 
   def self.comparison_props
-    @mb.config.select { |_k, v| v }.keys - %w(lasteditor lastedittime)
+    @mb.config.select { |_k, v| v }.keys - [:lasteditor, :lastedittime]
   end
 
   def self.current_filters
@@ -196,13 +188,13 @@ module FilterMonitor
   end
 
   def self.saved_filters
-    @saved_filters ||= @client.query('SELECT * FROM filters').to_a
+    @saved_filters ||= client.query('SELECT * FROM filters').to_a
   end
 
   # API methods
   def self.fetch_old_templates
     filters = @mb.get(@template_name).split(/^'''/).drop(1).map { |f| "'''#{f.rstrip}" }
-    filters.keep_if { |f| @mb.parse_date(f.scan(/\<!-- mb-date=(\d\d:\d\d.*?\d{4} \(UTC\)) --\>/).flatten[0]) > @mb.now - @mb.config['offset'] }
+    filters.keep_if { |f| @mb.parse_date(f.scan(/\<!-- mb-date=(\d\d:\d\d.*?\d{4} \(UTC\)) --\>/).flatten[0]) > @mb.now - @mb.config[:offset] }
   end
 
   def self.write_template(page, content, summaries)
@@ -220,6 +212,10 @@ module FilterMonitor
   end
 
   # Database related stuff
+  def self.client
+    @client ||= @mb.local_client("edit_filters#{@mb.lang != :en ? '_' + @mb.lang : ''}")
+  end
+
   def self.create_table
     query('CREATE TABLE filters (id INT PRIMARY KEY AUTO_INCREMENT, filter_id INT, description VARCHAR(255), actions VARCHAR(255), ' \
     'pattern VARCHAR(255), lasteditor VARCHAR(255), lastedittime DATETIME, enabled TINYINT, deleted TINYINT, private TINYINT);')
@@ -241,7 +237,7 @@ module FilterMonitor
 
   def self.query(sql)
     puts sql
-    @client.query(sql)
+    client.query(sql)
   end
 
   def self.attr_value(value)
@@ -260,7 +256,7 @@ module FilterMonitor
 
     if digest
       %w(description lasteditor).each do |prop|
-        data[prop] = @client.escape(data[prop].to_s)
+        data[prop] = client.escape(data[prop].to_s)
       end
       data['pattern'] = Digest::MD5.hexdigest(data['pattern']) rescue ''
     end

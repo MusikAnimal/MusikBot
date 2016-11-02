@@ -12,7 +12,7 @@ module TAFIDaily
 
     process_nomination_board
 
-    if @mb.config['run']['rotate_nominations'] && rotation_expired
+    if @mb.config[:run][:rotate_nominations] && rotation_expired
       rotate_nominations
       @mb.local_storage('last_run' => @mb.now.to_s)
     end
@@ -21,7 +21,7 @@ module TAFIDaily
   end
 
   def self.rotate_nominations(throttle = 0)
-    text = @mb.get_page_props(nominations_board_page_name, rvsection: @mb.config['config']['nominations_section']).chomp('').chomp('{{/TOC}}')
+    text = @mb.get_page_props(nominations_board_page_name, rvsection: @mb.config[:config][:nominations_section]).chomp('').chomp('{{/TOC}}')
     genres = []
 
     sections = text.split(/^==([^=].*?[^=])==\s*\n/)
@@ -52,7 +52,7 @@ module TAFIDaily
       content: ([intro] + genres.rotate).join("\n\n") + "\n\n\n{{/TOC}}",
       summary: "Rotating nominations; #{error_summaries.join(';')}".chomp('; '),
       conflicts: true,
-      section: @mb.config['config']['nominations_section']
+      section: @mb.config[:config][:nominations_section]
     )
   rescue MediaWiki::APIError => e
     if throttle > 3
@@ -81,9 +81,9 @@ module TAFIDaily
       newest_timestamp = @mb.parse_date(timestamps.min { |a, b| @mb.parse_date(b) <=> @mb.parse_date(a) })
       next unless newest_timestamp
 
-      should_archive = newest_timestamp + Rational(@mb.config['config']['archive_offset'], 24) < @mb.now
+      should_archive = newest_timestamp + Rational(@mb.config[:config][:archive_offset], 24) < @mb.now
 
-      if newest_timestamp < @mb.today - @mb.config['config']['auto_unapprove_offset']
+      if newest_timestamp < @mb.today - @mb.config[:config][:auto_unapprove_offset]
         unapproved_entires_count += 1
         text.gsub!(section, '')
         archive_entries << section.chomp('') + "\n{{unapproved}} (automated closure) No further input after 21 days ~~~~"
@@ -100,11 +100,11 @@ module TAFIDaily
 
     return unless archive_entries.any?
 
-    if @mb.config['run']['update_afi_page'] && approved_entries.any?
+    if @mb.config[:run][:update_afi_page] && approved_entries.any?
       add_afti_entries(approved_entries)
     end
 
-    if @mb.config['run']['archive_nominations']
+    if @mb.config[:run][:archive_nominations]
       approved_count = approved_entries.length
       unapproved_count = unapproved_entires_count
       archive_nominations(archive_entries, approved_count, unapproved_count)
@@ -160,7 +160,7 @@ module TAFIDaily
   end
 
   def self.nominations_board_page_name
-    @mb.config['config']['nominations_board_page_name']
+    @mb.config[:config][:nominations_board_page_name]
   end
 
   def self.archive_page_name

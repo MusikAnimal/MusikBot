@@ -1,24 +1,25 @@
 $LOAD_PATH << '..'
 require 'musikbot'
-require 'nokogiri'
-require 'uri'
 
 module AWBListMan
-  AWB_CHECKPAGE = 'User:MusikBot/AWBListMan/CheckPage'.freeze
-  REPORT_PAGE = 'User:MusikBot/AWBListMan/Report'.freeze
+  AWB_CHECKPAGE = 'User:MusikBot II/AWBListMan/CheckPage'.freeze
+  REPORT_PAGE = 'User:MusikBot II/AWBListMan/Report'.freeze
 
   def self.run
-    @mb = MusikBot::Session.new(inspect)
+    @mb = MusikBot::Session.new(inspect, true)
 
-    disk_cache = @mb.local_storage
+    disk_cache = @mb.local_storage || {
+      'users' => [],
+      'last_run' => @mb.now.to_s
+    }
     @old_users = disk_cache['users'] || []
     @last_run = @mb.parse_date(disk_cache['last_run'])
 
     all_new_users = []
 
-    %w(bot user).each do |user_type|
+    [:bot, :user].each do |user_type|
       config = @mb.config[user_type]
-      users = @mb.get(AWB_CHECKPAGE, rvsection: config['section']).split("\n")
+      users = @mb.get(AWB_CHECKPAGE, rvsection: config[:section]).split("\n")
       @removed_users = {
         admins: [],
         indefinitely_blocked: [],
@@ -32,16 +33,16 @@ module AWBListMan
 
       # which list of users to go off of based on whether we're editing that section on the AWB CheckPage
       #   or just making a report of those who would be revoked if we were editing the page
-      users_list = config['enabled'] ? new_users : @old_users
+      users_list = config[:enabled] ? new_users : @old_users
 
       all_new_users += users_list
 
-      user_type_str = user_type.clone.capitalize_first
+      user_type_str = user_type.to_s.capitalize_first
 
-      if config['enabled']
+      if config[:enabled]
         @mb.edit(AWB_CHECKPAGE,
           content: section_text,
-          section: config['section'],
+          section: config[:section],
           summary: "#{user_type_str}s: #{edit_summary}"
         )
       end
@@ -59,13 +60,13 @@ module AWBListMan
 
       @mb.edit("User:MusikBot/AWBListMan/#{user_type_str} count",
         content: users_list.length,
-        summary: "Reporting #{pluralize_num(user_type, users_list.length)} with AWB access"
+        summary: "Reporting #{user_type.pluralize_num(users_list.length)} with AWB access"
       )
     end
 
     @mb.local_storage(
-      'users' => all_new_users,
-      'last_run' => @mb.now.to_s
+      'last_run' => @mb.now.to_s,
+      'users' => all_new_users
     )
   rescue => e
     @mb.report_error('Fatal error', e)
@@ -102,10 +103,10 @@ module AWBListMan
       if info[:user_groups].include?('sysop')
         puts user_name + ' is sysop'
         @removed_users[:admins] << user_name
-      elsif info[:block_time] && info[:block_time] < @mb.today - @mb.config[user_type]['block_offset'] && info[:indefinite]
+      elsif info[:block_time] && info[:block_time] < @mb.today - @mb.config[user_type][:block_offset] && info[:indefinite]
         puts user_name + ' is blocked'
         @removed_users[:indefinitely_blocked] << user_name
-      elsif info[:last_edit] && info[:last_edit] < @mb.today - @mb.config[user_type]['edit_offset']
+      elsif info[:last_edit] && info[:last_edit] < @mb.today - @mb.config[user_type][:edit_offset]
         puts user_name + ' is inactive'
         @removed_users[:inactive] << user_name
       else
@@ -175,20 +176,20 @@ module AWBListMan
     removed_users = []
 
     if @removed_users[:admins].any?
-      removed_users << pluralize_num('admin', @removed_users[:admins].length)
+      removed_users << 'admin'.pluralize_num(@removed_users[:admins].length)
     end
     if @removed_users[:indefinitely_blocked].any?
-      removed_users << pluralize_num('indefinitely blocked user', @removed_users[:indefinitely_blocked].length)
+      removed_users << 'indefinitely blocked user'.pluralize_num(@removed_users[:indefinitely_blocked].length)
     end
     if @removed_users[:inactive].any?
-      removed_users << pluralize_num('inactive user', @removed_users[:inactive].length)
+      removed_users << 'inactive user'.pluralize_num(@removed_users[:inactive].length)
     end
 
     # we've removed users
     summary << "#{report ? 'reporting' : 'removed'} #{removed_users.join(', ')}" if removed_users.any?
 
     if @removed_users[:renamed].any?
-      summary << pluralize('user', @removed_users[:renamed].length) + ' renamed'
+      summary << 'user'.pluralize(@removed_users[:renamed].length) + ' renamed'
     end
 
     summary.join('; ')
@@ -201,7 +202,7 @@ module AWBListMan
     [:admins, :renamed, :indefinitely_blocked, :inactive].each do |section|
       title = section.to_s.tr('_', ' ').capitalize_first
       if [:indefinitely_blocked, :inactive].include?(section)
-        key = section == :inactive ? 'edit_offset' : 'block_offset'
+        key = section == :inactive ? :edit_offset : :block_offset
         title += " for #{@mb.config[user_type][key]} days"
       end
       markup += "\n=== #{title} ===\n"
@@ -211,7 +212,7 @@ module AWBListMan
     end
 
     checkpage = '[[Wikipedia:AutoWikiBrowser/CheckPage|CheckPage]]'
-    preface = if @mb.config[user_type]['enabled']
+    preface = if @mb.config[user_type][:enabled]
                 "#{total} #{user_type}s have been automatically removed from the #{checkpage}. If they are re-added, they will automatically be removed from this report.\n"
               else
                 "#{total} #{user_type}s potentially eligible to be removed from the #{checkpage}.{{pb}}" \
@@ -220,20 +221,6 @@ module AWBListMan
               end
 
     preface + markup
-  end
-
-  def self.pluralize(string, count)
-    "#{string}#{count > 1 ? 's' : ''}"
-  end
-
-  def self.pluralize_num(string, count)
-    "#{count} #{pluralize(string, count)}"
-  end
-
-  def self.query(sql, *values)
-    puts sql
-    statement = @client.prepare(sql)
-    statement.execute(*values)
   end
 end
 
