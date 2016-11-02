@@ -4,16 +4,24 @@
 environment: production # or 'test' which uses test.wikipedia
 api:
   edition_1: # for MusikBot
+    wiki_user: MusikBot
     username: username
     password: password
   edition_2: # for MusikBot II
+    wiki_user: MusikBot II
     username: username
     password: password
-repl:
+replica:
   host: 127.0.0.1
   port: 4711
   username: username
   password: password
+copypatrol: # private database on enwiki.labsdb
+  host: 127.0.0.1
+  port: 4711
+  username: username
+  password: password
+  database: s51306__copyright_p
 local_db:
   host: 127.0.0.1
   port: 3306
