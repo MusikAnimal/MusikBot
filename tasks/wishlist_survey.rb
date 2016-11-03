@@ -21,11 +21,11 @@ module WishlistSurvey
       editors = get_editors(category)
       total_proposals += proposals = num_proposals(category)
       all_editors += editors
-      @mb.edit("#{@category_root}/#{category}/Proposals",
+      @mb.edit("#{category}/Proposals",
         content: proposals,
         summary: "Updating proposal count"
       )
-      @mb.edit("#{@category_root}/#{category}/Editors",
+      @mb.edit("#{category}/Editors",
         content: editors.length,
         summary: "Updating editor count"
       )
