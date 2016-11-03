@@ -26,6 +26,9 @@ module WishlistSurvey
     all_editors = []
 
     categories.each do |category|
+      # skip if the page is a redirect
+      next if redirect?(category)
+
       editors = get_editors(category)
       total_proposals += proposals = num_proposals(category)
       all_editors += editors
@@ -75,6 +78,15 @@ module WishlistSurvey
     @mb.local_storage(cached_counts)
   end
 
+  def self.redirect?(category)
+    !@mb.gateway.custom_query(
+      action: 'query',
+      titles: category,
+      prop: 'info',
+      formatversion: 2
+    ).elements['pages'].first.attributes['redirect'].nil?
+  end
+
   # get direct child subpages of @category_root (and not the /Count pages, etc.)
   def self.categories
     # Opensearch evidently is severely lagged, so using plain ole list=search instead
@@ -84,7 +96,6 @@ module WishlistSurvey
       list: 'search',
       srlimit: 50,
       srprop: 'title',
-      srredirects: false,
       srsearch: @category_root + '/'
     ).elements['search']
       .collect do |result|
