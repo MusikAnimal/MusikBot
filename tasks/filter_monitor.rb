@@ -213,7 +213,7 @@ module FilterMonitor
 
   # Database related stuff
   def self.client
-    @client ||= @mb.local_client("s52506__edit_filters#{@mb.lang != :en ? '_' + @mb.lang : ''}")
+    @client ||= @mb.local_client("s52506__edit_filters#{@mb.lang != :en ? '_' + @mb.lang.to_s : ''}")
   end
 
   def self.create_table
