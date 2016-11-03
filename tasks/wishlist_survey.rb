@@ -43,14 +43,22 @@ module WishlistSurvey
 
   # get direct child subpages of @category_root (and not the /Count pages, etc.)
   def self.categories
-    api_root = @mb.gateway.wiki_url
-
-    # mediawiki-gateway framework does not support anything outside action=query, so use HTTParty.
-    # Opensearch has a weird response, what we want is always the second element in the returned array.
-    # profile=strict ensures we get results that precisely match @category_root.
-    @categories ||= # cache in instance variable
-      HTTParty.get("#{api_root}?action=opensearch&search=#{@category_root}/&profile=strict&redirects=resolve&limit=100")[1]
-        .select { |page| !page.sub(@category_root + '/', '').include?('/') }
+    # Opensearch evidently is severely lagged, so using plain ole list=search instead
+    # The caveat is it returns all sorts of unrelated crap, but we should be OK
+    #   with fetching 50 results and filtering accordingly
+    @categories ||= @mb.gateway.custom_query(
+      list: 'search',
+      srlimit: 50,
+      srprop: 'title',
+      srredirects: false,
+      srsearch: @category_root + '/'
+    ).elements['search']
+      .collect do |result|
+        # matches @category_root plus the first subpage following it, or nil if there's no match
+        result.attributes['title'].scan(/^(#{@category_root}\/.*?)(?:\/|$)/).flatten[0]
+      end
+      .compact # remove nils
+      .uniq
   end
 
   # get usernames of editors to given category page
