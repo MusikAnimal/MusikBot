@@ -16,6 +16,12 @@ module WishlistSurvey
 
     @category_root = "#{@survey_root}/Categories"
 
+    # get counts from previous run, with defaults if they haven't been set yet
+    cached_counts = {
+      'total_proposals' => 0,
+      'total_editors' => 0
+    }.merge(@mb.local_storage || {})
+
     total_proposals = 0
     all_editors = []
 
@@ -24,24 +30,49 @@ module WishlistSurvey
       total_proposals += proposals = num_proposals(category)
       all_editors += editors
 
-      @mb.edit("#{category}/Proposals",
-        content: proposals,
-        summary: "Updating proposal count"
-      )
-      @mb.edit("#{category}/Editors",
-        content: editors.length,
-        summary: "Updating editor count"
-      )
+      # get counts for this category from previous run, with defaults if they haven't been set yet
+      cached_counts[category] = {
+        'proposals' => 0,
+        'editors' => 0
+      }.merge(cached_counts[category] || {})
+
+      # only attempt to edit if there's a change in the counts
+      if cached_counts[category]['proposals'] != proposals
+        @mb.edit("#{category}/Proposals",
+          content: proposals,
+          summary: "Updating proposal count"
+        )
+        cached_counts[category]['proposals'] = proposals
+      end
+      if cached_counts[category]['editors'] != editors.length
+        @mb.edit("#{category}/Editors",
+          content: editors.length,
+          summary: "Updating editor count"
+        )
+        cached_counts[category]['editors'] = editors.length
+      end
     end
 
-    @mb.edit("#{@survey_root}/Total proposals",
-      content: total_proposals,
-      summary: "Updating total proposal count"
-    )
-    @mb.edit("#{@survey_root}/Total editors",
-      content: all_editors.uniq.length,
-      summary: "Updating total editor count"
-    )
+    total_editors = all_editors.uniq.length
+
+    # only attempt to edit if there's a change in the counts
+    if cached_counts['total_proposals'] != total_proposals
+      @mb.edit("#{@survey_root}/Total proposals",
+        content: total_proposals,
+        summary: "Updating total proposal count"
+      )
+      cached_counts['total_proposals'] = total_proposals
+    end
+    if cached_counts['total_editors'] != total_editors
+      @mb.edit("#{@survey_root}/Total editors",
+        content: total_editors,
+        summary: "Updating total editor count"
+      )
+      cached_counts['total_editors'] = total_editors
+    end
+
+    # cache counts for use on the next run
+    @mb.local_storage(cached_counts)
   end
 
   # get direct child subpages of @category_root (and not the /Count pages, etc.)
