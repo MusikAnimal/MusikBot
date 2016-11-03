@@ -11,7 +11,9 @@ module WishlistSurvey
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
+    # fetches from User:Community_Tech_bot/WishlistSurvey/config
     @survey_root = @mb.config[:survey_root]
+
     @category_root = "#{@survey_root}/Categories"
 
     total_proposals = 0
@@ -21,6 +23,7 @@ module WishlistSurvey
       editors = get_editors(category)
       total_proposals += proposals = num_proposals(category)
       all_editors += editors
+
       @mb.edit("#{category}/Proposals",
         content: proposals,
         summary: "Updating proposal count"
