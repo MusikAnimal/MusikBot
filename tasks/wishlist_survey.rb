@@ -25,6 +25,8 @@ module WishlistSurvey
     total_proposals = 0
     all_editors = []
 
+    @edits = {}
+
     categories.each do |category|
       # skip if the page is a redirect
       next if redirect?(category)
@@ -41,17 +43,17 @@ module WishlistSurvey
 
       # only attempt to edit if there's a change in the counts
       if cached_counts[category]['proposals'] != proposals
-        @mb.edit("#{category}/Proposals",
+        @edits["#{category}/Proposals"] = {
           content: proposals,
           summary: "Updating proposal count"
-        )
+        }
         cached_counts[category]['proposals'] = proposals
       end
       if cached_counts[category]['editors'] != editors.length
-        @mb.edit("#{category}/Editors",
+        @edits["#{category}/Editors"] = {
           content: editors.length,
           summary: "Updating editor count"
-        )
+        }
         cached_counts[category]['editors'] = editors.length
       end
     end
@@ -60,22 +62,31 @@ module WishlistSurvey
 
     # only attempt to edit if there's a change in the counts
     if cached_counts['total_proposals'] != total_proposals
-      @mb.edit("#{@survey_root}/Total proposals",
+      @edits["#{@survey_root}/Total proposals"] = {
         content: total_proposals,
         summary: "Updating total proposal count"
-      )
+      }
       cached_counts['total_proposals'] = total_proposals
     end
     if cached_counts['total_editors'] != total_editors
-      @mb.edit("#{@survey_root}/Total editors",
+      @edits["#{@survey_root}/Total editors"] = {
         content: total_editors,
         summary: "Updating total editor count"
-      )
+      }
       cached_counts['total_editors'] = total_editors
     end
 
+    perform_edits
+
     # cache counts for use on the next run
     @mb.local_storage(cached_counts)
+  end
+
+  def self.perform_edits
+    @edits.keys.each do |page|
+      @mb.edit(page, @edits[page])
+      sleep 60
+    end
   end
 
   def self.redirect?(category)
