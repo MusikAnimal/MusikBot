@@ -172,7 +172,7 @@ module FilterMonitor
   end
 
   def self.comparison_props
-    @mb.config.select { |_k, v| v }.keys - [:lasteditor, :lastedittime]
+    (@mb.config.select { |_k, v| v }.keys - [:lasteditor, :lastedittime]).map(&:to_s)
   end
 
   def self.current_filters
