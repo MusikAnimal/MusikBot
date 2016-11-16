@@ -59,11 +59,11 @@ class String
   alias_method :t, :translate
 
   def pluralize(count = 0)
-    "#{string}#{count == 1 ? '' : 's'}"
+    "#{self}#{count == 1 ? '' : 's'}"
   end
 
   def pluralize_num(count = 0)
-    "#{count} #{pluralize(string, count)}"
+    "#{count} #{self.pluralize(count)}"
   end
 end
 

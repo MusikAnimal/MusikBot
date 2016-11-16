@@ -49,7 +49,7 @@ module AWBListMan
 
       @mb.edit("#{REPORT_PAGE}/#{user_type_str}",
         content: report_page(user_type),
-        summary: "#{user_type_str}s: #{edit_summary(false)}"
+        summary: "#{user_type_str}s: #{edit_summary(true)}"
       )
 
       @mb.edit(REPORT_PAGE,
@@ -60,7 +60,7 @@ module AWBListMan
 
       @mb.edit("User:MusikBot/AWBListMan/#{user_type_str} count",
         content: users_list.length,
-        summary: "Reporting #{user_type.pluralize_num(users_list.length)} with AWB access"
+        summary: "Reporting #{user_type.to_s.pluralize_num(users_list.length)} with AWB access"
       )
     end
 
@@ -91,12 +91,12 @@ module AWBListMan
 
     new_list = []
     @old_users.uniq.sort.each do |user_name|
-      # moved_info = moved_user_info(user_name)
+      moved_info = moved_user_info(user_name)
 
-      # if moved_info && moved_info[:timestamp] > @last_run && @old_users.include?(user_name)
-      #   @renamed << new_user_name
-      #   user_name = new_user_name
-      # end
+      if moved_info && moved_info[:timestamp] > @last_run && @old_users.include?(user_name)
+        @renamed << moved_info[:new_user_name]
+        user_name = new_user_name
+      end
 
       info = user_info(user_name)
 
@@ -146,29 +146,21 @@ module AWBListMan
     }
   end
 
-  # FIXME: needs to use global rename log on meta
   def self.moved_user_info(user_name)
-    events = @mb.gateway.custom_query(
-      list: 'logevents',
-      letype: 'move',
-      leprop: 'timestamp|comment|details',
-      letitle: "User:#{user_name}"
-    ).elements['logevents']
+    log_entry = @mb.repl.query(
+      "SELECT log_timestamp, log_params FROM metawiki_p.logging " \
+      "WHERE log_type = 'gblrename' AND log_params LIKE '%\"#{user_name.sub("'"){ "\\'" }}\"%'"
+    ).to_a.first
 
-    events.each do |event|
-      new_user_name = event.attributes['comment'].scan(
-        /renaming the user ".*?" to "\[\[Special:CentralAuth\/(.*?)\|/
-      ).flatten.first
-
-      if new_user_name
-        return {
-          user_name: new_user_name,
-          timestamp: @mb.parse_date(event.attributes['timestamp'])
-        }
-      end
+    # make sure there was a result and it was for the old username
+    if log_entry.nil? || user_name != log_entry['log_params'].scan(/olduser";s:\d*:"(.*?)";s/).flatten.first
+      return nil
     end
 
-    nil
+    {
+      timestamp: @mb.parse_date(log_entry['log_timestamp']),
+      new_user_name: log_entry['log_params'].scan(/newuser";s:\d*:"(.*?)";}/).flatten.first
+    }
   end
 
   def self.edit_summary(report = false)
@@ -217,7 +209,7 @@ module AWBListMan
               else
                 "#{total} #{user_type}s potentially eligible to be removed from the #{checkpage}.{{pb}}" \
                 "'''These users have not been automatically removed from the CheckPage'''. To enable this feature, set <code>enable</code> to " \
-                "<code>true</code> in the <code>#{user_type}</code> hash of the [[User:MusikBot/AWBListMan/config|config]].\n"
+                "<code>true</code> in the <code>#{user_type}</code> hash of the [[User:MusikBot II/AWBListMan/config|config]].\n"
               end
 
     preface + markup

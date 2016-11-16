@@ -112,6 +112,12 @@ module MusikBot
       parse_date(date).strftime('%Y%m%d000000')
     end
 
+    # HTTParty getter
+    def http_get(base_uri, params)
+      @getter ||= HTTParty
+      @getter.get(base_uri, params)
+    end
+
     # Wiki-tools
     def wiki_tools(tool, query)
       @getter ||= HTTParty
@@ -217,7 +223,7 @@ module MusikBot
       return binding.pry if @opts[:dry]
       opts.merge(contentformat: 'text/x-wiki')
       if opts.delete(:conflicts)
-        opts.merge(
+        opts.merge!(
           basetimestamp: @base_timestamp,
           starttimestamp: @start_timestamp
         )
