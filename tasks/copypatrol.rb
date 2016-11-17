@@ -77,14 +77,13 @@ module CopyPatrol
           .map { |link| link.sub(/^WikiProject_/, '') }
       when 'fr.wikipedia'
         talk_markup.css('td b a')
-          .collect { |link| link.attributes['href'].value.sub('/wiki/', '') }
+          .collect { |link| URI.decode(link.attributes['href'].value.sub('/wiki/', '')) }
           .select { |link| link =~ /^Projet:/ && !link.include?('/') && !link.include?('#') }
           .map { |link| link.sub(/^Projet:/, '') }
     end
   end
 
   def self.query(sql, *values)
-    puts sql
     statement = @client.prepare(sql)
     statement.execute(*values)
   end
