@@ -1,3 +1,5 @@
+# FIXME: report log-only filters that have remained unchange for N days
+
 $LOAD_PATH << '..'
 require 'musikbot'
 

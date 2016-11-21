@@ -8,12 +8,16 @@ module AWBListMan
   def self.run
     @mb = MusikBot::Session.new(inspect, true)
 
-    disk_cache = @mb.local_storage || {
-      'users' => [],
-      'last_run' => @mb.now.to_s
+    @disk_cache = @mb.local_storage || {
+      'enabled_users' => [],
+      'last_run' => @mb.now.to_s,
+      'report' => {},
+      'notified_users' => {}
     }
-    @old_users = disk_cache['users'] || []
-    @last_run = @mb.parse_date(disk_cache['last_run'])
+    @old_users = @disk_cache['enabled_users'] || []
+    @last_run = @mb.parse_date(@disk_cache['last_run'])
+    @old_report = @disk_cache['report']
+    @new_report = {}
 
     all_new_users = []
 
@@ -23,17 +27,17 @@ module AWBListMan
       @removed_users = {
         admins: [],
         indefinitely_blocked: [],
-        inactive: [],
-        renamed: []
+        inactive: []
       }
-      @old_users = []
-      new_users, section_text = process_users(users, user_type)
+      @renamed_users = []
+      @current_users = []
+      @new_users, section_text = process_users(users, user_type)
 
-      next unless new_users.present?
+      next unless @new_users.present?
 
       # which list of users to go off of based on whether we're editing that section on the AWB CheckPage
       #   or just making a report of those who would be revoked if we were editing the page
-      users_list = config[:enabled] ? new_users : @old_users
+      users_list = config[:enabled] ? @new_users : @current_users
 
       all_new_users += users_list
 
@@ -66,35 +70,39 @@ module AWBListMan
 
     @mb.local_storage(
       'last_run' => @mb.now.to_s,
-      'users' => all_new_users
+      'enabled_users' => all_new_users.uniq,
+      'report' => @new_report,
+      'notified_users' => @notified_users
     )
   rescue => e
     @mb.report_error('Fatal error', e)
   end
 
   def self.process_users(list, user_type)
-    user_names = []
+    new_users = []
     before_lines = []
     after_lines = []
 
     list.each do |line|
-      user_name = line.scan(/^\*\s*(.*?)\s*$/).first
+      user_name = line.scan(/^\*\s*(.*?)\s*$/).flatten.first
 
       if user_name
-        @old_users << user_name.first
-      elsif user_names.any? # hit the end of the list
+        @current_users << user_name
+      elsif @current_users.any? # hit the end of the list
         after_lines << line
       else # before the list
         before_lines << line
       end
     end
 
-    new_list = []
-    @old_users.uniq.sort.each do |user_name|
+    @current_users.uniq!
+    @current_users.sort!.each do |user_name|
       moved_info = moved_user_info(user_name)
 
       if moved_info && moved_info[:timestamp] > @last_run && @old_users.include?(user_name)
-        @renamed << moved_info[:new_user_name]
+        new_user_name = moved_info[:new_user_name]
+        puts "#{user_name} renamed to #{new_user_name}"
+        @renamed_users << new_user_name
         user_name = new_user_name
       end
 
@@ -107,21 +115,26 @@ module AWBListMan
         puts user_name + ' is blocked'
         @removed_users[:indefinitely_blocked] << user_name
       elsif info[:last_edit] && info[:last_edit] < @mb.today - @mb.config[user_type][:edit_offset]
-        puts user_name + ' is inactive'
-        @removed_users[:inactive] << user_name
+        if @disk_cache['inactive_users'].keys.include?(user_name)
+          puts user_name + ' is inactive'
+          @removed_users[:inactive] << user_name
+        else
+          puts username + ' - Notifying that access may be revoked'
+          # notify_inactive_user(user_name)
+          new_users << user_name
+        end
       else
         puts user_name
-        new_list << user_name
+        new_users << user_name
       end
     end
 
     # alphabetize
-    new_list.sort!
-    @old_users.sort!.uniq!
+    new_users.sort!
 
-    new_list_text = "\n" + new_list.map { |user| "* #{user}\n" }.join
-    new_text = before_lines.join("\n") + new_list_text + after_lines.join("\n")
-    [new_list, new_text]
+    new_users_text = "\n" + new_users.map { |user| "* #{user}\n" }.join
+    new_text = before_lines.join("\n") + new_users_text + after_lines.join("\n")
+    [new_users, new_text]
   end
 
   def self.user_info(user_name)
@@ -153,13 +166,13 @@ module AWBListMan
     ).to_a.first
 
     # make sure there was a result and it was for the old username
-    if log_entry.nil? || user_name != log_entry['log_params'].scan(/olduser";s:\d*:"(.*?)";s/).flatten.first
+    if log_entry.nil? || user_name != log_entry['log_params'].scan(/olduser";s:\d*:"(.*?)";/).flatten.first
       return nil
     end
 
     {
       timestamp: @mb.parse_date(log_entry['log_timestamp']),
-      new_user_name: log_entry['log_params'].scan(/newuser";s:\d*:"(.*?)";}/).flatten.first
+      new_user_name: log_entry['log_params'].scan(/newuser";s:\d*:"(.*?)";/).flatten.first
     }
   end
 
@@ -180,8 +193,8 @@ module AWBListMan
     # we've removed users
     summary << "#{report ? 'reporting' : 'removed'} #{removed_users.join(', ')}" if removed_users.any?
 
-    if @removed_users[:renamed].any?
-      summary << 'user'.pluralize(@removed_users[:renamed].length) + ' renamed'
+    if @renamed_users.any?
+      summary << 'user'.pluralize(@renamed_users.length) + ' renamed'
     end
 
     summary.join('; ')
@@ -191,16 +204,26 @@ module AWBListMan
     markup = ''
     total = 0
 
-    [:admins, :renamed, :indefinitely_blocked, :inactive].each do |section|
+    [:admins, :indefinitely_blocked, :inactive].each do |section|
       title = section.to_s.tr('_', ' ').capitalize_first
       if [:indefinitely_blocked, :inactive].include?(section)
         key = section == :inactive ? :edit_offset : :block_offset
         title += " for #{@mb.config[user_type][key]} days"
       end
+
+      # subtract @current_users to remove any in the old report that have been re-added
+      old_report = (@old_report[user_type.to_s] || {})[section.to_s] || []
+      removed_users = (@removed_users[section] + old_report) - @new_users
+      removed_users.sort!.uniq!
+
+      # update local report cache
+      @new_report[user_type.to_s] ||= {}
+      @new_report[user_type.to_s][section.to_s] = removed_users
+
       markup += "\n=== #{title} ===\n"
-      markup += "#{@removed_users[section].length} total\n"
-      markup += @removed_users[section].map { |username| "* {{no ping|#{username}}}\n" }.join
-      total += @removed_users[section].length
+      markup += "#{removed_users.length} total\n"
+      markup += removed_users.map { |username| "* {{no ping|#{username}}}\n" }.join
+      total += removed_users.length
     end
 
     checkpage = '[[Wikipedia:AutoWikiBrowser/CheckPage|CheckPage]]'
@@ -213,6 +236,23 @@ module AWBListMan
               end
 
     preface + markup
+  end
+
+  def self.notify_inactive_user(user_name)
+    @notified_users << { user_name: @mb.today }
+
+    message = "Hello #{user_name}! This message is to inform you that due to editing inactivity, your access to " \
+      "[[Wikipedia:AutoWikiBrowser|AutoWikiBrowser]] may be temporarily revoked. If you do not resume editing within " \
+      "the next week your username will be removed from the [[Wikipedia:AutoWikiBrowser/CheckPage|CheckPage]]. This is purely " \
+      "for routine maintenance and is not indicative of wrongdoing on your part. " \
+      "You may regain access at any time by simply requesting it at [[WP:PERM/AWB]]. Thank you! ~~~~"
+
+    @mb.edit("User talk:#{user_name}",
+      content: message,
+      section: 'new',
+      sectiontitle: 'Your access to AWB may be temporarily revoked',
+      summary: "Notification that access to [[WP:AWB|AutoWikiBrowser]] may be temporarily revoked due to inactivity"
+    )
   end
 end
 
