@@ -195,7 +195,7 @@ module MusikBot
       filename = dir("disk_cache/#{@task}.yml")
 
       if data
-        file = File.open(filename, 'r+')
+        file = File.open(filename, 'w')
         file.write(YAML.dump(data))
         file.close
       else

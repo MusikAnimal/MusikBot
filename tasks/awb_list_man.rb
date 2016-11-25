@@ -18,6 +18,7 @@ module AWBListMan
     @last_run = @mb.parse_date(@disk_cache['last_run'])
     @old_report = @disk_cache['report']
     @new_report = {}
+    @notified_users = {}
 
     all_new_users = []
 
@@ -115,11 +116,12 @@ module AWBListMan
         puts user_name + ' is blocked'
         @removed_users[:indefinitely_blocked] << user_name
       elsif info[:last_edit] && info[:last_edit] < @mb.today - @mb.config[user_type][:edit_offset]
-        if @disk_cache['inactive_users'].keys.include?(user_name)
+        if (@disk_cache['notified_users'] || {}).keys.include?(user_name)
           puts user_name + ' is inactive'
           @removed_users[:inactive] << user_name
         else
-          puts username + ' - Notifying that access may be revoked'
+          puts user_name + ' - Notifying that access may be revoked'
+          @notified_users[user_name] = @mb.today
           # notify_inactive_user(user_name)
           new_users << user_name
         end
@@ -239,8 +241,6 @@ module AWBListMan
   end
 
   def self.notify_inactive_user(user_name)
-    @notified_users << { user_name: @mb.today }
-
     message = "Hello #{user_name}! This message is to inform you that due to editing inactivity, your access to " \
       "[[Wikipedia:AutoWikiBrowser|AutoWikiBrowser]] may be temporarily revoked. If you do not resume editing within " \
       "the next week your username will be removed from the [[Wikipedia:AutoWikiBrowser/CheckPage|CheckPage]]. This is purely " \
