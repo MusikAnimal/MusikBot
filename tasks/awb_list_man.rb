@@ -122,7 +122,7 @@ module AWBListMan
         else
           puts user_name + ' - Notifying that access may be revoked'
           @notified_users[user_name] = @mb.today
-          # notify_inactive_user(user_name)
+          notify_inactive_user(user_name) if @mb.config[user_type][:enabled]
           new_users << user_name
         end
       else
@@ -241,17 +241,18 @@ module AWBListMan
   end
 
   def self.notify_inactive_user(user_name)
-    message = "Hello #{user_name}! This message is to inform you that due to editing inactivity, your access to " \
-      "[[Wikipedia:AutoWikiBrowser|AutoWikiBrowser]] may be temporarily revoked. If you do not resume editing within " \
-      "the next week your username will be removed from the [[Wikipedia:AutoWikiBrowser/CheckPage|CheckPage]]. This is purely " \
-      "for routine maintenance and is not indicative of wrongdoing on your part. " \
+    message = "Hello '''#{user_name}'''! This message is to inform you that due to editing inactivity, your access to " \
+      "[[Wikipedia:AutoWikiBrowser|AutoWikiBrowser]] may be temporarily removed. If you do not resume editing within " \
+      "the next week, your username will be removed from the [[Wikipedia:AutoWikiBrowser/CheckPage|CheckPage]]. " \
+      "This is purely for routine maintenance and is not indicative of wrongdoing on your part. " \
       "You may regain access at any time by simply requesting it at [[WP:PERM/AWB]]. Thank you! ~~~~"
 
     @mb.edit("User talk:#{user_name}",
       content: message,
       section: 'new',
-      sectiontitle: 'Your access to AWB may be temporarily revoked',
-      summary: "Notification that access to [[WP:AWB|AutoWikiBrowser]] may be temporarily revoked due to inactivity"
+      sectiontitle: 'Your access to AWB may be temporarily removed',
+      summary: "Notification that access to [[WP:AWB|AutoWikiBrowser]] may be temporarily removed due to inactivity",
+      redirect: true
     )
   end
 end
