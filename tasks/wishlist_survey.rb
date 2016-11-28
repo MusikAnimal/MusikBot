@@ -105,8 +105,7 @@ module WishlistSurvey
 
     @mb.local_storage(
       'counts' => cached_counts,
-      'last_rotation' => rotation_needed ? @mb.now.to_s : last_rotation.to_s,
-      'votes' => all_votes
+      'last_rotation' => rotation_needed ? @mb.now.to_s : last_rotation.to_s
     )
   end
 
