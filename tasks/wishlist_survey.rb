@@ -166,7 +166,7 @@ module WishlistSurvey
 
     @mb.edit(category,
       content: new_content,
-      summary: 'Rotating proposals',
+      summary: "Rotating proposals to ensure fair visibility (happens every #{@mb.config[:rotation_rate]} hours)",
       conflicts: true
     )
   rescue MediaWiki::APIError => e
