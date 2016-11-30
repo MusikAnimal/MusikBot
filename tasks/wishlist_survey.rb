@@ -212,7 +212,6 @@ module WishlistSurvey
 
     # build markup
     rows.each do |proposal, category, votes|
-      binding.pry if proposal.include?('table-style')
       # strip out links and nowiki tags from section title
       proposal = proposal.gsub(/\<nowiki\>|\<\/nowiki\>|\[|\]/, '')
       # change spaces to underscores, then URI encode for link
