@@ -18,15 +18,18 @@ module WishlistSurvey
     # get counts from previous run, with defaults if they haven't been set yet
     cached_counts = {
       'total_proposals' => 0,
-      'total_editors' => 0
+      'total_editors' => 0,
+      'total_support_votes' => 0,
+      'total_votes' => 0
     }.merge(@mb.local_storage['counts'] || {})
 
-    # rotate the proposals every 6 hours
+    # rotate the proposals every N hours (as specified by rotation_rate in config)
     last_rotation = @mb.local_storage['last_rotation']
     rotation_needed = @mb.parse_date(last_rotation) < @mb.now - (@mb.config[:rotation_rate].to_f / 24)
 
     total_proposals = 0
     total_votes = 0
+    total_support_votes = 0
     all_editors = []
     all_votes = {}
 
@@ -38,11 +41,19 @@ module WishlistSurvey
       total_proposals += proposals = num_proposals(category)
       all_editors += editors
 
-      category_votes = get_vote_counts(category)                # get votes for this category
-      category_votes = category_votes.sort_by {|_k, v| -v}.to_h # sort proposals by number of votes
-      all_votes[category] = category_votes                      # store votes in the category's hash
-      votes = category_votes.values.inject(:+)                  # total votes for this category
-      total_votes += votes
+      # get votes for this category
+      category_votes = get_vote_counts(category)
+
+      # sort proposals by number of support votes
+      category_votes = category_votes.sort_by {|_k, v| -v[:support]}.to_h
+
+      # store votes in the category's hash
+      all_votes[category] = category_votes
+
+      # total votes for this category
+      support_votes = category_votes.values.map { |v| v[:support] }.inject(:+)
+      total_votes += category_votes.values.map(&:values).flatten.inject(:+)
+      total_support_votes += support_votes
 
       # get counts for this category from previous run, with defaults if they haven't been set yet
       cached_counts[category] = {
@@ -52,12 +63,12 @@ module WishlistSurvey
       }.merge(cached_counts[category] || {})
 
       # only attempt to edit if there's a change in the counts
-      if cached_counts[category]['votes'] != votes
+      if cached_counts[category]['votes'] != support_votes
         @mb.edit("#{category}/Votes",
-          content: votes,
-          summary: "Updating vote count"
+          content: support_votes,
+          summary: "Updating support vote count"
         )
-        cached_counts[category]['votes'] = votes
+        cached_counts[category]['votes'] = support_votes
       end
       if cached_counts[category]['proposals'] != proposals
         @mb.edit("#{category}/Proposals",
@@ -82,11 +93,13 @@ module WishlistSurvey
     # only attempt to edit if there's a change in the counts
     if cached_counts['total_votes'] != total_votes
       create_vote_report(all_votes)
+    end
+    if cached_counts['total_support_votes'] != total_support_votes
       @mb.edit("#{@survey_root}/Total votes",
-        content: total_votes,
-        summary: "Updating total vote count"
+        content: total_support_votes,
+        summary: "Updating total support vote count"
       )
-      cached_counts['total_votes'] = total_votes
+      cached_counts['total_votes'] = total_support_votes
     end
     if cached_counts['total_proposals'] != total_proposals
       @mb.edit("#{@survey_root}/Total proposals",
@@ -188,22 +201,28 @@ module WishlistSurvey
     votes = {}
 
     proposals.each do |proposal|
-      count = proposal.downcase.scan(/\{\{(#{@mb.config[:support_templates]})\}\}/).flatten.length
+      supports = proposal.downcase.scan(/\{\{\s*(#{@mb.config[:support_templates]})\s*\}\}/).flatten.length
+      neutrals = proposal.downcase.scan(/\{\{\s*(#{@mb.config[:neutral_templates]})\s*\}\}/).flatten.length
+      opposes = proposal.downcase.scan(/\{\{\s*(#{@mb.config[:oppose_templates]})\s*\}\}/).flatten.length
       title = proposal.scan(/^(.*?)==\n/).flatten.first.strip
-      votes[title] = count
+      votes[title] = {
+        support: supports,
+        neutral: neutrals,
+        opposes: opposes
+      }
     end
 
     votes
   end
 
   def self.create_vote_report(categories)
-    content = "{| class='wikitable sortable'\n!Proposal\n!Category\n!Support votes\n"
+    content = "{| class='wikitable sortable'\n!Proposal\n!Category\n!Support\n!Neutral\n!Oppose\n"
 
     # build array of proposal/category/votes for the report
     rows = []
     categories.each do |category, proposals|
       proposals.each do |proposal, count|
-        rows << [proposal, category, count]
+        rows << [proposal, category] + count.values
       end
     end
 
@@ -211,7 +230,7 @@ module WishlistSurvey
     rows = rows.sort_by { |_cat, _prop, count| -count }
 
     # build markup
-    rows.each do |proposal, category, votes|
+    rows.each do |proposal, category, supports, neutrals, opposes|
       # strip out links and nowiki tags from section title
       proposal = proposal.gsub(/\<nowiki\>|\<\/nowiki\>|\[|\]/, '')
       # change spaces to underscores, then URI encode for link
@@ -221,7 +240,9 @@ module WishlistSurvey
         |-
         | [[#{category}##{proposal_target}|<nowiki>#{proposal}</nowiki>]]
         | [[#{category}|#{category.split('/').last}]]
-        | #{votes}
+        | #{supports}
+        | #{neutrals}
+        | #{opposes}
       }
     end
 
