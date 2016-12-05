@@ -4,6 +4,8 @@ require 'nokogiri'
 require 'uri'
 
 module CopyPatrol
+  PAGE_ASSESSMENTS_PROJECTS = ['en.wikipedia']
+
   def self.run
     @mb = MusikBot::Session.new(inspect)
     # credentials option is by default :replica, we have our copypatrol-specific
@@ -14,24 +16,27 @@ module CopyPatrol
     REXML::Document.entity_expansion_text_limit = 20_480
 
     # this ID represents the id of the last record we processed in copyright_diffs
-    last_id = @mb.local_storage[@mb.opts[:project]]
+    disk_cache = @mb.local_storage
+    last_id = disk_cache[@mb.opts[:project]]
 
     # get the all the CopyPatrol records since the last run
     records = fetch_records(last_id)
 
     # loop through and fetch WikiProjects as needed
     records.each do |record|
+      page_title = record['page_title'].force_encoding('utf-8')
       # don't re-fetch WikiProjects - for now, that is
-      next if wikiprojects?(record['page_title'])
+      next if wikiprojects?(page_title)
 
-      wikiprojects = parse_wikiprojects(record['page_title'])
+      wikiprojects = fetch_wikiprojects(page_title)
 
       # save to database
-      write_wikiprojects(wikiprojects, record)
+      write_wikiprojects(wikiprojects, record) if wikiprojects.any?
     end
 
     # update the ID of the last run
-    @mb.local_storage(@mb.opts[:project] => records.last['id']) if records.any?
+    disk_cache[@mb.opts[:project]] = records.last['id']
+    @mb.local_storage(disk_cache) if records.any?
   rescue => e
     # gets logged to User:MusikBot/CopyPatrol/Error_log
     @mb.report_error('Fatal error', e)
@@ -56,7 +61,18 @@ module CopyPatrol
     end
   end
 
-  def self.parse_wikiprojects(page_title)
+  def self.fetch_wikiprojects(page_title)
+    # Use page assessments API if available for this project
+    if PAGE_ASSESSMENTS_PROJECTS.include?(@mb.opts[:project])
+      assessments = @mb.gateway.custom_query(
+        prop: 'pageassessments',
+        titles: page_title,
+        formatversion: 2
+      ).elements['pages'].first.elements['pageassessments'] || []
+
+      return assessments.collect { |pa| pa.attributes['project'] }
+    end
+
     # mw:API:Revisions, and convert to Nokogiri markup
     talk_markup = Nokogiri::HTML(
       # Talk: namespace is always normalized to whatever it is for the given wiki
@@ -70,11 +86,6 @@ module CopyPatrol
     # Uses XML query selectors to identify the WikiProject links, removing any sub-wikiprojects
     #   and the Wikipedia: prefix
     case @mb.opts[:project]
-      when 'en.wikipedia'
-        talk_markup.css('.wpb-header a, .mbox-text b a')
-          .collect { |link| URI.decode(link.attributes['href'].value.sub('/wiki/Wikipedia:', '')) }.uniq
-          .select { |link| link =~ /^WikiProject/ && !link.include?('/') && !link.include?('#') }
-          .map { |link| link.sub(/^WikiProject_/, '') }
       when 'fr.wikipedia'
         talk_markup.css('td b a')
           .collect { |link| URI.decode(link.attributes['href'].value.sub('/wiki/', '')) }
