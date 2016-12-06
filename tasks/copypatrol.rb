@@ -35,8 +35,10 @@ module CopyPatrol
     end
 
     # update the ID of the last run
-    disk_cache[@mb.opts[:project]] = records.last['id']
-    @mb.local_storage(disk_cache) if records.any?
+    if records.any?
+      disk_cache[@mb.opts[:project]] = records.last['id']
+      @mb.local_storage(disk_cache)
+    end
   rescue => e
     # gets logged to User:MusikBot/CopyPatrol/Error_log
     @mb.report_error('Fatal error', e)
