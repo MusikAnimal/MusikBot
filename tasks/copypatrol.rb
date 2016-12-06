@@ -66,8 +66,7 @@ module CopyPatrol
     if PAGE_ASSESSMENTS_PROJECTS.include?(@mb.opts[:project])
       assessments = @mb.gateway.custom_query(
         prop: 'pageassessments',
-        titles: page_title,
-        formatversion: 2
+        titles: page_title
       ).elements['pages'].first.elements['pageassessments'] || []
 
       return assessments.collect { |pa| pa.attributes['project'] }

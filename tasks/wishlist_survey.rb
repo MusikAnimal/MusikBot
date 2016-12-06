@@ -126,8 +126,7 @@ module WishlistSurvey
     !@mb.gateway.custom_query(
       action: 'query',
       titles: category,
-      prop: 'info',
-      formatversion: 2
+      prop: 'info'
     ).elements['pages'].first.attributes['redirect'].nil?
   end
 
