@@ -200,7 +200,7 @@ module WishlistSurvey
   end
 
   def self.create_vote_report(categories)
-    content = "{| class='wikitable sortable'\n!Proposal\n!Category\n!Support\n!Neutral\n!Oppose\n"
+    content = "{| class='wikitable sortable'\n!Rank\n!Proposal\n!Category\n!Support\n!Neutral\n!Oppose\n"
 
     # build array of proposal/category/votes for the report
     rows = []
@@ -213,8 +213,12 @@ module WishlistSurvey
     # sort all rows by count, descending
     rows = rows.sort_by { |_cat, _prop, count| -count }
 
+    rank = 0
+
     # build markup
     rows.each do |proposal, category, supports, neutrals, opposes|
+      rank += 1
+
       # strip out links and nowiki tags from section title
       proposal = proposal.gsub(/\<nowiki\>|\<\/nowiki\>|\[|\]/, '')
       # change spaces to underscores, then URI encode for link
@@ -222,6 +226,7 @@ module WishlistSurvey
 
       content += %Q{
         |-
+        | #{rank}
         | [[#{category}##{proposal_target}|<nowiki>#{proposal}</nowiki>]]
         | [[#{category}|#{category.split('/').last}]]
         | #{supports}
