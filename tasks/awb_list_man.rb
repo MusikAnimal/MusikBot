@@ -2,11 +2,11 @@ $LOAD_PATH << '..'
 require 'musikbot'
 
 module AWBListMan
-  AWB_CHECKPAGE = 'User:MusikBot II/AWBListMan/CheckPage'.freeze
+  AWB_CHECKPAGE = 'Wikipedia:AutoWikiBrowser/CheckPage'.freeze
   REPORT_PAGE = 'User:MusikBot II/AWBListMan/Report'.freeze
 
   def self.run
-    @mb = MusikBot::Session.new(inspect, true)
+    @mb = MusikBot::Session.new(inspect)
 
     @disk_cache = @mb.local_storage || {
       'enabled_users' => [],
