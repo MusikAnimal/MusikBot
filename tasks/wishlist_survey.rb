@@ -34,9 +34,6 @@ module WishlistSurvey
     all_votes = {}
 
     categories.each do |category|
-      # skip if the page is a redirect
-      next if redirect?(category)
-
       editors = get_editors(category)
       total_proposals += proposals = num_proposals(category)
       all_editors += editors
@@ -52,7 +49,9 @@ module WishlistSurvey
 
       # total votes for this category
       support_votes = category_votes.values.map { |v| v[:support] }.inject(:+)
-      total_votes += category_votes.values.map(&:values).flatten.inject(:+)
+      neutral_votes = category_votes.values.map { |v| v[:neutral] }.inject(:+)
+      oppose_votes = category_votes.values.map { |v| v[:oppose] }.inject(:+)
+      total_votes += support_votes + neutral_votes + oppose_votes
       total_support_votes += support_votes
 
       # get counts for this category from previous run, with defaults if they haven't been set yet
@@ -122,14 +121,6 @@ module WishlistSurvey
     )
   end
 
-  def self.redirect?(category)
-    !@mb.gateway.custom_query(
-      action: 'query',
-      titles: category,
-      prop: 'info'
-    ).elements['pages'].first.attributes['redirect'].nil?
-  end
-
   def self.categories
     @mb.config[:categories].collect { |cat| "#{@category_root}/#{cat}" }
   end
@@ -185,14 +176,27 @@ module WishlistSurvey
     votes = {}
 
     proposals.each do |proposal|
+      proposer = proposal.scan(/\n\*\s*'''Proposer'''\s*:.*?\[\[.*?(?:User(?: talk)?:|Special:Contributions\/)(.*?)(?:\]\]|\|)/i).flatten.first
+      voting_section = proposal.scan(/\n===\s*Voting.*?\n(.*)/m).flatten.first
+      lines = voting_section.scan(/^#[^:](.*?)\n/).flatten
+
       supports = proposal.downcase.scan(/\{\{\s*(#{@mb.config[:support_templates]})\s*\}\}/).flatten.length
       neutrals = proposal.downcase.scan(/\{\{\s*(#{@mb.config[:neutral_templates]})\s*\}\}/).flatten.length
       opposes = proposal.downcase.scan(/\{\{\s*(#{@mb.config[:oppose_templates]})\s*\}\}/).flatten.length
       title = proposal.scan(/^(.*?)==\n/).flatten.first.strip
+
+      proposer_sig = /\{\{\s*(#{@mb.config[:support_templates]})\s*\}\}.*?\[\[.*?(?:User(?: talk)?:|Special:Contributions\/)#{proposer}(?:\]\]|\|).*?\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)/
+
+      if proposer_voted = lines.select { |l| l =~ proposer_sig }.length == 1
+        supports -= 1
+      end
+
       votes[title] = {
         support: supports,
         neutral: neutrals,
-        opposes: opposes
+        oppose: opposes,
+        proposer: proposer,
+        proposer_voted: proposer_voted
       }
     end
 
@@ -200,7 +204,7 @@ module WishlistSurvey
   end
 
   def self.create_vote_report(categories)
-    content = "{| class='wikitable sortable'\n!Rank\n!Proposal\n!Category\n!Support\n!Neutral\n!Oppose\n"
+    content = "{| class='wikitable sortable'\n!Rank\n!Proposal\n!Category\n!Proposer\n!Proposer<br/>voted?\n!Support\n!Neutral\n!Oppose\n"
 
     # build array of proposal/category/votes for the report
     rows = []
@@ -216,7 +220,7 @@ module WishlistSurvey
     rank = 0
 
     # build markup
-    rows.each do |proposal, category, supports, neutrals, opposes|
+    rows.each do |proposal, category, supports, neutrals, opposes, proposer, proposer_voted|
       rank += 1
 
       # strip out links and nowiki tags from section title
@@ -224,11 +228,15 @@ module WishlistSurvey
       # change spaces to underscores, then URI encode for link
       proposal_target = URI.encode(proposal.score)
 
+      proposer_str = proposer ? "[[User:#{proposer}|#{proposer}]]" : 'Unparsable'
+
       content += %Q{
         |-
         | #{rank}
         | [[#{category}##{proposal_target}|<nowiki>#{proposal}</nowiki>]]
         | [[#{category}|#{category.split('/').last}]]
+        | #{proposer_str}
+        | #{proposer_voted ? 'Yes' : 'No'}
         | #{supports}
         | #{neutrals}
         | #{opposes}
