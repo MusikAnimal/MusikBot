@@ -39,7 +39,7 @@ module WishlistSurvey
       all_editors += editors
 
       # get votes for this category
-      category_votes = get_vote_counts(category)
+      category_votes = parse_category(category)
 
       # sort proposals by number of support votes
       category_votes = category_votes.sort_by {|_k, v| -v[:support]}.to_h
@@ -167,7 +167,7 @@ module WishlistSurvey
     end
   end
 
-  def self.get_vote_counts(category)
+  def self.parse_category(category)
     content = get_page(category)
     proposals = content.split(/\n==[^=]/)
 
@@ -187,6 +187,12 @@ module WishlistSurvey
 
       proposer_sig = /\{\{\s*(#{@mb.config[:support_templates]})\s*\}\}.*?\[\[.*?(?:User(?: talk)?:|Special:Contributions\/)#{proposer}(?:\]\]|\|).*?\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)/
 
+      # binding.pry if proposal.include?('Global settings')
+
+      statement, discussion = proposal.split(/<h3>\s*Community discussion\s*<\/h3>/)
+      phabs = statement.scan(/\[\[:?phab(?:ricator)?:(T\d+)|.*?phabricator\.wikimedia\.org\/(T\d+)/).flatten.compact
+      related_phabs = discussion.scan(/\[\[:?phab(?:ricator)?:(T\d+)|.*?phabricator\.wikimedia\.org\/(T\d+)/).flatten.compact - phabs
+
       if proposer_voted = lines.select { |l| l =~ proposer_sig }.length == 1
         supports -= 1
       end
@@ -196,7 +202,9 @@ module WishlistSurvey
         neutral: neutrals,
         oppose: opposes,
         proposer: proposer,
-        proposer_voted: proposer_voted
+        proposer_voted: proposer_voted,
+        phabs: phabs.uniq,
+        related_phabs: related_phabs.uniq
       }
     end
 
@@ -204,7 +212,7 @@ module WishlistSurvey
   end
 
   def self.create_vote_report(categories)
-    content = "{| class='wikitable sortable'\n!Rank\n!Proposal\n!Category\n!Proposer\n!Proposer<br/>voted?\n!Support\n!Neutral\n!Oppose\n"
+    content = "{| class='wikitable sortable'\n!Rank\n!Proposal\n!Category\n!Proposer\n!Proposer<br/>voted?\n![[File:Symbol support vote.svg|15px]]\n![[File:Symbol neutral vote.svg|15px]]\n![[File:Symbol oppose vote.svg|15px]]\n!Phabs\n"
 
     # build array of proposal/category/votes for the report
     rows = []
@@ -220,7 +228,7 @@ module WishlistSurvey
     rank = 0
 
     # build markup
-    rows.each do |proposal, category, supports, neutrals, opposes, proposer, proposer_voted|
+    rows.each do |proposal, category, supports, neutrals, opposes, proposer, proposer_voted, phabs, related_phabs|
       rank += 1
 
       # strip out links and nowiki tags from section title
@@ -229,6 +237,12 @@ module WishlistSurvey
       proposal_target = URI.encode(proposal.score)
 
       proposer_str = proposer ? "[[User:#{proposer}|#{proposer}]]" : 'Unparsable'
+
+      phabs = phabs.map { |p| "[[phab:#{p}|#{p}]]" }.join(', ')
+
+      if related_phabs.any?
+        phabs += "\n<small>Related: #{related_phabs.map { |p| "[[phab:#{p}|#{p}]]" }.join(', ')}</small>"
+      end
 
       content += %Q{
         |-
@@ -240,6 +254,7 @@ module WishlistSurvey
         | #{supports}
         | #{neutrals}
         | #{opposes}
+        | #{phabs}
       }
     end
 
