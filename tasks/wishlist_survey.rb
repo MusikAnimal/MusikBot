@@ -241,7 +241,7 @@ module WishlistSurvey
       phabs = phabs.map { |p| "[[phab:#{p}|#{p}]]" }.join(', ')
 
       if related_phabs.any?
-        phabs += "<br/><small>Related: #{related_phabs.map { |p| "[[phab:#{p}|#{p}]]" }.join(', ')}</small>"
+        phabs += "#{phabs.present? ? '<br/>' : ''}<small>Related: #{related_phabs.map { |p| "[[phab:#{p}|#{p}]]" }.join(', ')}</small>"
       end
 
       content += %Q{
