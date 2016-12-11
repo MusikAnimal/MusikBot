@@ -212,7 +212,7 @@ module WishlistSurvey
   end
 
   def self.create_vote_report(categories)
-    content = "{| class='wikitable sortable'\n!Rank\n!Proposal\n!Category\n!Proposer\n!Proposer<br/>voted?\n![[File:Symbol support vote.svg|15px]]\n![[File:Symbol neutral vote.svg|15px]]\n![[File:Symbol oppose vote.svg|15px]]\n!Phabs\n"
+    content = "{| class='wikitable sortable'\n!Rank\n!Proposal\n!Category\n!Proposer\n![[File:Symbol support vote.svg|15px]]\n![[File:Symbol neutral vote.svg|15px]]\n![[File:Symbol oppose vote.svg|15px]]\n!Phabs\n"
 
     # build array of proposal/category/votes for the report
     rows = []
@@ -250,7 +250,6 @@ module WishlistSurvey
         | [[#{category}##{proposal_target}|<nowiki>#{proposal}</nowiki>]]
         | [[#{category}|#{category.split('/').last}]]
         | #{proposer_str}
-        | #{proposer_voted ? 'Yes' : 'No'}
         | #{supports}
         | #{neutrals}
         | #{opposes}
