@@ -193,8 +193,8 @@ module WishlistSurvey
       phabs = statement.scan(/\[\[:?phab(?:ricator)?:(T\d+)|.*?phabricator\.wikimedia\.org\/(T\d+)/).flatten.compact
       related_phabs = discussion.scan(/\[\[:?phab(?:ricator)?:(T\d+)|.*?phabricator\.wikimedia\.org\/(T\d+)/).flatten.compact - phabs
 
-      if proposer_voted = lines.select { |l| l =~ proposer_sig }.length == 1
-        supports -= 1
+      unless proposer_voted = lines.select { |l| l =~ proposer_sig }.length == 1
+        supports += 1
       end
 
       votes[title] = {
