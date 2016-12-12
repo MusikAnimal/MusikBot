@@ -212,7 +212,8 @@ module WishlistSurvey
   end
 
   def self.create_vote_report(categories)
-    content = "{| class='wikitable sortable'\n!Rank\n!Proposal\n!Category\n!Proposer\n![[File:Symbol support vote.svg|15px]]\n![[File:Symbol neutral vote.svg|15px]]\n![[File:Symbol oppose vote.svg|15px]]\n!Phabs\n"
+    content = "|-\n!Rank\n!Proposal\n!Category\n!Proposer\n![[File:Symbol support vote.svg|15px]]" \
+      "\n![[File:Symbol neutral vote.svg|15px]]\n![[File:Symbol oppose vote.svg|15px]]\n!Phabs\n"
 
     # build array of proposal/category/votes for the report
     rows = []
@@ -226,6 +227,12 @@ module WishlistSurvey
     rows = rows.sort_by { |_cat, _prop, count| -count }
 
     rank = 0
+    all_proposers = []
+    all_phabs = []
+    all_related_phabs = []
+    total_supports = 0
+    total_neutrals = 0
+    total_opposes = 0
 
     # build markup
     rows.each do |proposal, category, supports, neutrals, opposes, proposer, proposer_voted, phabs, related_phabs|
@@ -235,6 +242,13 @@ module WishlistSurvey
       proposal = proposal.gsub(/\<nowiki\>|\<\/nowiki\>|\[|\]/, '')
       # change spaces to underscores, then URI encode for link
       proposal_target = URI.encode(proposal.score)
+
+      all_proposers << proposer
+      all_phabs << phabs
+      all_related_phabs << related_phabs
+      total_supports += supports
+      total_neutrals += neutrals
+      total_opposes += opposes
 
       proposer_str = proposer ? "[[User:#{proposer}|#{proposer}]]" : 'Unparsable'
 
@@ -257,7 +271,9 @@ module WishlistSurvey
       }
     end
 
-    content += "|}"
+    content = "{| class='wikitable sortable'\n!\n!#{rows.length} proposals\n!#{categories.length} cateogries" \
+      "\n!#{all_proposers.uniq.length} proposers\n!#{total_supports}\n!#{total_neutrals}\n!#{total_opposes}" \
+      "\n!#{all_phabs.uniq.length} phab tasks, #{all_related_phabs.uniq.length} related\n#{content}\n|}"
 
     @mb.edit("User:Community Tech bot/WishlistSurvey/Votes",
       content: content,
