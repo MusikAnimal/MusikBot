@@ -271,7 +271,7 @@ module WishlistSurvey
       }
     end
 
-    content = "{| class='wikitable sortable'\n!\n!#{rows.length} proposals\n!#{categories.length} cateogries" \
+    content = "{| class='wikitable sortable'\n!\n!#{rows.length} proposals\n!#{categories.length} categories" \
       "\n!#{all_proposers.uniq.length} proposers\n!#{total_supports}\n!#{total_neutrals}\n!#{total_opposes}" \
       "\n!#{all_phabs.uniq.length} phab tasks, #{all_related_phabs.uniq.length} related\n#{content}\n|}"
 
