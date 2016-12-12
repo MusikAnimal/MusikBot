@@ -177,7 +177,7 @@ module WishlistSurvey
 
     proposals.each do |proposal|
       proposer = proposal.scan(/\n\*\s*'''Proposer'''\s*:.*?\[\[.*?(?:User(?: talk)?:|Special:Contributions\/)(.*?)(?:\]\]|\|)/i).flatten.first
-      voting_section = proposal.scan(/\n===\s*Voting.*?\n(.*)/m).flatten.first
+      voting_section = proposal.scan(/\n===\s*Voting.*?\n(.*)/m).flatten.first || ''
       lines = voting_section.scan(/^#[^:](.*?)\n/).flatten
 
       supports = proposal.downcase.scan(/\{\{\s*(#{@mb.config[:support_templates]})\s*\}\}/).flatten.length
