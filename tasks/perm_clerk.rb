@@ -607,16 +607,26 @@ module PermClerk
 
     info("  Checking revocations of #{@permission} for #{@username}...")
 
-    revocations = if @permission == 'AutoWikiBrowser'
-                    check_revoked_awb || []
-                  else
-                    check_revoked_perm.flatten
-                  end
+    revoke_type = :checkrevoked
+
+    if @permission == 'AutoWikiBrowser'
+      awb_report_page = 'User:MusikBot_II/AWBListMan/Report/User'
+      auto_revoke_report = @mb.get_page_props(awb_report_page, full_response: true, no_conflict: true)
+      if auto_revoke_report.elements['revisions/rev'].text =~ /\{\{no ping\|#{Regexp.escape(@username)}\}\}/
+        revision_id = auto_revoke_report.attributes['lastrevid']
+        revoke_type = :awb_autorevoked
+        revocations = ["#{@mb.gateway.wiki_url.chomp('api.php')}index.php?title=#{awb_report_page}&oldid=#{revision_id}"]
+      else
+        revocations = check_revoked_awb || []
+      end
+    else
+      revocations = check_revoked_perm.flatten
+    end
 
     return unless revocations.any?
 
     @request_changes << {
-      type: :checkrevoked,
+      type: revoke_type,
       permission: @permission.downcase,
       revokedLinks: revocations.map { |l| "[#{l}]" }.join
     }
@@ -811,6 +821,8 @@ module PermClerk
       "by {{no ping|#{params[:admin]}}}"
     when :checkrevoked
       "has had this permission revoked in the past #{@mb.config[:checkrevoked_config][:offset]} days (#{params[:revokedLinks]})"
+    when :awb_autorevoked
+      "has had their access to AutoWikiBrowser automatically revoked (#{params[:revokedLinks]})"
     when :editCount
       "has <!-- mb-editCount -->#{params[:editCount]}<!-- mb-editCount-end --> total edits"
     when :fetchdeclined
