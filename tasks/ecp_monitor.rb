@@ -107,7 +107,7 @@ module ECPMonitor
     changes.each do |change|
       page_title = "#{namespace(change['namespace'])}#{change['title'].tr('_', ' ')}"
       markup += "\n|-" \
-        "\n|[[#{page_title}]]" \
+        "\n|[[:#{page_title}]]" \
         "\n|style='white-space:nowrap' |#{parse_date(change['timestamp'])}" \
         "\n|style='white-space:nowrap' |#{parse_date(change['expiry'])}" \
         "\n|#{change['type']}" \
