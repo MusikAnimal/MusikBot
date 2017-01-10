@@ -10,7 +10,7 @@ module MassPageMover
         noredirect: true,
         movetalk: true,
         movesubpages: true, # just in case
-        reason: 'Moving [[WP:BLP|BLP]]s created by [[User:Sander.v.Ginkel]] to the draftspace per [[Special:PermaLink/759098518]]'
+        reason: 'Moving to the draft space per [[User:Aymatth2/SvG clean-up/Guidelines]]'
       )
     end
   end
