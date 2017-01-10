@@ -656,7 +656,7 @@ module PermClerk
       log_timestamp = timestamp.strftime('%Y%m%d%H%M') + (timestamp.second + 1).to_s
 
       revocations << "#{@mb.gateway.wiki_url.chomp('api.php')}index.php?title=Special:Log&" \
-        "page=User:#{@username}&type=rights&offset=#{log_timestamp}&limit=1"
+        "page=User:#{@username.score}&type=rights&offset=#{log_timestamp}&limit=1"
     end
 
     revocations
