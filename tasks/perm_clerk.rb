@@ -646,8 +646,10 @@ module PermClerk
     normalized_perm = @mb.config[:pages][@permission.to_sym]
 
     logevents.each do |event|
-      in_old = event.elements['params/oldgroups'].collect(&:text).grep(normalized_perm).any?
-      in_new = event.elements['params/newgroups'].collect(&:text).grep(normalized_perm).any?
+      old_events = event.elements['params/oldgroups']
+      new_events = event.elements['params/newgroups']
+      in_old = old_events && old_events.collect(&:text).grep(normalized_perm).any?
+      in_new = new_events && new_events.collect(&:text).grep(normalized_perm).any?
       timestamp = @mb.parse_date(event.attributes['timestamp'])
 
       next unless in_old && !in_new && timestamp > @mb.today - @mb.config[:checkrevoked_config][:offset]
