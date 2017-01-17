@@ -63,7 +63,7 @@ module AWBListMan
         summary: 'Updating heading of report page'
       )
 
-      @mb.edit("User:MusikBot/AWBListMan/#{user_type_str} count",
+      @mb.edit("User:MusikBot II/AWBListMan/#{user_type_str} count",
         content: users_list.length,
         summary: "Reporting #{user_type.to_s.pluralize_num(users_list.length)} with AWB access"
       )
