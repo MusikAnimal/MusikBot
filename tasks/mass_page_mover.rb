@@ -2,15 +2,21 @@ $LOAD_PATH << '..'
 require 'musikbot'
 
 module MassPageMover
-  @mb = MusikBot::Session.new(inspect)
+  @mb = MusikBot::Session.new(inspect, true)
 
   def self.run
     pages_to_move.each do |page|
-      @mb.gateway.move(page, "Draft:#{page}",
+      new_title = "Draft:#{page}"
+      @mb.gateway.move(page, new_title,
         noredirect: true,
         movetalk: true,
         movesubpages: true, # just in case
         reason: 'Moving to the draft space per [[User:Aymatth2/SvG clean-up/Guidelines]]'
+      )
+      new_content = @mb.get(new_title).gsub(/\[\[Category:(.*?)\]\]/, '[[:Category:\1]]')
+      @mb.edit(new_title,
+        content: new_content,
+        summary: 'Deactivating categories'
       )
     end
   end
