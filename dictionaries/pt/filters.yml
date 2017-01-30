@@ -28,7 +28,7 @@ pt:
   'private': 'Privado'
   'recent changes': 'Modificações recentes'
   'reporting': 'Relatórios'
-  'reporting recent changes to filters': 'Informando mudanças recentes nos filtros'
+  'reporting recent changes to filters': 'Informando [[Special:AbuseFilter/history|mudanças recentes]] nos filtros'
   'special:AbuseFilter': 'Especial:Filtro_de_abusos'
   'special:AbuseLog': 'Especial:Registro_de_abusos'
   'tag': 'etiquetar'
