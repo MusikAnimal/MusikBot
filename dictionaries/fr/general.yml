@@ -10,3 +10,4 @@ fr:
   user: 'Utilisateur'
   user_link: '[[Utilisateur:%{name}|%{name}]]'
   'yes': 'oui'
+  links: 'Links'

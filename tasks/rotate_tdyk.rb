@@ -36,7 +36,7 @@ module RotateTDYK
       )
     end
   rescue MediaWiki::APIError => e
-    if e.code.to_s == 'editconflict'
+    if ['editconflict', 'readonly'].include?(e.code.to_s)
       process_page(throttle + 1)
     elsif throttle > 3
       @mb.report_error('Edit throttle hit', e)

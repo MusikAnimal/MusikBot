@@ -11,7 +11,7 @@ GEM
   specs:
     byebug (8.2.1)
     coderay (1.1.0)
-    domain_name (0.5.20161021)
+    domain_name (0.5.20161129)
       unf (>= 0.0.5, < 1.0.0)
     http-cookie (1.0.3)
       domain_name (~> 0.5)

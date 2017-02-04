@@ -11,6 +11,7 @@ module StaleFilters
     @report_page = "#{t('User')}:MusikBot/StaleFilters/Report"
     @total_page = "#{t('User')}:MusikBot/StaleFilters/Total"
     @offset_page = "#{t('User')}:MusikBot/StaleFilters/Offset"
+    @links_page = "#{t('User')}:MusikBot/StaleFilters/Report/Links"
 
     new_hash = Digest::MD5.hexdigest(stale_filters.join)
 
@@ -35,24 +36,30 @@ module StaleFilters
   end
 
   def self.generate_report
+    links_page = @mb.get(@links_page)
+
+    headings = [
+      t('Filter'),
+      t('Description'),
+      t('Last hit'),
+      t('Last filter author'),
+      t('Last filter edit'),
+      t('Private'),
+      t('Actions')
+    ]
+
+    headings << t('Links') if links_page.present?
+
     extended_content = "<div style='font-size:24px'>#{t(:title, date: I18n.l(@mb.today, format: :heading))} <sup>(#{I18n.t(:purge_link)})</sup></div>\n\n" \
       "<small>#{I18n.t(:purging)}</small>\n\n" +
       t(:summary, num: stale_filters.length, days: offset) +
       "\n\n{| class='wikitable sortable'\n! " +
-      [
-        t('Filter'),
-        t('Description'),
-        t('Last hit'),
-        t('Last filter author'),
-        t('Last filter edit'),
-        t('Private'),
-        t('Actions')
-      ].join("\n! ") + "\n|-\n"
+      headings.join("\n! ") + "\n|-\n"
 
     stale_filters.each do |filter|
       puts "#{index} of #{stale_filters.length}: #{title}" if @env == :test
 
-      extended_content += '| ' + [
+      fields = [
         "[[#{t('Special:AbuseFilter')}/#{filter['af_id']}|#{filter['af_id']}]]",
         filter['af_public_comments'].force_encoding('utf-8'),
         "data-sort-value=\"#{@mb.api_date(filter['afl_timestamp'])}\" | " + t(:plain_link, url: log(filter['af_id']), name: fdate(filter['afl_timestamp'])),
@@ -60,7 +67,11 @@ module StaleFilters
         "data-sort-value=\"#{@mb.api_date(filter['af_timestamp'])}\" | [[#{history(filter['af_id'])}|#{fdate(filter['af_timestamp'])}]]",
         filter['af_hidden'] == 1 ? t('yes') : t('no'),
         translate(filter['af_actions'])
-      ].join("\n| ") + "\n|-\n"
+      ]
+
+      fields << links_page.gsub('$1', filter['af_id'].to_s) if links_page.present?
+
+      extended_content += '| ' + fields.join("\n| ") + "\n|-\n"
     end
 
     extended_content = extended_content.chomp("|-\n") + "|}\n\n"

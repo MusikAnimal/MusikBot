@@ -2,3 +2,4 @@ en:
   plain_link: '{{plain link|url=%{url}|name=%{name}}}'
   purge_link: '{{purge|purge}}'
   user_link: '[[User:%{name}|%{name}]]'
+  links: 'Links'

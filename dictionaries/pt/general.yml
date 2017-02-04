@@ -10,3 +10,4 @@ pt:
   user: 'Usuário(a)'
   user_link: '[[Usuário(a):%{name}|%{name}]]'
   'yes': 'sim'
+  links: 'Links'
