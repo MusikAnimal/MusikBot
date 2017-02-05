@@ -406,7 +406,7 @@ module PermClerk
 
   def self.archiving(resolution, overriden_resolution, resolution_timestamp)
     return false unless @mb.config[:run][:archive] && resolution.present?
-    should_archive_now = @section.match(/\{\{User:MusikBot\/archivenow\}\}/)
+    should_archive_now = @section.match(/\{\{(?:User:MusikBot\/)?archive\s?now\}\}/)
 
     if resolution_timestamp.nil?
       record_error(
