@@ -115,9 +115,16 @@ module WishlistSurvey
 
     total_editors = all_editors.uniq.length
 
+    report_needs_update = false
+
     # only attempt to edit if there's a change in the counts
     if cached_counts['total_votes'] != total_votes
-      create_vote_report(all_votes)
+      @mb.edit("#{@survey_root}/Total votes",
+        content: total_votes,
+        summary: "Updating total vote count"
+      )
+      cached_counts['total_votes'] = total_votes
+      report_needs_update = true
     end
     # if cached_counts['total_support_votes'] != total_support_votes
     #   @mb.edit("#{@survey_root}/Total votes",
@@ -132,6 +139,7 @@ module WishlistSurvey
         summary: "Updating total proposal count"
       )
       cached_counts['total_proposals'] = total_proposals
+      report_needs_update = true
     end
     if cached_counts['total_editors'] != total_editors
       @mb.edit("#{@survey_root}/Total editors",
@@ -139,6 +147,7 @@ module WishlistSurvey
         summary: "Updating total editor count"
       )
       cached_counts['total_editors'] = total_editors
+      report_needs_update = true
     end
     if cached_counts['total_endorsements'] != total_endorsements
       @mb.edit("#{@survey_root}/Total endorsements",
@@ -146,7 +155,10 @@ module WishlistSurvey
         summary: "Updating total endorsement count"
       )
       cached_counts['total_endorsements'] = total_endorsements
+      report_needs_update = true
     end
+
+    create_vote_report(all_votes) if report_needs_update
 
     @mb.local_storage(
       'counts' => cached_counts,
