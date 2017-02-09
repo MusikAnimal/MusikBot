@@ -13,13 +13,19 @@ module WishlistSurvey
     # fetches from User:Community_Tech_bot/WishlistSurvey/config
     @survey_root = @mb.config[:survey_root]
 
-    @category_root = "#{@survey_root}/Categories"
+    @category_root = "#{@survey_root}/2017"
 
     # get counts from previous run, with defaults if they haven't been set yet
+    # cached_counts = {
+    #   'total_proposals' => 0,
+    #   'total_editors' => 0,
+    #   'total_support_votes' => 0,
+    #   'total_votes' => 0
+    # }.merge(@mb.local_storage['counts'] || {})
+
     cached_counts = {
       'total_proposals' => 0,
       'total_editors' => 0,
-      'total_support_votes' => 0,
       'total_votes' => 0
     }.merge(@mb.local_storage['counts'] || {})
 
@@ -29,7 +35,8 @@ module WishlistSurvey
 
     total_proposals = 0
     total_votes = 0
-    total_support_votes = 0
+    total_endorsements = 0
+    # total_support_votes = 0
     all_editors = []
     all_votes = {}
 
@@ -42,17 +49,22 @@ module WishlistSurvey
       category_votes = parse_category(category)
 
       # sort proposals by number of support votes
-      category_votes = category_votes.sort_by {|_k, v| -v[:support]}.to_h
+      # category_votes = category_votes.sort_by {|_k, v| -v[:support]}.to_h
+      category_votes = category_votes.sort_by {|_k, v| -v[:votes]}.to_h
 
       # store votes in the category's hash
       all_votes[category] = category_votes
 
       # total votes for this category
-      support_votes = category_votes.values.map { |v| v[:support] }.inject(:+)
-      neutral_votes = category_votes.values.map { |v| v[:neutral] }.inject(:+)
-      oppose_votes = category_votes.values.map { |v| v[:oppose] }.inject(:+)
-      total_votes += support_votes + neutral_votes + oppose_votes
-      total_support_votes += support_votes
+      support_votes = category_votes.values.map { |v| v[:votes] }.inject(:+)
+      # support_votes = category_votes.values.map { |v| v[:support] }.inject(:+)
+      # neutral_votes = category_votes.values.map { |v| v[:neutral] }.inject(:+)
+      # oppose_votes = category_votes.values.map { |v| v[:oppose] }.inject(:+)
+      # total_votes += support_votes + neutral_votes + oppose_votes
+      # total_support_votes += support_votes
+      total_votes += support_votes
+      endorsements_count = category_votes.values.map { |v| v[:endorsements] }.inject(:+)
+      total_endorsements += endorsements_count
 
       # get counts for this category from previous run, with defaults if they haven't been set yet
       cached_counts[category] = {
@@ -62,12 +74,26 @@ module WishlistSurvey
       }.merge(cached_counts[category] || {})
 
       # only attempt to edit if there's a change in the counts
+      # if cached_counts[category]['votes'] != support_votes
+      #   @mb.edit("#{category}/Votes",
+      #     content: support_votes,
+      #     summary: "Updating support vote count"
+      #   )
+      #   cached_counts[category]['votes'] = support_votes
+      # end
       if cached_counts[category]['votes'] != support_votes
         @mb.edit("#{category}/Votes",
           content: support_votes,
           summary: "Updating support vote count"
         )
         cached_counts[category]['votes'] = support_votes
+      end
+      if cached_counts[category]['endorsements'] != endorsements_count
+        @mb.edit("#{category}/Endorsements",
+          content: endorsements_count,
+          summary: "Updating endorsement count"
+        )
+        cached_counts[category]['endorsements'] = endorsements_count
       end
       if cached_counts[category]['proposals'] != proposals
         @mb.edit("#{category}/Proposals",
@@ -84,7 +110,7 @@ module WishlistSurvey
         cached_counts[category]['editors'] = editors.length
       end
 
-      rotate_proposals(category) if rotation_needed
+      rotate_proposals(category) if false # rotation_needed
     end
 
     total_editors = all_editors.uniq.length
@@ -93,13 +119,13 @@ module WishlistSurvey
     if cached_counts['total_votes'] != total_votes
       create_vote_report(all_votes)
     end
-    if cached_counts['total_support_votes'] != total_support_votes
-      @mb.edit("#{@survey_root}/Total votes",
-        content: total_support_votes,
-        summary: "Updating total support vote count"
-      )
-      cached_counts['total_votes'] = total_support_votes
-    end
+    # if cached_counts['total_support_votes'] != total_support_votes
+    #   @mb.edit("#{@survey_root}/Total votes",
+    #     content: total_support_votes,
+    #     summary: "Updating total support vote count"
+    #   )
+    #   cached_counts['total_votes'] = total_support_votes
+    # end
     if cached_counts['total_proposals'] != total_proposals
       @mb.edit("#{@survey_root}/Total proposals",
         content: total_proposals,
@@ -113,6 +139,13 @@ module WishlistSurvey
         summary: "Updating total editor count"
       )
       cached_counts['total_editors'] = total_editors
+    end
+    if cached_counts['total_endorsements'] != total_endorsements
+      @mb.edit("#{@survey_root}/Total endorsements",
+        content: total_endorsements,
+        summary: "Updating total endorsement count"
+      )
+      cached_counts['total_endorsements'] = total_endorsements
     end
 
     @mb.local_storage(
@@ -128,7 +161,7 @@ module WishlistSurvey
   # get usernames of editors to given category page
   def self.get_editors(category)
     sql = 'SELECT DISTINCT(rev_user_text) AS editor ' \
-        "FROM metawiki_p.revision WHERE rev_page = #{page_id(category)}"
+        "FROM #{@mb.db}_p.revision WHERE rev_page = #{page_id(category)}"
     @mb.repl.query(sql).to_a.collect { |row| row['editor'] }
   end
 
@@ -176,48 +209,56 @@ module WishlistSurvey
     votes = {}
 
     proposals.each do |proposal|
-      proposer = proposal.scan(/\n\*\s*'''Proposer'''\s*:.*?\[\[.*?(?:User(?: talk)?:|Special:Contributions\/)(.*?)(?:\]\]|\|)/i).flatten.first
-      voting_section = proposal.scan(/\n===\s*Voting.*?\n(.*)/m).flatten.first || ''
-      lines = voting_section.scan(/^#[^:](.*?)\n/).flatten
+      # proposer = proposal.scan(/\n\*\s*'''Proposer'''\s*:.*?\[\[.*?(?:User(?: talk)?:|Special:Contributions\/)(.*?)(?:\]\]|\|)/i).flatten.first
+      # voting_section = proposal.scan(/\n===\s*Voting.*?\n(.*)/m).flatten.first || ''
+      # lines = voting_section.scan(/^#[^:](.*?)\n/).flatten
 
-      supports = proposal.downcase.scan(/\{\{\s*(#{@mb.config[:support_templates]})\s*\}\}/).flatten.length
-      neutrals = proposal.downcase.scan(/\{\{\s*(#{@mb.config[:neutral_templates]})\s*\}\}/).flatten.length
-      opposes = proposal.downcase.scan(/\{\{\s*(#{@mb.config[:oppose_templates]})\s*\}\}/).flatten.length
+      # supports = proposal.downcase.scan(/\{\{\s*(#{@mb.config[:support_templates]})\s*\}\}/).flatten.length
+      # neutrals = proposal.downcase.scan(/\{\{\s*(#{@mb.config[:neutral_templates]})\s*\}\}/).flatten.length
+      # opposes = proposal.downcase.scan(/\{\{\s*(#{@mb.config[:oppose_templates]})\s*\}\}/).flatten.length
       title = proposal.scan(/^(.*?)==\n/).flatten.first.strip
 
-      proposer_sig = /\{\{\s*(#{@mb.config[:support_templates]})\s*\}\}.*?\[\[.*?(?:User(?: talk)?:|Special:Contributions\/)#{proposer}(?:\]\]|\|).*?\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)/
+      # proposer_sig = /\{\{\s*(#{@mb.config[:support_templates]})\s*\}\}.*?\[\[.*?(?:User(?: talk)?:|Special:Contributions\/)#{proposer}(?:\]\]|\|).*?\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)/
 
       # binding.pry if proposal.include?('Global settings')
 
-      statement, discussion = proposal.split(/<h3>\s*Community discussion\s*<\/h3>/)
-      phabs = statement.scan(/\[\[:?phab(?:ricator)?:(T\d+)|.*?phabricator\.wikimedia\.org\/(T\d+)/).flatten.compact
-      related_phabs = discussion.scan(/\[\[:?phab(?:ricator)?:(T\d+)|.*?phabricator\.wikimedia\.org\/(T\d+)/).flatten.compact - phabs
+      # statement, discussion = proposal.split(/<h3>\s*Community discussion\s*<\/h3>/)
+      # phabs = statement.scan(/\[\[:?phab(?:ricator)?:(T\d+)|.*?phabricator\.wikimedia\.org\/(T\d+)/).flatten.compact
+      # related_phabs = discussion.scan(/\[\[:?phab(?:ricator)?:(T\d+)|.*?phabricator\.wikimedia\.org\/(T\d+)/).flatten.compact - phabs
 
-      unless proposer_voted = lines.select { |l| l =~ proposer_sig }.length == 1
-        supports += 1
-      end
+      # unless proposer_voted = lines.select { |l| l =~ proposer_sig }.length == 1
+      #   supports += 1
+      # end
 
+      # votes[title] = {
+      #   support: supports,
+      #   neutral: neutrals,
+      #   oppose: opposes,
+      #   proposer: proposer,
+      #   proposer_voted: proposer_voted,
+      #   phabs: phabs.uniq,
+      #   related_phabs: related_phabs.uniq
+      # }
+
+      phab = proposal.scan(/^===\s*Support.*?(T\d+)/).flatten.first
+      endorsements_section, voting_section = proposal.split(/^===\s*Support.*?===\n/)
+      endorsements_section = endorsements_section.split(/^===\s*Endorsements.*?===\n/)[1]
       votes[title] = {
-        support: supports,
-        neutral: neutrals,
-        oppose: opposes,
-        proposer: proposer,
-        proposer_voted: proposer_voted,
-        phabs: phabs.uniq,
-        related_phabs: related_phabs.uniq
+        votes: voting_section.scan(/^#/).size,
+        endorsements: endorsements_section.scan(/^#\s*\w/).size,
+        phab: phab
       }
     end
 
     votes
   end
 
-  def self.create_vote_report(categories)
-    content = "|-\n!Rank\n!Proposal\n!Category\n!Proposer\n![[File:Symbol support vote.svg|15px]]" \
-      "\n![[File:Symbol neutral vote.svg|15px]]\n![[File:Symbol oppose vote.svg|15px]]\n!Phabs\n"
+  def self.create_vote_report(cats)
+    content = "|-\n!Rank\n!Proposal\n!Category\n!Votes\n!Endorsements\n!Phab\n"
 
     # build array of proposal/category/votes for the report
     rows = []
-    categories.each do |category, proposals|
+    cats.each do |category, proposals|
       proposals.each do |proposal, count|
         rows << [proposal, category] + count.values
       end
@@ -227,53 +268,47 @@ module WishlistSurvey
     rows = rows.sort_by { |_cat, _prop, count| -count }
 
     rank = 0
-    all_proposers = []
     all_phabs = []
-    all_related_phabs = []
-    total_supports = 0
-    total_neutrals = 0
-    total_opposes = 0
+    total_votes = 0
+    total_endorsements = 0
 
     # build markup
-    rows.each do |proposal, category, supports, neutrals, opposes, proposer, proposer_voted, phabs, related_phabs|
+    rows.each do |proposal, category, votes, endorsements, phab|
       rank += 1
 
       # strip out links and nowiki tags from section title
-      proposal = proposal.gsub(/\<nowiki\>|\<\/nowiki\>|\[|\]/, '')
+      # proposal = proposal.gsub(/\<nowiki\>|\<\/nowiki\>|\[|\]/, '')
       # change spaces to underscores, then URI encode for link
-      proposal_target = URI.encode(proposal.score)
+      proposal_target = URI.encode(proposal.score).gsub('[', '.5B').gsub(']', '.5D')
 
-      all_proposers << proposer
-      all_phabs << phabs
-      all_related_phabs << related_phabs
-      total_supports += supports
-      total_neutrals += neutrals
-      total_opposes += opposes
+      binding.pry if rank == 62
 
-      proposer_str = proposer ? "[[User:#{proposer}|#{proposer}]]" : 'Unparsable'
+      all_phabs << phab
+      total_votes += votes
+      total_endorsements += endorsements
 
-      phabs = phabs.map { |p| "[[phab:#{p}|#{p}]]" }.join(', ')
+      # proposer_str = proposer ? "[[User:#{proposer}|#{proposer}]]" : 'Unparsable'
 
-      if related_phabs.any?
-        phabs += "#{phabs.present? ? '<br/>' : ''}<small>Related: #{related_phabs.map { |p| "[[phab:#{p}|#{p}]]" }.join(', ')}</small>"
-      end
+      # phabs = phabs.map { |p| "[[phab:#{p}|#{p}]]" }.join(', ')
+
+      # if related_phabs.any?
+      #   phabs += "#{phabs.present? ? '<br/>' : ''}<small>Related: #{related_phabs.map { |p| "[[phab:#{p}|#{p}]]" }.join(', ')}</small>"
+      # end
 
       content += %Q{
         |-
         | #{rank}
         | [[#{category}##{proposal_target}|<nowiki>#{proposal}</nowiki>]]
         | [[#{category}|#{category.split('/').last}]]
-        | #{proposer_str}
-        | #{supports}
-        | #{neutrals}
-        | #{opposes}
-        | #{phabs}
+        | #{votes}
+        | #{endorsements}
+        | [[phab:#{phab}|#{phab}]]
       }
     end
 
     content = "{| class='wikitable sortable'\n!\n!#{rows.length} proposals\n!#{categories.length} categories" \
-      "\n!#{all_proposers.uniq.length} proposers\n!#{total_supports}\n!#{total_neutrals}\n!#{total_opposes}" \
-      "\n!#{all_phabs.uniq.length} phab tasks, #{all_related_phabs.uniq.length} related\n#{content}\n|}"
+      "\n!#{total_votes} votes\n!#{total_endorsements} endorsements\n!#{all_phabs.uniq.length} phab tasks" \
+      "\n#{content}\n|}"
 
     @mb.edit("User:Community Tech bot/WishlistSurvey/Votes",
       content: content,
