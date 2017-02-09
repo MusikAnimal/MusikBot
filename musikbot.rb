@@ -154,7 +154,7 @@ module MusikBot
     end
 
     def db
-      site_map[@opts[:project]]
+      site_map[@opts[:project].sub(/^www./, '')]
     end
 
     # Cache-related
@@ -306,7 +306,7 @@ module MusikBot
         message += " &mdash; in {{mono|#{e.backtrace_locations.first.label}}}: ''#{e.message}''"
       end
 
-      content = get(page)
+      content = get(page) || ''
       content.sub!(content.scan(/.*\n/).first, '') if content.length > 10_000
 
       last_timestamp, last_message = content.split(/\[(.*?)\] /).last(2)
