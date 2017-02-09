@@ -281,8 +281,6 @@ module WishlistSurvey
       # change spaces to underscores, then URI encode for link
       proposal_target = URI.encode(proposal.score).gsub('[', '.5B').gsub(']', '.5D')
 
-      binding.pry if rank == 62
-
       all_phabs << phab
       total_votes += votes
       total_endorsements += endorsements
