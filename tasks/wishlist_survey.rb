@@ -110,7 +110,7 @@ module WishlistSurvey
         cached_counts[category]['editors'] = editors.length
       end
 
-      rotate_proposals(category) if false # rotation_needed
+      rotate_proposals(category) if rotation_needed
     end
 
     total_editors = all_editors.uniq.length
