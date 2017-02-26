@@ -682,7 +682,7 @@ module PermClerk
     is_account_creator = @permission == 'Account creator'
     return unless @mb.config[:run][:admin_backlog]
 
-    oldest_timestamp = @open_timestamps.min { |a, b| @mb.parse_date(a) <=> @mb.parse_date(b) }
+    oldest_timestamp = @open_timestamps.compact.min { |a, b| @mb.parse_date(a) <=> @mb.parse_date(b) }
     min_num_requests = is_account_creator ? 0 : @mb.config[:adminbacklog_config][:requests]
     has_old_requests = oldest_timestamp ? @mb.parse_date(oldest_timestamp) <= @mb.today - @mb.config[:adminbacklog_config][:offset] : false
 
