@@ -27,7 +27,12 @@ module BLPCat
 
         # replace first instance with corrected category
         sort_key = captures[0][1]
-        sort_key&.strip! unless sort_key == ' ' # blank sort key should be preserved
+
+        # blank sort key should be preserved, otherwise strip out whitespace
+        if sort_key && sort_key != ' '
+          sort_key.strip!
+        end
+
         old_cat = captures.shift[0]
         content.gsub!(old_cat, "[[Category:#{category} (living people)#{'|' + sort_key if sort_key}]]\n")
 
