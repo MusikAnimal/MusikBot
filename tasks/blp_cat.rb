@@ -75,7 +75,7 @@ module BLPCat
   end
 
   def self.categories
-    ['Year of birth missing', 'Date of birth missing', 'Place of birth missing']
+    @categories ||= @mb.config[:categories]
   end
 end
 
