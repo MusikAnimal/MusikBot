@@ -121,7 +121,7 @@ module AWBListMan
         if notified_users[user_name].present? && @mb.parse_date(notified_users[user_name]) < @mb.today - @mb.config[user_type][:edit_offset]
           puts user_name + ' is inactive'
           @removed_users[:inactive] << user_name
-        else
+        elsif notified_users[user_name].blank?
           puts user_name + ' - Notifying that access may be revoked'
           @notified_users[user_name] = @mb.today
           notify_inactive_user(user_name) if @mb.config[user_type][:enabled]
