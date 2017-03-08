@@ -116,7 +116,9 @@ module AWBListMan
         puts user_name + ' is blocked'
         @removed_users[:indefinitely_blocked] << user_name
       elsif info[:last_edit] && info[:last_edit] < @mb.today - @mb.config[user_type][:edit_offset]
-        if (@disk_cache['notified_users'] || {}).keys.include?(user_name)
+        notified_users = (@disk_cache['notified_users'] || {})
+
+        if notified_users[user_name].present? && @mb.parse_date(notified_users[user_name]) < @mb.today - @mb.config[user_type][:edit_offset]
           puts user_name + ' is inactive'
           @removed_users[:inactive] << user_name
         else
