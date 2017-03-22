@@ -141,7 +141,7 @@ module AWBListMan
     [new_users, new_text]
   end
 
-  def self.user_info(user_name)
+  def self.user_info(user_name, throttle = 0)
     api_obj = @mb.gateway.custom_query(
       list: 'users|usercontribs',
       uclimit: '1',
@@ -161,6 +161,12 @@ module AWBListMan
       last_edit: @mb.parse_date(last_edit),
       user_groups: users_hash.elements['groups'].to_a.collect { |g| g[0].to_s }
     }
+  rescue => e
+    if throttle > 3
+      @mb.report_error('Edit throttle hit', e)
+    else
+      user_info(user_name, throttle + 1)
+    end
   end
 
   def self.moved_user_info(user_name)
@@ -184,13 +190,18 @@ module AWBListMan
     summary = report ? [] : ['General cleanup']
     removed_users = []
 
+    puts '==== BUILDING EDIT SUMMARY ===='
+
     if @removed_users[:admins].any?
+      puts "...#{@removed_users[:admins].length} admins"
       removed_users << 'admin'.pluralize_num(@removed_users[:admins].length)
     end
     if @removed_users[:indefinitely_blocked].any?
+      puts "...#{@removed_users[:indefinitely_blocked].length} indefinitely blocked"
       removed_users << 'indefinitely blocked user'.pluralize_num(@removed_users[:indefinitely_blocked].length)
     end
     if @removed_users[:inactive].any?
+      puts "...#{@removed_users[:inactive].length} inactive"
       removed_users << 'inactive user'.pluralize_num(@removed_users[:inactive].length)
     end
 
