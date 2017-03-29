@@ -305,8 +305,7 @@ module PermClerk
   def self.autoformat
     return unless @mb.config[:run][:autoformat]
 
-    # FIXME: make this work for AutoWikiBrowser (might work with |access) or rather it is auto-removed by the template
-    fragmented_regex = /\{\{rfplinks.*\}\}\n:(Reason for requesting (?:#{@permission.downcase}) (?:rights|access)) .*\(UTC\)(?m:(.*?)(?:\n\=\=|\z))/
+    fragmented_regex = /\{\{rfplinks.*\}\}\n:(Reason for requesting (?:#{@permission.downcase}) (?:rights|access))(?m:(.*?)(?:\n\=\=|\z))/
     fragmented_match = @section.scan(fragmented_regex)
 
     unless fragmented_match.present?
@@ -318,6 +317,8 @@ module PermClerk
     end
 
     info("    Found improperly formatted request for #{@username}, repairing")
+
+    binding.pry
 
     actual_reason = fragmented_match.flatten[1]
     if actual_reason.empty? && @headers_removed[@username]
