@@ -102,7 +102,7 @@ module AWBListMan
 
       if moved_info && moved_info[:timestamp] > @last_run && @old_users.include?(user_name)
         new_user_name = moved_info[:new_user_name]
-        puts "#{user_name} renamed to #{new_user_name}"
+        puts "#{user_name} - renamed to #{new_user_name}"
         @renamed_users << new_user_name
         user_name = new_user_name
       end
@@ -110,16 +110,16 @@ module AWBListMan
       info = user_info(user_name)
 
       if info[:user_groups].include?('sysop')
-        puts user_name + ' is sysop'
+        puts user_name + ' - is sysop'
         @removed_users[:admins] << user_name
       elsif info[:block_time] && info[:block_time] < @mb.today - @mb.config[user_type][:block_offset] && info[:indefinite]
-        puts user_name + ' is blocked'
+        puts user_name + ' - is blocked'
         @removed_users[:indefinitely_blocked] << user_name
       elsif info[:last_edit] && info[:last_edit] < @mb.today - @mb.config[user_type][:edit_offset]
         notified_users = (@disk_cache['notified_users'] || {})
 
-        if notified_users[user_name].present? && @mb.parse_date(notified_users[user_name]) < @mb.today - @mb.config[user_type][:edit_offset]
-          puts user_name + ' is inactive'
+        if notified_users[user_name].present? && @mb.parse_date(notified_users[user_name]) <= @mb.today - 7
+          puts user_name + ' - is inactive'
           @removed_users[:inactive] << user_name
         elsif notified_users[user_name].blank?
           puts user_name + ' - Notifying that access may be revoked'
@@ -128,7 +128,6 @@ module AWBListMan
           new_users << user_name
         end
       else
-        puts user_name
         new_users << user_name
       end
     end
