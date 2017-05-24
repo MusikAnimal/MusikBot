@@ -26,7 +26,9 @@ module NPPReport
       page_id = page['ptrp_page_id']
       page_is_unreviewed = page['ptrp_reviewed'].to_i == 0
 
-      if is_page_creator_autopatrolled?(page_id)
+      page_creator_user_id = page_creator(page_id)
+
+      if is_page_creator_autopatrolled?(page_creator_user_id)
         next
       else
         total_page_count += 1
@@ -97,6 +99,9 @@ module NPPReport
       }
       reviewers = @mb.repl.query(sql).to_a.collect { |r| r['reviewer'] }
 
+      # Don't count the page creator as a reviewer if they are themselves a reviewer
+      reviewer_length = reviewers.length - (is_page_creator_a_patroller?(page_creator_user_id) ? 1 : 0)
+
       # There were edits by more than one reviewer. If the page is currently reviewed,
       # we're only accounting for edits that took place before the final review,
       # OR there were edits by a single reviewer, and the page is still unreviewed.
@@ -124,7 +129,15 @@ module NPPReport
     @mb.repl.query(sql).to_a.first['page_title']
   end
 
-  def self.is_page_creator_autopatrolled?(page_id)
+  def self.is_page_creator_autopatrolled?(user_id)
+    autopatrolled_user_ids.include?(user_id)
+  end
+
+  def self.is_page_creator_a_patroller?(user_id)
+    patroller_user_ids.include?(user_id)
+  end
+
+  def self.page_creator(page_id)
     sql = %{
       SELECT rev_user
       FROM revision_userindex
@@ -132,8 +145,7 @@ module NPPReport
       ORDER BY rev_id ASC
       LIMIT 1
     }
-    user_id = @mb.repl.query(sql).to_a.first['rev_user']
-    autopatrolled_user_ids.include?(user_id)
+    @mb.repl.query(sql).to_a.first['rev_user']
   end
 
   def self.autopatrolled_user_ids
@@ -144,6 +156,16 @@ module NPPReport
       WHERE ug_group = 'autoreviewer'
     }
     @autopatrolled_user_ids = @mb.repl.query(sql).to_a.collect { |ug| ug['ug_user'] }
+  end
+
+  def self.patroller_user_ids
+    return @patroller_user_ids if @patroller_user_ids
+    sql = %{
+      SELECT ug_user
+      FROM user_groups
+      WHERE ug_group = 'patroller'
+    }
+    @patroller_user_ids = @mb.repl.query(sql).to_a.collect { |ug| ug['ug_user'] }
   end
 
   def self.pages_to_check
