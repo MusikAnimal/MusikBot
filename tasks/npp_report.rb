@@ -6,7 +6,10 @@ module NPPReport
     @mb = MusikBot::Session.new(inspect, true)
     @disk_cache = @mb.local_storage || {}
 
+    total_page_count = 0
+
     # Only look for edits made by users who are known to have done reviews
+    # This list is from https://quarry.wmflabs.org/query/10877 and https://quarry.wmflabs.org/query/18802
     reviewers = @disk_cache['reviewers'].uniq
     reviewers_sql = reviewers.map{ |r| "\"#{r}\"" }.join(',')
 
@@ -22,6 +25,12 @@ module NPPReport
 
       page_id = page['ptrp_page_id']
       page_is_unreviewed = page['ptrp_reviewed'].to_i == 0
+
+      if is_page_creator_autopatrolled?(page_id)
+        next
+      else
+        total_page_count += 1
+      end
 
       # get timestamp of first review of the page
       sql = %{
@@ -89,7 +98,7 @@ module NPPReport
       reviewers = @mb.repl.query(sql).to_a.collect { |r| r['reviewer'] }
 
       # There were edits by more than one reviewer. If the page is currently reviewed,
-      # we're only accounting for edits that took place before the final review/
+      # we're only accounting for edits that took place before the final review,
       # OR there were edits by a single reviewer, and the page is still unreviewed.
       if reviewers.length > 1 || (reviewers.length == 1 && page_is_unreviewed)
         page_title = get_page_name(page_id)
@@ -99,6 +108,7 @@ module NPPReport
     end
 
     @disk_cache['pages'] = pages_with_reviewers
+    @disk_cache['total_pages_non_autopatrolled'] = total_page_count
     @disk_cache['pages_reviewed_and_unreviewed'] = reviewed_and_unreviewed
 
     @mb.local_storage(@disk_cache)
@@ -112,6 +122,28 @@ module NPPReport
       AND page_namespace = 0
     }
     @mb.repl.query(sql).to_a.first['page_title']
+  end
+
+  def self.is_page_creator_autopatrolled?(page_id)
+    sql = %{
+      SELECT rev_user
+      FROM revision_userindex
+      WHERE rev_page = #{page_id}
+      ORDER BY rev_id ASC
+      LIMIT 1
+    }
+    user_id = @mb.repl.query(sql).to_a.first['rev_user']
+    autopatrolled_user_ids.include?(user_id)
+  end
+
+  def self.autopatrolled_user_ids
+    return @autopatrolled_user_ids if @autopatrolled_user_ids
+    sql = %{
+      SELECT ug_user
+      FROM user_groups
+      WHERE ug_group = 'autoreviewer'
+    }
+    @autopatrolled_user_ids = @mb.repl.query(sql).to_a.collect { |ug| ug['ug_user'] }
   end
 
   def self.pages_to_check
