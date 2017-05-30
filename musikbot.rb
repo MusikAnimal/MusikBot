@@ -157,6 +157,11 @@ module MusikBot
       site_map[@opts[:project].sub(/^www./, '')]
     end
 
+    def repl_query(sql, *values)
+      statement = repl_client.prepare(sql)
+      statement.execute(*values)
+    end
+
     # Cache-related
     def redis_client
       @redis_client ||= Redis.new(app_config[:redis])
