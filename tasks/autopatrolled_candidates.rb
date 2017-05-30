@@ -112,7 +112,7 @@ module AutopatrolledCandidates
       ].join(' &middot; ')
 
       markup += <<~END
-        | [[User:#{username}|#{username}]]
+        | {{no ping|#{username}|#{username}}}
         | #{xtools_link}
         | {{FORMATNUM:#{data[:tagged]}}}
         | data-sort-value=#{data[:deleted][:total]} | #{deleted_str}
