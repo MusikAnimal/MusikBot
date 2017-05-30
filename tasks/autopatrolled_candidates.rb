@@ -33,7 +33,8 @@ module AutopatrolledCandidates
         deleted: deleted_counts(username),
         blocks: block_count(username),
         tagged: maintenance_count(articles),
-        perm_revoked: autopatrolled_revoked?(username)
+        perm_revoked: autopatrolled_revoked?(username),
+        copyvios: scan_talk_page(username)
       }
 
       users[username] = user_data
@@ -60,12 +61,14 @@ module AutopatrolledCandidates
       * '''Deleted''': Number of deleted articles in the past year (may include redirects)<ref name='deleted' />
       * '''Edit count''': Raw edit count of the user
       * '''Blocks''': Number of blocks in the past year
+      * '''Copyvios''': Number of ''possible'' user talk notifications about copyright concerns in the past year<ref name='copyvios' />
       * '''Revoked?''': Whether or not the autopatrolled permission was previously revoked
       {{pb}}
       ;Notes
       {{reflist|refs="
       <ref name='tags'>Supported maintenance categories include: #{cat_str}</ref>
       <ref name='deleted'>[[WP:G6|G6]] (technical) and [[WP:G7|G7]] (user-requested) speedy deletions are not included. The number of speedy, (BLP)PROD and AfDs deletions are shown if detected via the deletion summary.</ref>
+      <ref name='copyvios'>This works by scanning the edit summaries for "copyvios" or "copyright". Links are provided to the diffs, which may include removal of notices.</ref>
       }}
 
       == Report ==
@@ -76,10 +79,14 @@ module AutopatrolledCandidates
       ! Deleted
       ! Edit count
       ! Blocks
+      ! Copyvios
       ! Revoked?
-      ! Links
+      ! class="unsortable" | Links
       |-
     END
+
+    # Sort by number of articles created
+    users = users.sort_by { |username, data| -data[:created] }.to_h
 
     users.each do |username, data|
       user_rights_log = "https://en.wikipedia.org/w/index.php?title=Special:Log&page=User:#{username.score}&type=rights"
@@ -103,6 +110,18 @@ module AutopatrolledCandidates
       end
 
       block_str = data[:blocks] > 0 ? "[#{block_log} {{FORMATNUM:#{data[:blocks]}}}]" : '0'
+
+      copyvios_str = 0
+      if data[:copyvios].any?
+        copyvios_str = "{{collapse top|bg=transparent|bg2=transparent|border=0|" \
+          "border2=transparent|padding=0|title=<span style='font-weight:normal;float:left'>" \
+          "#{data[:copyvios].length}</span>|width=100%}}"
+        data[:copyvios].each do |rev_id|
+          copyvios_str += "\n[https://en.wikipedia.org/wiki/Special:Diff/#{rev_id}]"
+        end
+        copyvios_str += "\n{{collapse bottom}}"
+      end
+
       revoked_str = data[:perm_revoked] ? "[#{user_rights_log} Yes]" : 'No'
 
       links = [
@@ -112,12 +131,13 @@ module AutopatrolledCandidates
       ].join(' &middot; ')
 
       markup += <<~END
-        | {{no ping|#{username}|#{username}}}
+        | {{User0|#{username}}}
         | #{xtools_link}
         | {{FORMATNUM:#{data[:tagged]}}}
         | data-sort-value=#{data[:deleted][:total]} | #{deleted_str}
-        | {{FORMATNUM:#{data[:edits]}}}
+        | [[Special:Contributions/#{username}|{{FORMATNUM:#{data[:edits]}}}]]
         | #{block_str}
+        | data-sort-value=#{data[:copyvios].length} | #{copyvios_str}
         | #{revoked_str}
         | #{links}
         |-
@@ -130,6 +150,23 @@ module AutopatrolledCandidates
       content: markup,
       summary: "Reporting #{users.length} users eligible for autopatrolled"
     )
+  end
+
+  # Scan talk page history for messages that are potentially about copyvios
+  def self.scan_talk_page(username)
+    sql = %{
+      SELECT rev_id
+      FROM revision_userindex
+      WHERE rev_page = (
+        SELECT page_id
+        FROM page
+        WHERE page_title = ?
+        AND page_namespace = 3
+      )
+      AND rev_timestamp > #{@mb.db_date(@mb.today - 365)}
+      AND rev_comment REGEXP "[Cc]opy(right|vio)"
+    }
+    @mb.repl_query(sql, username).to_a.collect { |r| r['rev_id'] }
   end
 
   # Get data about pages the user created that were deleted
