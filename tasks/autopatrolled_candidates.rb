@@ -11,7 +11,7 @@ MAINTENANCE_CATEGORIES = [
   'All_articles_with_a_promotional_tone',
   'All_articles_with_topics_of_unclear_notability'
 ]
-REPORT_PAGE = 'User:MusikBot/sandbox'
+REPORT_PAGE = 'Wikipedia:Database reports/Editors eligible for Autopatrol privilege'
 
 module AutopatrolledCandidates
   def self.run
