@@ -52,6 +52,8 @@ module AutopatrolledCandidates
       <div style='font-size:24px'>Users eligible to be autopatrolled as of #{I18n.l(@mb.today, format: :heading)}</div>
       {{FORMATNUM:#{users.length}}} users who have created an article in the past month, and are eligible for the autopatrolled privilege but don't have it yet.
 
+      Prepared by ~~~~
+
       == Key ==
       * '''Articles''': Number of live, non-redirect articles
       * '''Tagged''': Number of articles with maintenance tags<ref name=tags />
