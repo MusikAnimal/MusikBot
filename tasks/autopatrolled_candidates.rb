@@ -51,9 +51,9 @@ module AutopatrolledCandidates
 
     markup = <<~END
       <div style='font-size:24px'>Users eligible to be autopatrolled as of #{I18n.l(@mb.today, format: :heading)}</div>
-      {{FORMATNUM:#{users.length}}} users who have created an article in the past month, and are eligible for the autopatrolled privilege but don't have it yet.
+      {{FORMATNUM:#{users.length}}} users who have created an article in the past month, and may be eligible for the autopatrolled privilege but don't have it yet.
 
-      Prepared by ~~~~
+      Prepared by ~~~ <onlyinclude>~~~~~</onlyinclude>
 
       == Key ==
       * '''Articles''': Number of live, non-redirect articles
@@ -67,7 +67,7 @@ module AutopatrolledCandidates
       ;Notes
       {{reflist|refs="
       <ref name='tags'>Supported maintenance categories include: #{cat_str}</ref>
-      <ref name='deleted'>[[WP:G6|G6]] (technical) and [[WP:G7|G7]] (user-requested) speedy deletions are not included. The number of speedy, (BLP)PROD and AfDs deletions are shown if detected via the deletion summary.</ref>
+      <ref name='deleted'>[[WP:G6|G6]] (technical) and [[WP:G7|G7]] (user-requested) speedy deletions are not included. The number of speedy, (BLP)PROD and AfD deletions are shown if detected via the deletion summary.</ref>
       <ref name='copyvios'>This works by scanning the edit summaries for "copyvios" or "copyright". Links are provided to the diffs, which may include removal of notices.</ref>
       }}
 
