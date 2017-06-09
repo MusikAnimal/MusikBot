@@ -11,7 +11,7 @@ MAINTENANCE_CATEGORIES = [
   'All_articles_with_a_promotional_tone',
   'All_articles_with_topics_of_unclear_notability'
 ]
-REPORT_PAGE = 'Wikipedia:Database reports/Editors eligible for Autopatrol privilege'
+REPORT_PAGE = 'User:MusikBot/sandbox'
 
 module AutopatrolledCandidates
   def self.run
@@ -22,10 +22,13 @@ module AutopatrolledCandidates
     page_creators.each_with_index do |user, i|
       username = user['user_name']
 
+      # not sure how this happens
+      next if username.nil?
+
       articles = articles_created(username)
 
-      # Skip if they don't meet article count prerequisite
-      next if articles.length < MIN_ARTICLE_COUNT
+      # Skip if they don't meet article count prerequisite or recently had a PERM request declined
+      next if articles.length < MIN_ARTICLE_COUNT || perm_request_declined?(username)
 
       user_data = {
         created: articles.length,
@@ -52,6 +55,8 @@ module AutopatrolledCandidates
     markup = <<~END
       <div style='font-size:24px'>Users eligible to be autopatrolled as of #{I18n.l(@mb.today, format: :heading)}</div>
       {{FORMATNUM:#{users.length}}} users who have created an article in the past month, and may be eligible for the autopatrolled privilege but don't have it yet.
+
+      Users who had a [[WP:PERM/A|request for autopatrolled]] declined in the past 90 days are not listed.
 
       Prepared by ~~~ <onlyinclude>~~~~~</onlyinclude>
 
@@ -106,20 +111,18 @@ module AutopatrolledCandidates
             deletion_stats << "#{type}: {{FORMATNUM:#{data[:deleted][type]}}}"
           end
         end
-        deleted_str += " (#{deletion_stats.join(', ')})"
+        deleted_str += " (#{deletion_stats.join(', ')})".chomp('()')
       end
 
       block_str = data[:blocks] > 0 ? "[#{block_log} {{FORMATNUM:#{data[:blocks]}}}]" : '0'
 
       copyvios_str = 0
       if data[:copyvios].any?
-        copyvios_str = "{{collapse top|bg=transparent|bg2=transparent|border=0|" \
-          "border2=transparent|padding=0|title=<span style='font-weight:normal;float:left'>" \
-          "#{data[:copyvios].length}</span>|width=100%}}"
+        copyvios_str = "#{data[:copyvios].length}<ref>"
         data[:copyvios].each do |rev_id|
-          copyvios_str += "\n[https://en.wikipedia.org/wiki/Special:Diff/#{rev_id}]"
+          copyvios_str += "[https://en.wikipedia.org/wiki/Special:Diff/#{rev_id}]"
         end
-        copyvios_str += "\n{{collapse bottom}}"
+        copyvios_str += "</ref>"
       end
 
       revoked_str = data[:perm_revoked] ? "[#{user_rights_log} Yes]" : 'No'
@@ -144,7 +147,12 @@ module AutopatrolledCandidates
       END
     end
 
-    markup = markup.chomp("\n|-") + "|}\n\n"
+    markup = markup.chomp("\n|-") + <<~END
+      |}
+
+      ;Links
+      {{reflist}}"
+    END
 
     @mb.edit(REPORT_PAGE,
       content: markup,
@@ -166,7 +174,7 @@ module AutopatrolledCandidates
       AND rev_timestamp > #{@mb.db_date(@mb.today - 365)}
       AND rev_comment REGEXP "[Cc]opy(right|vio)"
     }
-    @mb.repl_query(sql, username).to_a.collect { |r| r['rev_id'] }
+    @mb.repl_query(sql, username.score).to_a.collect { |r| r['rev_id'] }
   end
 
   # Get data about pages the user created that were deleted
@@ -196,7 +204,7 @@ module AutopatrolledCandidates
       AfD: 0
     }
 
-    @mb.repl_query(sql, username).to_a.each do |data|
+    @mb.repl_query(sql, username.score).to_a.each do |data|
       # don't count technical or user-requested deletions
       next if data['log_comment'] =~ /\[\[WP:CSD#G(6|7)\|/
 
@@ -224,7 +232,7 @@ module AutopatrolledCandidates
       AND log_title = ?
       AND log_timestamp > #{@mb.db_date(@mb.now - 365)}
     }
-    @mb.repl_query(sql, username).to_a.first['count']
+    @mb.repl_query(sql, username.score).to_a.first['count']
   end
 
   # Check if the user has had the autopatrolled permission revoked in the past
@@ -236,7 +244,7 @@ module AutopatrolledCandidates
       AND log_title = ?
       AND log_params REGEXP "oldgroups.*?autoreviewer.*?newgroups(?!.*?autoreviewer)"
     }
-    @mb.repl_query(sql, username).to_a.first['count'] > 0
+    @mb.repl_query(sql, username.score).to_a.first['count'] > 0
   end
 
   # Get the page title, ID and creation date of articles created by the given user
@@ -251,7 +259,7 @@ module AutopatrolledCandidates
       AND rev_deleted = 0
       AND page_is_redirect = 0
     }
-    @mb.repl_query(sql, username).to_a
+    @mb.repl_query(sql, username.score).to_a
   end
 
   # Get the number of articles created by the user that are in maintenance categories
@@ -272,6 +280,34 @@ module AutopatrolledCandidates
       AND cl_type = 'page'
     }
     @mb.repl.query(sql).to_a.first['count']
+  end
+
+  def self.perm_request_declined?(username)
+    target_date = @mb.today - 90
+    links = []
+    dates_to_fetch = (target_date..@mb.today).select { |d| d.day == target_date.day || d.day == @mb.today.day }.uniq(&:month)
+
+    dates_to_fetch.each do |date|
+      key = "#{Date::MONTHNAMES[date.month]} #{date.year}"
+      page = @mb.get("Wikipedia:Requests for permissions/Denied/#{key}")
+
+      next unless page
+
+      # Regexp.escape may break with other encodings
+      username = username.force_encoding('utf-8')
+
+      decline_days = page.split(/==\s*\w+\s+/i)
+      decline_days.each do |decline_day|
+        day_number = decline_day.scan(/^(\d+)\s*==/).flatten[0].to_i
+        next if day_number == 0
+        decline_day_date = @mb.parse_date("#{date.year}-#{date.month}-#{day_number}")
+        matches = decline_day.scan(/\{\{Usercheck.*\|#{Regexp.escape(username).descore}}}.*Autopatrolled\]\]/i)[0]
+
+        return true if matches && decline_day_date >= target_date
+      end
+    end
+
+    false
   end
 
   # Get the usernames and edit counts of users who have created a page in the past month
