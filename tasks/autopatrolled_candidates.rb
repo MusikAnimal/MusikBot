@@ -151,7 +151,7 @@ module AutopatrolledCandidates
       |}
 
       ;Links
-      {{reflist}}"
+      {{reflist}}
     END
 
     @mb.edit(REPORT_PAGE,
