@@ -6,6 +6,208 @@ module NPPReport
     @mb = MusikBot::Session.new(inspect, true)
     @disk_cache = @mb.local_storage || {}
 
+    # This script can do two things:
+    # 1) patroller_review_stats()
+    #    Find the number of patrollers who edited a page before marking it as reviewed
+    #    (see https://phabricator.wikimedia.org/P5480 for results)
+    # 2) article_survival_stats()
+    #    Find the percentage of articles created by autoconfirmed and non-autoconfirmed
+    #    users, and the percentage of those that were ultimately deleted.
+    # Call whichever function below
+
+    patroller_review_stats
+    article_survival_stats
+  end
+
+  # ARTICLE SURVIVAL STATS
+
+  def self.article_survival_stats
+    stats = {
+      created: 0,
+      autoconfirmed: {
+        created: 0,
+        revdel: 0,
+        deleted: {
+          total: 0,
+          speedy: 0,
+          prod: 0,
+          afd: 0,
+          other: 0
+        },
+        now_redirect: 0
+      },
+      non_autoconfirmed: {
+        created: 0,
+        revdel: 0,
+        deleted: {
+          total: 0,
+          speedy: 0,
+          prod: 0,
+          afd: 0,
+          other: 0
+        },
+        now_redirect: 0
+      }
+    }
+
+    num_pages = pages_created.length
+
+    pages_processed = []
+
+    pages_created.each_with_index do |page, i|
+      next if page_was_redirect?(page) || pages_processed.include?(page['page_id'])
+
+      pages_processed << page['page_id']
+
+      stats_key = user_autoconfirmed?(
+        page['user_id'], page['user_name'], page['timestamp']
+      ) ? :autoconfirmed : :non_autoconfirmed
+
+      puts "#{i} of #{num_pages}: #{page['title']} (#{page['deleted'] == 1 ? 'deleted, ' : ''}#{stats_key})"
+
+      stats[:created] += 1
+      stats[stats_key][:created] += 1
+
+      # page_is_redirect comes from the page object, which only exists if the page is live
+      if page['redirect'] == 1
+        stats[stats_key][:now_redirect] += 1
+      elsif page['deleted'] == 1
+        deletion_key = deletion_reason(page['page_id'])
+        stats[stats_key][:deleted][:total] += 1
+        stats[stats_key][:deleted][deletion_key.to_sym] += 1
+      end
+    end
+
+    @mb.local_storage(stats)
+
+    puts stats
+  end
+
+  def self.page_was_redirect?(page_props)
+    if page_props['deleted'] == 1
+      !!(page_props['comment'] =~ /Redirected/i)
+    else
+      begin
+        content = @mb.get_revision_at_date(page_props['title'], page_props['timestamp'])
+        !!(content =~ /^#REDIRECT \[\[.*?\]\]/i)
+      rescue => e
+        # This sometimes happens if the page was so big that Rexml library breaks.
+        # In such cases it's safe to assume the page was not a redirect.
+        false
+      end
+    end
+  end
+
+  def self.user_autoconfirmed?(user_id, username, timestamp)
+    # IPs may create articles through AfC
+    return false if user_id == 0
+
+    # Check if they were granted (semi|extended)confirmed prior to creating the article
+    sql = %{
+      SELECT COUNT(*) AS count
+      FROM logging
+      WHERE log_type = 'rights'
+      AND log_title = ?
+      AND log_params REGEXP ".*?confirmed"
+      AND log_timestamp < ?
+    }
+    return true if @mb.repl_query(sql, username.score, timestamp).to_a.first['count'] > 0
+
+    # Check if the account was under 4 days old at the time they created the article
+    sql = %{
+      SELECT user_registration
+      FROM user
+      WHERE user_name = ?
+    }
+    registration = @mb.repl_query(sql, username.descore).to_a.first['user_registration']
+
+    # Some really old accounts mysteriously don't have a registration date
+    # We'll just have to assume they made at least 10 edits
+    return true if registration.nil?
+
+    age_at_creation = (@mb.parse_date(timestamp.to_s) - @mb.parse_date(registration)).to_i
+    return false if age_at_creation < 4
+
+    # Check if the account has an edit count of less than 10 when they created the article
+    sql = %{
+      SELECT COUNT(*) AS count
+      FROM revision
+      WHERE rev_user = ?
+      AND rev_timestamp BETWEEN #{registration} AND #{timestamp}
+    }
+    edits_at_creation = @mb.repl_query(sql, user_id).first['count']
+
+    return false if edits_at_creation < 10
+
+    true
+  end
+
+  def self.pages_created
+    return @pages_created if @pages_created
+
+    start_date = 20161101000000
+    end_date = 20161108000000
+
+    # Ask for pages between two IDs to speed up the query on revision
+    # These were picked by looking at Special:NewPagesFeed
+    #   and using the IDs of pages around the above date range
+    lower_page_id = 52035284
+    upper_page_id = 52532113
+
+    sql = %{
+      SELECT page_title AS title, rev_page AS page_id, rev_timestamp AS timestamp,
+             rev_user AS user_id, rev_user_text AS user_name, 0 AS deleted,
+             rev_comment AS comment, page_is_redirect AS redirect
+      FROM revision
+      JOIN page ON page_id = rev_page
+      WHERE rev_page > #{lower_page_id}
+      AND rev_page < #{upper_page_id}
+      AND rev_parent_id = 0
+      AND page_namespace = 0
+      AND rev_timestamp BETWEEN #{start_date} AND #{end_date}
+    }
+    pages = @mb.repl.query(sql).to_a
+
+    sql = %{
+      SELECT ar_title AS title, ar_page_id AS page_id, ar_timestamp AS timestamp,
+             ar_user AS user_id, ar_user_text AS user_name, 1 AS deleted,
+             ar_comment AS comment, 0 AS redirect
+      FROM archive
+      WHERE ar_parent_id = 0
+      AND ar_namespace = 0
+      AND ar_timestamp BETWEEN #{start_date} AND #{end_date}
+    }
+
+    # Cache and return combined results of the two queries
+    @pages_created = (pages + @mb.repl.query(sql).to_a).sort {|a, b| a['title'] <=> b['title']}
+  end
+
+  def self.deletion_reason(page_id)
+    sql = %{
+      SELECT log_comment
+      FROM logging
+      WHERE log_type = 'delete'
+      AND log_page = #{page_id}
+    }
+
+    # rescue nil to handle pages where the revision or log entry was suppressed
+    reason = @mb.repl.query(sql).to_a.first['log_comment'] rescue nil
+
+    case reason
+    when /\[\[WP:CSD#/
+      'speedy'
+    when /\[\[WP:(BLP)?PROD/
+      'prod'
+    when /\[\[(Wikipedia|WP):Articles for deletion\//
+      'afd'
+    else
+      'other'
+    end
+  end
+
+  # PATROLLER REVIEW STATS
+
+  def self.patroller_review_stats
     total_page_count = 0
 
     # Only look for edits made by users who are known to have done reviews
