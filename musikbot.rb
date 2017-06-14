@@ -135,7 +135,7 @@ module MusikBot
       }.merge(opts)
       return @repl_client if @repl_client && !opts.delete(:reload)
       @repl_client = Repl::Session.new(
-        { database: opts[:database] || db + '_p' }.merge(app_config[opts[:credentials]])
+        { database: opts[:database] || db }.merge(app_config[opts[:credentials]])
       )
     end
     alias_method :repl, :repl_client
@@ -243,14 +243,25 @@ module MusikBot
 
     def get_revision_at_date(page, date, opts = {})
       full_response = opts.delete(:full_response)
+      deleted = opts.delete(:deleted)
 
-      opts = {
-        prop: 'revisions',
-        rvprop: 'content',
-        titles: page,
-        rvstart: api_date(date),
-        rvlimit: 1
-      }.merge(opts)
+      if deleted
+        opts = {
+          prop: 'deletedrevisions',
+          drvprop: 'content',
+          titles: page,
+          drvstart: api_date(date),
+          drvlimit: 1
+        }.merge(opts)
+      else
+        opts = {
+          prop: 'revisions',
+          rvprop: 'content',
+          titles: page,
+          rvstart: api_date(date),
+          rvlimit: 1
+        }.merge(opts)
+      end
 
       page_obj = gateway.custom_query(opts).elements['pages'][0]
 
@@ -258,6 +269,9 @@ module MusikBot
 
       if full_response
         page_obj
+      elsif deleted
+        rev = page_obj.elements['deletedrevisions/rev']
+        opts[:drvprop] == 'content' ? rev.text : rev
       else
         rev = page_obj.elements['revisions/rev']
         opts[:rvprop] == 'content' ? rev.text : rev

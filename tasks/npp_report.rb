@@ -1,6 +1,16 @@
 $LOAD_PATH << '..'
 require 'musikbot'
 
+# Start and end of the date range to process
+START_DATE = 20170215000000
+END_DATE = 20170315000000
+
+# Ask for pages between two IDs to speed up the query on revision.
+# These were picked by looking at Special:NewPagesFeed
+#   and using the IDs of pages around the above date range.
+LOWER_PAGE_ID = 53149940
+UPPER_PAGE_ID = 53549951
+
 module NPPReport
   def self.run
     @mb = MusikBot::Session.new(inspect, true)
@@ -15,67 +25,112 @@ module NPPReport
     #    users, and the percentage of those that were ultimately deleted.
     # Call whichever function below
 
-    patroller_review_stats
     article_survival_stats
   end
 
   # ARTICLE SURVIVAL STATS
 
   def self.article_survival_stats
-    stats = {
-      created: 0,
-      autoconfirmed: {
-        created: 0,
-        revdel: 0,
-        deleted: {
-          total: 0,
-          speedy: 0,
-          prod: 0,
-          afd: 0,
-          other: 0
+    # Set up timeline data structure, with an entry for each date in the date range
+    stats = {}
+    (Date.parse(START_DATE.to_s)..Date.parse(END_DATE.to_s)).each do |date|
+      # For each day, we record data for autopatrolled, autoconfirmed and non-autoconfirmed users.
+      # The summation of numbers for autoconfirmed and non-autoconfirmed will be the grand total.
+      # Stats on autopatrolled users are included so we can do subtractions to get numbers
+      #   on pages that entered the new page patrol backlog.
+      stats[date.strftime('%Y-%m-%d')] = {
+        autopatrolled: {
+          # total number of pages created on this day
+          created: 0,
+          # list types of deletions, where the summation = total number of deleted articles
+          deleted: {
+            speedy: 0,
+            prod: 0,
+            afd: 0,
+            other: 0
+          },
+          # number of articles deleted within 90 days of creation
+          deleted_90_days: 0,
+          # number of articles that are currently a redirect
+          redirected: 0,
+          revdel: 0
         },
-        now_redirect: 0
-      },
-      non_autoconfirmed: {
-        created: 0,
-        revdel: 0,
-        deleted: {
-          total: 0,
-          speedy: 0,
-          prod: 0,
-          afd: 0,
-          other: 0
+        # Use the same data structure for autoconfirmed and non-autoconfirmed users
+        autoconfirmed: {
+          created: 0,
+          deleted: {
+            speedy: 0,
+            prod: 0,
+            afd: 0,
+            other: 0
+          },
+          deleted_90_days: 0,
+          redirected: 0,
+          revdel: 0
         },
-        now_redirect: 0
+        non_autoconfirmed: {
+          created: 0,
+          deleted: {
+            speedy: 0,
+            prod: 0,
+            afd: 0,
+            other: 0
+          },
+          deleted_90_days: 0,
+          redirected: 0,
+          revdel: 0
+        }
       }
-    }
+    end
 
+    # Fetch pages in date range, cache the results, and store the length in num_pages
     num_pages = pages_created.length
 
+    # This is more of a safeguard. The same page (with the same ID) should
+    # theoretically not be processed more than once.
     pages_processed = []
 
+    # Loop through each page and do our processing
     pages_created.each_with_index do |page, i|
       next if page_was_redirect?(page) || pages_processed.include?(page['page_id'])
 
       pages_processed << page['page_id']
 
-      stats_key = user_autoconfirmed?(
-        page['user_id'], page['user_name'], page['timestamp']
-      ) ? :autoconfirmed : :non_autoconfirmed
+      user_rights_key = user_rights_type(page['user_id'], page['user_name'], page['timestamp'])
 
-      puts "#{i} of #{num_pages}: #{page['title']} (#{page['deleted'] == 1 ? 'deleted, ' : ''}#{stats_key})"
+      # Log output to monitor progress and spot check for accuracy
+      output = "#{i} of #{num_pages}: #{page['title']} (#{page['deleted'] == 1 ? 'deleted, ' : ''}#{user_rights_key}"
 
-      stats[:created] += 1
-      stats[stats_key][:created] += 1
+      # Do summations for this date in the timeline
+      timeline_date = @mb.parse_date(page['timestamp']).strftime('%Y-%m-%d')
+      stats[timeline_date][user_rights_key][:created] += 1
+
+      # Check if the text was revdel'd or suppressed, and if so increment this count,
+      #   just out of curiousity of how many times this happens
+      if [1, 15].include?(page['revdel'].to_i)
+        stats[timeline_date][user_rights_key][:revdel] += 1
+      end
 
       # page_is_redirect comes from the page object, which only exists if the page is live
       if page['redirect'] == 1
-        stats[stats_key][:now_redirect] += 1
+        stats[timeline_date][user_rights_key][:redirected] += 1
+        output += ", redirected"
       elsif page['deleted'] == 1
-        deletion_key = deletion_reason(page['page_id'])
-        stats[stats_key][:deleted][:total] += 1
-        stats[stats_key][:deleted][deletion_key.to_sym] += 1
+        deletion_key, deletion_timestamp = deletion_data(page['page_id'])
+
+        # increment count on the type of deletion
+        stats[timeline_date][user_rights_key][:deleted][deletion_key.to_sym] += 1
+
+        output += ", #{deletion_key}"
+
+        # Some log entries are suppressed, in which case we don't know if the page was deleted within 90 days
+        if deletion_timestamp.present? && @mb.parse_date(deletion_timestamp) < @mb.parse_date(page['timestamp']) + 90
+          stats[timeline_date][user_rights_key][:deleted_90_days] += 1
+          output += ", deleted after 90 days"
+        end
       end
+
+      puts output + ")"
     end
 
     @mb.local_storage(stats)
@@ -84,34 +139,50 @@ module NPPReport
   end
 
   def self.page_was_redirect?(page_props)
-    if page_props['deleted'] == 1
-      !!(page_props['comment'] =~ /Redirected/i)
-    else
-      begin
-        content = @mb.get_revision_at_date(page_props['title'], page_props['timestamp'])
-        !!(content =~ /^#REDIRECT \[\[.*?\]\]/i)
-      rescue => e
-        # This sometimes happens if the page was so big that Rexml library breaks.
-        # In such cases it's safe to assume the page was not a redirect.
-        false
-      end
+    begin
+      content = @mb.get_revision_at_date(page_props['title'], page_props['timestamp'],
+        deleted: page_props['deleted'] == 1
+      )
+      !!(content =~ /^#REDIRECT/i)
+    rescue => e
+      # This sometimes happens if the page was so big that the Rexml library breaks.
+      # In such cases it's safe to assume the page was not a redirect.
+      false
     end
   end
 
-  def self.user_autoconfirmed?(user_id, username, timestamp)
+  # Determine if the user was autopatrolled or autoconfirmed based on user rights,
+  #   number of edits, and registration date at the time the page was created (timestamp)
+  def self.user_rights_type(user_id, username, timestamp)
     # IPs may create articles through AfC
-    return false if user_id == 0
+    return :non_autoconfirmed if user_id == 0
 
-    # Check if they were granted (semi|extended)confirmed prior to creating the article
+    # First check if they were autopatrolled
+
+    # Get last user rights change before the page creation, which
+    #   will tell us what user rights that had at that time.
     sql = %{
-      SELECT COUNT(*) AS count
+      SELECT log_params
       FROM logging
       WHERE log_type = 'rights'
       AND log_title = ?
-      AND log_params REGEXP ".*?confirmed"
       AND log_timestamp < ?
+      ORDER BY log_timestamp DESC
+      LIMIT 1
     }
-    return true if @mb.repl_query(sql, username.score, timestamp).to_a.first['count'] > 0
+    last_rights_change = @mb.repl_query(sql, username.score, timestamp).to_a.first
+    if last_rights_change.present?
+      # The current format of the log params is `oldgroups [groups] newgroups [groups]`
+      #   where the old format just listed what they currently had at that time, e.g. `autoreviewer,rollback`
+      # So we look at either the "newgroups" or any groups that aren't followed by the text "newgroups"
+      autopatrolled_regex = /newgroups(?=.*?(autoreviewer|sysop))|(autoreviewer|sysop)(?!.*?newgroups)/
+
+      # accounts for confirmed, autoconfirmed and extendedconfirmed (the latter implies (auto)confirmed is present)
+      confirmed_regex = /newgroups(?=.*?confirmed)|confirmed(?!.*?newgroups)/
+
+      return :autopatrolled if last_rights_change['log_params'] =~ autopatrolled_regex
+      return :autoconfirmed if last_rights_change['log_params'] =~ confirmed_regex
+    end
 
     # Check if the account was under 4 days old at the time they created the article
     sql = %{
@@ -121,79 +192,77 @@ module NPPReport
     }
     registration = @mb.repl_query(sql, username.descore).to_a.first['user_registration']
 
-    # Some really old accounts mysteriously don't have a registration date
-    # We'll just have to assume they made at least 10 edits
-    return true if registration.nil?
+    # Some really old accounts mysteriously don't have a registration date.
+    # We'll just have to assume they made at least 10 edits.
+    return :autoconfirmed if registration.nil?
 
     age_at_creation = (@mb.parse_date(timestamp.to_s) - @mb.parse_date(registration)).to_i
-    return false if age_at_creation < 4
+    return :non_autoconfirmed if age_at_creation < 4
 
     # Check if the account has an edit count of less than 10 when they created the article
     sql = %{
-      SELECT COUNT(*) AS count
+      SELECT 'live' AS source, COUNT(*) AS count
       FROM revision
       WHERE rev_user = ?
       AND rev_timestamp BETWEEN #{registration} AND #{timestamp}
+      UNION
+      SELECT 'del' AS source, COUNT(*) AS count
+      FROM archive
+      WHERE ar_user = ?
+      AND ar_timestamp BETWEEN #{registration} AND #{timestamp}
     }
-    edits_at_creation = @mb.repl_query(sql, user_id).first['count']
+    result = @mb.repl_query(sql, user_id, user_id).to_a
+    edits_at_creation = result[0]['count'] + result[1]['count']
 
-    return false if edits_at_creation < 10
+    return :non_autoconfirmed if edits_at_creation < 10
 
-    true
+    :autoconfirmed
   end
 
   def self.pages_created
     return @pages_created if @pages_created
 
-    start_date = 20161101000000
-    end_date = 20161108000000
-
-    # Ask for pages between two IDs to speed up the query on revision
-    # These were picked by looking at Special:NewPagesFeed
-    #   and using the IDs of pages around the above date range
-    lower_page_id = 52035284
-    upper_page_id = 52532113
-
     sql = %{
       SELECT page_title AS title, rev_page AS page_id, rev_timestamp AS timestamp,
              rev_user AS user_id, rev_user_text AS user_name, 0 AS deleted,
-             rev_comment AS comment, page_is_redirect AS redirect
+             rev_deleted AS revdel, page_is_redirect AS redirect
       FROM revision
       JOIN page ON page_id = rev_page
-      WHERE rev_page > #{lower_page_id}
-      AND rev_page < #{upper_page_id}
+      WHERE rev_page > #{LOWER_PAGE_ID}
+      AND rev_page < #{UPPER_PAGE_ID}
       AND rev_parent_id = 0
       AND page_namespace = 0
-      AND rev_timestamp BETWEEN #{start_date} AND #{end_date}
+      AND rev_timestamp BETWEEN #{START_DATE} AND #{END_DATE}
     }
     pages = @mb.repl.query(sql).to_a
 
     sql = %{
       SELECT ar_title AS title, ar_page_id AS page_id, ar_timestamp AS timestamp,
              ar_user AS user_id, ar_user_text AS user_name, 1 AS deleted,
-             ar_comment AS comment, 0 AS redirect
+             ar_deleted AS revdel, 0 AS redirect
       FROM archive
       WHERE ar_parent_id = 0
       AND ar_namespace = 0
-      AND ar_timestamp BETWEEN #{start_date} AND #{end_date}
+      AND ar_timestamp BETWEEN #{START_DATE} AND #{END_DATE}
     }
 
     # Cache and return combined results of the two queries
     @pages_created = (pages + @mb.repl.query(sql).to_a).sort {|a, b| a['title'] <=> b['title']}
   end
 
-  def self.deletion_reason(page_id)
+  def self.deletion_data(page_id)
     sql = %{
-      SELECT log_comment
+      SELECT log_comment, log_timestamp
       FROM logging
       WHERE log_type = 'delete'
       AND log_page = #{page_id}
     }
 
     # rescue nil to handle pages where the revision or log entry was suppressed
-    reason = @mb.repl.query(sql).to_a.first['log_comment'] rescue nil
+    comment = @mb.repl.query(sql).to_a.first['log_comment'] rescue nil
+    timestamp = @mb.repl.query(sql).to_a.first['log_timestamp'] rescue nil
 
-    case reason
+    deletion_type = case comment
     when /\[\[WP:CSD#/
       'speedy'
     when /\[\[WP:(BLP)?PROD/
@@ -203,6 +272,8 @@ module NPPReport
     else
       'other'
     end
+
+    [deletion_type, timestamp]
   end
 
   # PATROLLER REVIEW STATS
