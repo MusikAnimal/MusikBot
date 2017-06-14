@@ -35,9 +35,7 @@ module NPPReport
     stats = {}
     (Date.parse(START_DATE.to_s)..Date.parse(END_DATE.to_s)).each do |date|
       # For each day, we record data for autopatrolled, autoconfirmed and non-autoconfirmed users.
-      # The summation of numbers for autoconfirmed and non-autoconfirmed will be the grand total.
-      # Stats on autopatrolled users are included so we can do subtractions to get numbers
-      #   on pages that entered the new page patrol backlog.
+      # The summation of the numbers for each user group will be the grand total.
       stats[date.strftime('%Y-%m-%d')] = {
         autopatrolled: {
           # total number of pages created on this day
@@ -156,8 +154,6 @@ module NPPReport
   def self.user_rights_type(user_id, username, timestamp)
     # IPs may create articles through AfC
     return :non_autoconfirmed if user_id == 0
-
-    # First check if they were autopatrolled
 
     # Get last user rights change before the page creation, which
     #   will tell us what user rights that had at that time.
