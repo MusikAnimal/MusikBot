@@ -11,6 +11,8 @@ module TopPageReviewers
       {{TOC right}}
       <div style='font-size:24px'>Top new page reviewers as of ~~~~~</div>
 
+      Limited to the top 100 reviewers for each time period.
+
       Prepared by ~~~ <onlyinclude>~~~~~</onlyinclude>
 
       == Last 24 hours ==
@@ -27,6 +29,14 @@ module TopPageReviewers
     markup += "\n== Last 30 days ==\n"
     markup += report_block(30)
 
+    # Last 3 months
+    markup += "\n== Last 90 days ==\n"
+    markup += report_block(90)
+
+    # Last year
+    markup += "\n== Last 365 days ==\n"
+    markup += report_block(365)
+
     @mb.edit(REPORT_PAGE,
       content: markup,
       summary: "Reporting top new page reviewers"
@@ -36,15 +46,24 @@ module TopPageReviewers
   def self.report_block(offset)
     markup = <<~END
       {| class='wikitable sortable'
+      ! Rank
       ! Username
       ! Num reviews
+      ! Log
       |-
     END
 
-    top_reviewers(offset).each do |data|
+    top_reviewers(offset).each_with_index do |data, i|
+      patrol_log_link = "https://en.wikipedia.org/w/index.php?title=Special:Log" \
+        "&type=patrol&subtype=patrol&user=#{data['reviewer'].score}"
+      pagetriage_log_link = "https://en.wikipedia.org/w/index.php?title=Special:Log" \
+        "&type=pagetriage-curation&user=#{data['reviewer'].score}"
+
       markup += <<~END
+        | #{i + 1}
         | {{User0|#{data['reviewer']}}}
-        | {{FORMATNUM:#{data['reviews']}}}
+        | data-sort-value=#{data['reviewer']} | {{FORMATNUM:#{data['reviews']}}}
+        | [#{patrol_log_link} Patrol] [#{pagetriage_log_link} Page Curation]
         |-
       END
     end
@@ -62,21 +81,22 @@ module TopPageReviewers
 
     sql = %{
       SELECT log_user_text AS `reviewer`,
-             COUNT(log_id) AS `reviews`
+             COUNT(DISTINCT(log_page)) AS `reviews`
       FROM logging
       WHERE log_timestamp BETWEEN #{start_time} AND #{end_time}
       AND log_namespace = 0
       AND (
         (
           log_type = 'patrol'
-          AND log_params NOT LIKE '%::auto";i:1%'
+          AND log_action = 'patrol'
         ) OR (
           log_type = 'pagetriage-curation'
           AND log_action = 'reviewed'
         )
       )
       GROUP BY reviewer
-      ORDER BY reviews DESC;
+      ORDER BY reviews DESC
+      LIMIT 100;
     }
     @top_reviewers ||= {}
     @top_reviewers[offset] = @mb.repl.query(sql).to_a
