@@ -135,7 +135,7 @@ module MusikBot
       }.merge(opts)
       return @repl_client if @repl_client && !opts.delete(:reload)
       @repl_client = Repl::Session.new(
-        { database: opts[:database] || db }.merge(app_config[opts[:credentials]])
+        { database: opts[:database] || db + '_p' }.merge(app_config[opts[:credentials]])
       )
     end
     alias_method :repl, :repl_client
