@@ -28,6 +28,7 @@ class String
     self[0] = self[0].capitalize
     self
   end
+  alias_method :ucfirst, :capitalize_first
 
   def uncapitalize
     self[0, 1].downcase + self[1..-1]

@@ -23,7 +23,7 @@ GEM
     method_source (0.8.2)
     mime-types (2.99.3)
     multi_xml (0.5.5)
-    mysql2 (0.4.2)
+    mysql2 (0.4.5)
     netrc (0.11.0)
     nokogiri (1.5.10)
     pry (0.10.3)
@@ -51,7 +51,7 @@ DEPENDENCIES
   httparty (= 0.13.7)
   i18n (= 0.7.0)
   mediawiki-gateway!
-  mysql2 (= 0.4.2)
+  mysql2 (= 0.4.5)
   nokogiri (= 1.5.10)
   pry-byebug (= 3.3.0)
   redis (= 3.2.2)
