@@ -1,15 +1,16 @@
 $LOAD_PATH << '..'
 require 'musikbot'
+require 'json'
 
 # Start and end of the date range to process
-START_DATE = 20170215000000
-END_DATE = 20170315000000
+START_DATE = 20170210000000
+END_DATE   = 20170211000000
 
 # Ask for pages between two IDs to speed up the query on revision.
 # These were picked by looking at Special:NewPagesFeed
 #   and using the IDs of pages around the above date range.
-LOWER_PAGE_ID = 53149940
-UPPER_PAGE_ID = 53549951
+LOWER_PAGE_ID = 52680222
+UPPER_PAGE_ID = 53600142
 
 module NPPReport
   def self.run
@@ -25,44 +26,57 @@ module NPPReport
     #    users, and the percentage of those that were ultimately deleted.
     # Call whichever function below
 
-    article_survival_stats
+    # article_survival_stats
+    export_data(@disk_cache.sort.to_h)
   end
 
   # ARTICLE SURVIVAL STATS
 
   def self.article_survival_stats
-    # Set up timeline data structure, with an entry for each date in the date range
-    stats = {}
+    # Set up timeline data structure, with an entry for each date in the date range.
+    # @disk_cache pulls in data from the last run, as this script may be ran in chunks.
+    stats = @disk_cache.present? ? @disk_cache : {}
+
     (Date.parse(START_DATE.to_s)..Date.parse(END_DATE.to_s)).each do |date|
+      date_key = date.strftime('%Y-%m-%d')
+
+      # Skip if we already have an entry for this date from the last run
+      next if stats[date_key].present?
+
       # For each day, we record data for autopatrolled, autoconfirmed and non-autoconfirmed users.
       # The summation of the numbers for each user group will be the grand total.
-      stats[date.strftime('%Y-%m-%d')] = {
-        autopatrolled: {
-          # total number of pages created on this day
-          created: 0,
-          # list types of deletions, where the summation = total number of deleted articles
-          deleted: {
-            speedy: 0,
-            prod: 0,
-            afd: 0,
-            other: 0
-          },
-          # number of articles deleted within 90 days of creation
-          deleted_90_days: 0,
-          # number of articles that are currently a redirect
-          redirected: 0,
-          revdel: 0
-        },
+      stats[date_key] = {
         # Use the same data structure for autoconfirmed and non-autoconfirmed users
         autoconfirmed: {
           created: 0,
           deleted: {
             speedy: 0,
+            speedy_type: {
+              a1: 0,
+              a2: 0,
+              a3: 0,
+              a5: 0,
+              a7: 0,
+              a9: 0,
+              a10: 0,
+              a11: 0,
+              g1: 0,
+              g2: 0,
+              g3: 0,
+              g4: 0,
+              g5: 0,
+              g6: 0,
+              g7: 0,
+              g8: 0,
+              g9: 0,
+              g10: 0,
+              g11: 0,
+              g12: 0
+            },
             prod: 0,
             afd: 0,
             other: 0
           },
-          deleted_90_days: 0,
           redirected: 0,
           revdel: 0
         },
@@ -70,11 +84,32 @@ module NPPReport
           created: 0,
           deleted: {
             speedy: 0,
+            speedy_type: {
+              a1: 0,
+              a2: 0,
+              a3: 0,
+              a5: 0,
+              a7: 0,
+              a9: 0,
+              a10: 0,
+              a11: 0,
+              g1: 0,
+              g2: 0,
+              g3: 0,
+              g4: 0,
+              g5: 0,
+              g6: 0,
+              g7: 0,
+              g8: 0,
+              g9: 0,
+              g10: 0,
+              g11: 0,
+              g12: 0
+            },
             prod: 0,
             afd: 0,
             other: 0
           },
-          deleted_90_days: 0,
           redirected: 0,
           revdel: 0
         }
@@ -96,6 +131,9 @@ module NPPReport
 
       user_rights_key = user_rights_type(page['user_id'], page['user_name'], page['timestamp'])
 
+      # Only interested in non-autopatrolled users
+      next if user_rights_key == :autopatrolled
+
       # Log output to monitor progress and spot check for accuracy
       output = "#{i} of #{num_pages}: #{page['title']} (#{page['deleted'] == 1 ? 'deleted, ' : ''}#{user_rights_key}"
 
@@ -114,18 +152,19 @@ module NPPReport
         stats[timeline_date][user_rights_key][:redirected] += 1
         output += ", redirected"
       elsif page['deleted'] == 1
-        deletion_key, deletion_timestamp = deletion_data(page['page_id'])
+        deletion_key, deletion_timestamp, speedy_types = deletion_data(page['page_id'])
+
+        speedy_types.each do |speedy_type|
+          speedy_key = speedy_type.downcase.to_sym
+          if stats[timeline_date][user_rights_key][:deleted][:speedy_type].keys.include?(speedy_key)
+            stats[timeline_date][user_rights_key][:deleted][:speedy_type][speedy_key] += 1
+          end
+        end
 
         # increment count on the type of deletion
         stats[timeline_date][user_rights_key][:deleted][deletion_key.to_sym] += 1
 
         output += ", #{deletion_key}"
-
-        # Some log entries are suppressed, in which case we don't know if the page was deleted within 90 days
-        if deletion_timestamp.present? && @mb.parse_date(deletion_timestamp) < @mb.parse_date(page['timestamp']) + 90
-          stats[timeline_date][user_rights_key][:deleted_90_days] += 1
-          output += ", deleted after 90 days"
-        end
       end
 
       puts output + ")"
@@ -134,6 +173,259 @@ module NPPReport
     @mb.local_storage(stats)
 
     puts stats
+  end
+
+  # This returns the data in a format needed for Extension:Graph
+  def self.export_data(stats)
+    data = {
+      line: {
+        all: {
+          backlog: "type,date,value\n",
+          survival: "type,date,value\n",
+          deletions: "type,date,value\n",
+          speedy: "type,date,value\n"
+        },
+        autoconfirmed: {
+          survival: "type,date,value\n",
+          deletions: "type,date,value\n",
+          speedy: "type,date,value\n"
+        },
+        non_autoconfirmed: {
+          survival: "type,date,value\n",
+          deletions: "type,date,value\n",
+          speedy: "type,date,value\n"
+        }
+      },
+      pie: {
+        all: {
+          backlog: [
+            {x: 'Autoconfirmed', y: 0},
+            {x: 'Non-autoconfirmed', y: 0}
+          ],
+          survival: [
+            {x: 'Kept', y: 0},
+            {x: 'Deleted', y: 0},
+            {x: 'Redirected', y: 0}
+          ],
+          deletions: [
+            {x: 'Speedy', y: 0},
+            {x: 'PROD', y: 0},
+            {x: 'AfD', y: 0},
+            {x: 'Other', y: 0}
+          ],
+          speedy: {}
+        },
+        autoconfirmed: {
+          survival: [
+            {x: 'Kept', y: 0},
+            {x: 'Deleted', y: 0},
+            {x: 'Redirected', y: 0}
+          ],
+          deletions: [
+            {x: 'Speedy', y: 0},
+            {x: 'PROD', y: 0},
+            {x: 'AfD', y: 0},
+            {x: 'Other', y: 0}
+          ],
+          speedy: {}
+        },
+        non_autoconfirmed: {
+          survival: [
+            {x: 'Kept', y: 0},
+            {x: 'Deleted', y: 0},
+            {x: 'Redirected', y: 0}
+          ],
+          deletions: [
+            {x: 'Speedy', y: 0},
+            {x: 'PROD', y: 0},
+            {x: 'AfD', y: 0},
+            {x: 'Other', y: 0}
+          ],
+          speedy: {}
+        }
+      }
+    }
+
+    top_10_speedy = {
+      all: {},
+      autoconfirmed: {},
+      non_autoconfirmed: {}
+    }
+
+    # First determine the top 10 most used speedy deletion types,
+    # the values of which we can go ahead and store for use in the pie charts.
+    # Later in the main loop we will only keep track of the top 9 + "other"
+    # for use in the line charts.
+    stats.each do |date, values|
+      [:autoconfirmed, :non_autoconfirmed].each do |rights_key|
+        values[rights_key][:deleted][:speedy_type].keys.each do |speedy_key|
+          speedy_value = values[rights_key][:deleted][:speedy_type][speedy_key]
+          speedy_key = speedy_key.upcase
+
+          # Pie - All - Speedy
+          if data[:pie][:all][:speedy][speedy_key]
+            data[:pie][:all][:speedy][speedy_key] += speedy_value
+          else
+            data[:pie][:all][:speedy][speedy_key] = speedy_value
+          end
+
+          # Pie - (Non-)Autoconfirmed - Speedy
+          if data[:pie][rights_key][:speedy][speedy_key]
+            data[:pie][rights_key][:speedy][speedy_key] += speedy_value
+          else
+            data[:pie][rights_key][:speedy][speedy_key] = speedy_value
+          end
+        end
+      end
+    end
+
+    # Do our sorts
+    [:all, :autoconfirmed, :non_autoconfirmed].each do |rights_key|
+      sorted_values = data[:pie][rights_key][:speedy].sort_by { |_key, value| value }.reverse
+      data[:pie][rights_key][:speedy] = sorted_values.slice!(0, 9).to_h
+      data[:pie][rights_key][:speedy][:other] = sorted_values.to_h.values.inject(:+)
+    end
+
+    # Now loop through stats by date and fill in all needed data structures
+    stats.each do |date, values|
+      date_value = Date.parse(date).strftime('%b %-d %Y')
+
+      # Line - All - Backlog
+      data[:line][:all][:backlog] += "All,#{date_value},#{values[:autoconfirmed][:created] + values[:non_autoconfirmed][:created]}\n" \
+        "Autoconfirmed,#{date_value},#{values[:autoconfirmed][:created]}\n" \
+        "Non-autoconfirmed,#{date_value},#{values[:non_autoconfirmed][:created]}\n"
+
+      # Pie - All - Backlog
+      data[:pie][:all][:backlog][0][:y] += values[:autoconfirmed][:created]
+      data[:pie][:all][:backlog][1][:y] += values[:non_autoconfirmed][:created]
+
+      # Data for Line - All - Survival
+      total_kept = 0
+      total_deleted = 0
+      total_redirected = 0
+
+      # Data for Line - All - Deletions
+      totals_deletions = {
+        'Speedy' => 0,
+        'PROD' => 0,
+        'AfD' => 0,
+        'Other' => 0
+      }
+
+      # Data for Line - All - Speedy
+      totals_speedy = { 'Other' => 0 }
+
+      [:autoconfirmed, :non_autoconfirmed].each do |rights_key|
+        deleted = 0
+        ['Speedy', 'PROD', 'AfD', 'Other'].each_with_index do |del_type, i|
+          deleted_value = values[rights_key][:deleted][del_type.downcase.to_sym]
+          deleted += deleted_value
+
+          # Line - (Non-)Autoconfirmed - Deletions
+          data[:line][rights_key][:deletions] += "#{del_type},#{date_value},#{deleted_value}\n"
+
+          # Pie - (Non-)Autoconfirmed - Deletions
+          data[:pie][rights_key][:deletions][i][:y] += deleted_value
+
+          # For Line - All - Deletions
+          totals_deletions[del_type] += deleted_value
+
+          # Pie - All - Deletions
+          data[:pie][:all][:deletions][i][:y] += deleted_value
+        end
+        redirected = values[rights_key][:redirected]
+        kept = values[rights_key][:created] - deleted - redirected
+
+        # Update totals for Line - All - Survival
+        total_kept += kept
+        total_deleted += deleted
+        total_redirected += redirected
+
+        # Pie - All - Survival
+        data[:pie][:all][:survival][0][:y] += kept
+        data[:pie][:all][:survival][1][:y] += deleted
+        data[:pie][:all][:survival][2][:y] += redirected
+
+        # Line - (Non-)Autoconfirmed - Survival
+        data[:line][rights_key][:survival] += "Kept,#{date_value},#{kept}\n"
+        data[:line][rights_key][:survival] += "Deleted,#{date_value},#{deleted}\n"
+        data[:line][rights_key][:survival] += "Redirected,#{date_value},#{redirected}\n"
+
+        # Pie - (Non-)Autoconfirmed - Survival
+        data[:pie][rights_key][:survival][0][:y] += kept
+        data[:pie][rights_key][:survival][1][:y] += deleted
+        data[:pie][rights_key][:survival][2][:y] += redirected
+
+        # Loop through each type of speedy deletion and populate data structures
+        values[rights_key][:deleted][:speedy_type].keys.each do |speedy_key|
+          speedy_value = values[rights_key][:deleted][:speedy_type][speedy_key]
+          speedy_key = speedy_key.upcase
+
+          # Above in the first loop we got the top 10 speedy types of each user right type.
+          # Here we'll keep track of the per-day values for the line charts, but only
+          # for the top 10
+          if data[:pie][rights_key][:speedy].keys.include?(speedy_key)
+            data[:line][rights_key][:speedy] += "#{speedy_key},#{date_value},#{speedy_value}\n"
+          else
+            data[:line][rights_key][:speedy] += "Other,#{date_value},#{speedy_value}\n"
+          end
+
+          # Same logic as above but for All
+          if data[:pie][:all][:speedy].keys.include?(speedy_key)
+            if totals_speedy[speedy_key]
+              totals_speedy[speedy_key] += speedy_value
+            else
+              totals_speedy[speedy_key] = speedy_value
+            end
+          else
+            totals_speedy['Other'] += speedy_value
+          end
+        end
+      end
+
+      # Line - All - Survival
+      data[:line][:all][:survival] += "Kept,#{date_value},#{total_kept}\n"
+      data[:line][:all][:survival] += "Deleted,#{date_value},#{total_deleted}\n"
+      data[:line][:all][:survival] += "Redirected,#{date_value},#{total_redirected}\n"
+
+      # Line - All - Deletions
+      data[:line][:all][:deletions] += "Speedy,#{date_value},#{totals_deletions['Speedy']}\n"
+      data[:line][:all][:deletions] += "PROD,#{date_value},#{totals_deletions['PROD']}\n"
+      data[:line][:all][:deletions] += "AfD,#{date_value},#{totals_deletions['AfD']}\n"
+      data[:line][:all][:deletions] += "Other,#{date_value},#{totals_deletions['Other']}\n"
+
+      # Line - All - Speedy
+      totals_speedy.keys.each do |speedy_key|
+        data[:line][:all][:speedy] += "#{speedy_key},#{date_value},#{totals_speedy[speedy_key]}\n"
+      end
+    end
+
+    # Transform data structures for speedy types into what's needed for the pie charts
+    [:all, :autoconfirmed, :non_autoconfirmed].each do |rights_key|
+      new_speedy_data = []
+      data[:pie][rights_key][:speedy].each do |speedy_type, speedy_value|
+        new_speedy_data << {x: speedy_type.to_s.ucfirst, y: speedy_value}
+      end
+      data[:pie][rights_key][:speedy] = new_speedy_data
+    end
+
+    # Write to file
+    write_report("all-backlog-line", data[:line][:all][:backlog])
+    write_report("all-backlog-pie", data[:pie][:all][:backlog].to_json)
+    [:all, :autoconfirmed, :non_autoconfirmed].each do |rights_key|
+      write_report("#{rights_key}-survival-line", data[:line][rights_key][:survival])
+      write_report("#{rights_key}-survival-pie", data[:pie][rights_key][:survival].to_json)
+      write_report("#{rights_key}-deletions-line", data[:line][rights_key][:deletions])
+      write_report("#{rights_key}-deletions-pie", data[:pie][rights_key][:deletions].to_json)
+      write_report("#{rights_key}-speedy-line", data[:line][rights_key][:speedy])
+      write_report("#{rights_key}-speedy-pie", data[:pie][rights_key][:speedy].to_json)
+    end
+  end
+
+  def self.write_report(title, csv)
+    file_path = File.dirname(__FILE__) + "/../disk_cache/#{title}"
+    puts file_path
+    File.open(file_path, 'w') { |file| file.write(csv) }
   end
 
   def self.page_was_redirect?(page_props)
@@ -166,7 +458,7 @@ module NPPReport
       ORDER BY log_timestamp DESC
       LIMIT 1
     }
-    last_rights_change = @mb.repl_query(sql, username.score, timestamp).to_a.first
+    last_rights_change = repl_query(sql, username.score, timestamp).first
     if last_rights_change.present?
       # The current format of the log params is `oldgroups [groups] newgroups [groups]`
       #   where the old format just listed what they currently had at that time, e.g. `autoreviewer,rollback`
@@ -186,7 +478,7 @@ module NPPReport
       FROM user
       WHERE user_name = ?
     }
-    registration = @mb.repl_query(sql, username.descore).to_a.first['user_registration']
+    registration = repl_query(sql, username.descore).first['user_registration']
 
     # Some really old accounts mysteriously don't have a registration date.
     # We'll just have to assume they made at least 10 edits.
@@ -207,7 +499,7 @@ module NPPReport
       WHERE ar_user = ?
       AND ar_timestamp BETWEEN #{registration} AND #{timestamp}
     }
-    result = @mb.repl_query(sql, user_id, user_id).to_a
+    result = repl_query(sql, user_id, user_id)
     edits_at_creation = result[0]['count'] + result[1]['count']
 
     return :non_autoconfirmed if edits_at_creation < 10
@@ -258,8 +550,10 @@ module NPPReport
     comment = @mb.repl.query(sql).to_a.first['log_comment'] rescue nil
     timestamp = @mb.repl.query(sql).to_a.first['log_timestamp'] rescue nil
 
+    speedy_regex = /\[\[WP:CSD#((?:A|G)\d+)|\[\[WP:((?:A|G)\d+)\|/
+
     deletion_type = case comment
-    when /\[\[WP:CSD#/
+    when speedy_regex
       'speedy'
     when /\[\[WP:(BLP)?PROD/
       'prod'
@@ -269,7 +563,13 @@ module NPPReport
       'other'
     end
 
-    [deletion_type, timestamp]
+    speedy_type = []
+    if deletion_type == 'speedy'
+      speedy_type = comment.scan(speedy_regex).flatten.compact.uniq
+      puts "  #{comment} = #{speedy_type}"
+    end
+
+    [deletion_type, timestamp, speedy_type]
   end
 
   # PATROLLER REVIEW STATS
@@ -447,6 +747,11 @@ module NPPReport
       AND ptrp_created BETWEEN 20170401000000 AND 20170501000000
     }
     @mb.repl.query(sql).to_a
+  end
+
+  def self.repl_query(sql, *values)
+    statement = @mb.repl(replicas: false).prepare(sql)
+    statement.execute(*values).to_a
   end
 end
 
