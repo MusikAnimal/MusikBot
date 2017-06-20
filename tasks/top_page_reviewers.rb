@@ -82,7 +82,7 @@ module TopPageReviewers
     sql = %{
       SELECT log_user_text AS `reviewer`,
              COUNT(DISTINCT(log_page)) AS `reviews`
-      FROM logging
+      FROM logging_userindex
       WHERE log_timestamp BETWEEN #{start_time} AND #{end_time}
       AND log_namespace = 0
       AND (
