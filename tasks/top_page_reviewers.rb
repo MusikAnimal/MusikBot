@@ -44,6 +44,7 @@ module TopPageReviewers
   end
 
   def self.report_block(offset)
+    puts "Getting top reviewers for the past #{offset} days..."
     markup = <<~END
       {| class='wikitable sortable'
       ! Rank
@@ -80,20 +81,23 @@ module TopPageReviewers
     end_time = @mb.now.strftime('%Y%m%d%H%M%S')
 
     sql = %{
-      SELECT log_user_text AS `reviewer`,
-             COUNT(DISTINCT(log_page)) AS `reviews`
-      FROM logging_userindex
-      WHERE log_timestamp BETWEEN #{start_time} AND #{end_time}
-      AND log_namespace = 0
-      AND (
-        (
-          log_type = 'patrol'
-          AND log_action = 'patrol'
-        ) OR (
-          log_type = 'pagetriage-curation'
-          AND log_action = 'reviewed'
-        )
-      )
+      SELECT logtemp.log_user_text AS `reviewer`,
+      COUNT(DISTINCT(logtemp.log_page)) AS `reviews`
+      FROM (
+        SELECT log_user_text, log_page
+        FROM logging_userindex
+        WHERE log_timestamp BETWEEN #{start_time} AND #{end_time}
+        AND log_type = 'patrol'
+        AND log_action = 'patrol'
+        AND log_namespace = 0
+        UNION
+        SELECT log_user_text, log_page
+        FROM logging_userindex
+        WHERE log_timestamp BETWEEN #{start_time} AND #{end_time}
+        AND log_type = 'pagetriage-curation'
+        AND log_action = 'reviewed'
+        AND log_namespace = 0
+      ) logtemp
       GROUP BY reviewer
       ORDER BY reviews DESC
       LIMIT 100;
