@@ -1,7 +1,7 @@
 $LOAD_PATH << '..'
 require 'musikbot'
 
-REPORT_PAGE = 'User:MusikBot/TopPageReviewers/Report'
+REPORT_PAGE = 'Wikipedia:Database reports/Top new page reviewers'
 
 module TopPageReviewers
   def self.run
