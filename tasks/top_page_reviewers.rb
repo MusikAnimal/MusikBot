@@ -11,7 +11,7 @@ module TopPageReviewers
       {{TOC right}}
       <div style='font-size:24px'>Top new page reviewers as of ~~~~~</div>
 
-      Limited to the top 100 reviewers for each time period.
+      Only reviews of mainspace pages are counted. Limited to the top 100 reviewers for each time period.
 
       Prepared by ~~~ <onlyinclude>~~~~~</onlyinclude>
 
