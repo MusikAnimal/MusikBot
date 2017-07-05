@@ -3,14 +3,14 @@ require 'musikbot'
 require 'json'
 
 # Start and end of the date range to process
-START_DATE = 20170210000000
-END_DATE   = 20170211000000
+START_DATE = 20170401000000
+END_DATE   = 20170431235959
 
 # Ask for pages between two IDs to speed up the query on revision.
 # These were picked by looking at Special:NewPagesFeed
 #   and using the IDs of pages around the above date range.
 LOWER_PAGE_ID = 52680222
-UPPER_PAGE_ID = 53600142
+UPPER_PAGE_ID = 54111773
 
 module NPPReport
   def self.run
@@ -43,7 +43,7 @@ module NPPReport
       # Skip if we already have an entry for this date from the last run
       next if stats[date_key].present?
 
-      # For each day, we record data for autopatrolled, autoconfirmed and non-autoconfirmed users.
+      # For each day, we record data for autoconfirmed and non-autoconfirmed users.
       # The summation of the numbers for each user group will be the grand total.
       stats[date_key] = {
         # Use the same data structure for autoconfirmed and non-autoconfirmed users
@@ -129,17 +129,47 @@ module NPPReport
 
       pages_processed << page['page_id']
 
-      user_rights_key = user_rights_type(page['user_id'], page['user_name'], page['timestamp'])
+      edit_count, user_rights_key = user_info(page['user_id'], page['user_name'], page['timestamp'])
 
       # Only interested in non-autopatrolled users
       next if user_rights_key == :autopatrolled
 
-      # Log output to monitor progress and spot check for accuracy
-      output = "#{i} of #{num_pages}: #{page['title']} (#{page['deleted'] == 1 ? 'deleted, ' : ''}#{user_rights_key}"
-
       # Do summations for this date in the timeline
       timeline_date = @mb.parse_date(page['timestamp']).strftime('%Y-%m-%d')
       stats[timeline_date][user_rights_key][:created] += 1
+
+      # Increment counts on relative edit count
+      if user_rights_key == :non_autoconfirmed && edit_count > 10
+        if stats[timeline_date][:non_autoconfirmed][:edit_count].blank?
+          stats[timeline_date][:non_autoconfirmed][:edit_count] = {}
+          stats[timeline_date][:non_autoconfirmed][:edit_count][:gt_10] = 0
+        end
+        stats[timeline_date][:non_autoconfirmed][:edit_count][:gt_10] += 1
+      elsif user_rights_key == :autoconfirmed
+        edit_count_key = if edit_count < 20
+          :lt_20
+        elsif edit_count < 50
+          :lt_50
+        elsif edit_count < 100
+          :lt_100
+        elsif edit_count < 1000
+          :lt_1000
+        elsif edit_count < 5000
+          :lt_5000
+        else
+          :gte_5000
+        end
+        if stats[timeline_date][:autoconfirmed][:edit_count].blank? ||
+           stats[timeline_date][:autoconfirmed][:edit_count][edit_count_key].blank?
+          stats[timeline_date][:autoconfirmed][:edit_count] = {}
+          stats[timeline_date][:autoconfirmed][:edit_count][edit_count_key] = 0
+        end
+        stats[timeline_date][:autoconfirmed][:edit_count][edit_count_key] += 1
+      end
+
+      # Log output to monitor progress and spot check for accuracy
+      output = "#{i} of #{num_pages}: #{page['title']} (#{page['deleted'] == 1 ? 'deleted, ' : ''}" +
+        user_rights_key.to_s + (edit_count_key.present? ? ', ' + edit_count_key.to_s : '')
 
       # Check if the text was revdel'd or suppressed, and if so increment this count,
       #   just out of curiousity of how many times this happens
@@ -441,11 +471,13 @@ module NPPReport
     end
   end
 
-  # Determine if the user was autopatrolled or autoconfirmed based on user rights,
+  # Determine if the user was autoconfirmed based on user rights,
   #   number of edits, and registration date at the time the page was created (timestamp)
-  def self.user_rights_type(user_id, username, timestamp)
+  def self.user_info(user_id, username, timestamp)
     # IPs may create articles through AfC
-    return :non_autoconfirmed if user_id == 0
+    return [0, :non_autoconfirmed] if user_id == 0
+
+    confirmed_state = nil
 
     # Get last user rights change before the page creation, which
     #   will tell us what user rights that had at that time.
@@ -465,46 +497,57 @@ module NPPReport
       # So we look at either the "newgroups" or any groups that aren't followed by the text "newgroups"
       autopatrolled_regex = /newgroups(?=.*?(autoreviewer|sysop))|(autoreviewer|sysop)(?!.*?newgroups)/
 
+      # Don't care about autopatrolled users
+      return [nil, :autopatrolled] if last_rights_change['log_params'] =~ autopatrolled_regex
+
       # accounts for confirmed, autoconfirmed and extendedconfirmed (the latter implies (auto)confirmed is present)
       confirmed_regex = /newgroups(?=.*?confirmed)|confirmed(?!.*?newgroups)/
 
-      return :autopatrolled if last_rights_change['log_params'] =~ autopatrolled_regex
-      return :autoconfirmed if last_rights_change['log_params'] =~ confirmed_regex
+      if last_rights_change['log_params'] =~ confirmed_regex
+        confirmed_state = :autoconfirmed
+      end
     end
 
-    # Check if the account was under 4 days old at the time they created the article
-    sql = %{
-      SELECT user_registration
-      FROM user
-      WHERE user_name = ?
-    }
-    registration = repl_query(sql, username.descore).first['user_registration']
+    # Only need to check the registration date if we still don't know the confirmed state
+    if confirmed_state.nil?
+      # Check if the account was under 4 days old at the time they created the article
+      sql = %{
+        SELECT user_registration
+        FROM user
+        WHERE user_name = ?
+      }
+      registration = repl_query(sql, username.descore).first['user_registration']
 
-    # Some really old accounts mysteriously don't have a registration date.
-    # We'll just have to assume they made at least 10 edits.
-    return :autoconfirmed if registration.nil?
+      # Some really old accounts mysteriously don't have a registration date,
+      # so we'll just have to assume the account age is at least 4 days
+      if registration.present?
+        age_at_creation = (@mb.parse_date(timestamp.to_s) - @mb.parse_date(registration)).to_i
+        confirmed_state = :non_autoconfirmed if age_at_creation < 4
+      end
+    end
 
-    age_at_creation = (@mb.parse_date(timestamp.to_s) - @mb.parse_date(registration)).to_i
-    return :non_autoconfirmed if age_at_creation < 4
-
-    # Check if the account has an edit count of less than 10 when they created the article
+    # Check if the account had an edit count of less than or equal to 10 when they created the article
     sql = %{
       SELECT 'live' AS source, COUNT(*) AS count
       FROM revision
       WHERE rev_user = ?
-      AND rev_timestamp BETWEEN #{registration} AND #{timestamp}
+      AND rev_timestamp <= #{timestamp}
       UNION
       SELECT 'del' AS source, COUNT(*) AS count
       FROM archive
       WHERE ar_user = ?
-      AND ar_timestamp BETWEEN #{registration} AND #{timestamp}
+      AND ar_timestamp <= #{timestamp}
     }
     result = repl_query(sql, user_id, user_id)
     edits_at_creation = result[0]['count'] + result[1]['count']
 
-    return :non_autoconfirmed if edits_at_creation < 10
+    # Doesn't matter what the edit count was if they were manually confirmed
+    # or we already checked the account age to know that they weren't auto-confirmed
+    if confirmed_state.nil?
+      confirmed_state = edits_at_creation < 10 ? :non_autoconfirmed : :autoconfirmed
+    end
 
-    :autoconfirmed
+    [edits_at_creation, confirmed_state]
   end
 
   def self.pages_created
@@ -516,13 +559,12 @@ module NPPReport
              rev_deleted AS revdel, page_is_redirect AS redirect
       FROM revision
       JOIN page ON page_id = rev_page
-      WHERE rev_page > #{LOWER_PAGE_ID}
-      AND rev_page < #{UPPER_PAGE_ID}
       AND rev_parent_id = 0
       AND page_namespace = 0
       AND rev_timestamp BETWEEN #{START_DATE} AND #{END_DATE}
+      AND page_id > #{LOWER_PAGE_ID}
     }
-    pages = @mb.repl.query(sql).to_a
+    pages = repl_client.query(sql).to_a
 
     sql = %{
       SELECT ar_title AS title, ar_page_id AS page_id, ar_timestamp AS timestamp,
@@ -535,7 +577,7 @@ module NPPReport
     }
 
     # Cache and return combined results of the two queries
-    @pages_created = (pages + @mb.repl.query(sql).to_a).sort {|a, b| a['title'] <=> b['title']}
+    @pages_created = (pages + repl_client.query(sql).to_a).sort {|a, b| a['title'] <=> b['title']}
   end
 
   def self.deletion_data(page_id)
@@ -547,8 +589,8 @@ module NPPReport
     }
 
     # rescue nil to handle pages where the revision or log entry was suppressed
-    comment = @mb.repl.query(sql).to_a.first['log_comment'] rescue nil
-    timestamp = @mb.repl.query(sql).to_a.first['log_timestamp'] rescue nil
+    comment = repl_client.query(sql).to_a.first['log_comment'] rescue nil
+    timestamp = repl_client.query(sql).to_a.first['log_timestamp'] rescue nil
 
     speedy_regex = /\[\[WP:CSD#((?:A|G)\d+)|\[\[WP:((?:A|G)\d+)\|/
 
@@ -750,8 +792,15 @@ module NPPReport
   end
 
   def self.repl_query(sql, *values)
-    statement = @mb.repl(replicas: false).prepare(sql)
+    statement = repl_client.prepare(sql)
     statement.execute(*values).to_a
+  end
+
+  def self.repl_client
+    @mb.repl(
+      replicas: false,
+      credentials: :analytics
+    )
   end
 end
 

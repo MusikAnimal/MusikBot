@@ -1,15 +1,15 @@
 $LOAD_PATH << '..'
 require 'musikbot'
 
-REPORT_PAGE = 'Wikipedia:Database reports/Top new page reviewers'
+REPORT_PAGE = 'Wikipedia:Database reports/Top new article reviewers'
 
-module TopPageReviewers
+module TopArticleReviewers
   def self.run
     @mb = MusikBot::Session.new(inspect, true)
 
     markup = <<~END
       {{TOC right}}
-      <div style='font-size:24px'>Top new page reviewers as of ~~~~~</div>
+      <div style='font-size:24px'>Top new article reviewers as of ~~~~~</div>
 
       Only reviews of mainspace pages are counted. Limited to the top 100 reviewers for each time period.
 
@@ -39,7 +39,7 @@ module TopPageReviewers
 
     @mb.edit(REPORT_PAGE,
       content: markup,
-      summary: "Reporting top new page reviewers"
+      summary: "Reporting top new article reviewers"
     )
   end
 
@@ -107,4 +107,4 @@ module TopPageReviewers
   end
 end
 
-TopPageReviewers.run
+TopArticleReviewers.run

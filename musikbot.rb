@@ -131,11 +131,13 @@ module MusikBot
         reload: false,
         database: nil,
         credentials: :replica,
-        log: true
+        log: true,
+        replicas: true
       }.merge(opts)
       return @repl_client if @repl_client && !opts.delete(:reload)
+      suffix = opts.delete(:replicas) ? '_p' : ''
       @repl_client = Repl::Session.new(
-        { database: opts[:database] || db + '_p' }.merge(app_config[opts[:credentials]])
+        { database: opts[:database] || db + suffix }.merge(app_config[opts[:credentials]])
       )
     end
     alias_method :repl, :repl_client
