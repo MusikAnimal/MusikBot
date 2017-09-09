@@ -12,9 +12,9 @@ module StaleDrafts
   def self.process_nonredirects
     pages = fetch_drafts
 
-    content = "<div style='font-size:24px'>Stale non-AFC drafts as of #{@mb.today.strftime('%-d %B %Y')}</div>\n" \
-      "== Non-redirects ==\n#{pages.length} unedited pages since #{@mb.wiki_date(end_date)}\n\n" \
-      "{| class='wikitable sortable'\n! Page\n! Length\n! Revisions\n! style='min-width:75px' | Last edit\n! Links\n! Tagged\n! Mainspace \n|-\n"
+    inner_content = ''
+
+    count = 0
 
     pages.each_with_index do |page, index|
       begin
@@ -24,7 +24,9 @@ module StaleDrafts
 
         puts "#{index} of #{pages.length}: #{title}" if @env == :test
 
-        next if api_data['categories'].to_a.select { |c| c.attributes['title'].include?('AfC submissions') }.any?
+        next if api_data['categories'].to_a.select { |c| c.attributes['title'] && c.attributes['title'].include?('AfC submissions') }.any?
+
+        count += 1
 
         links = api_data['linkshere'].elements.to_a.reject { |lh| lh.attributes['pageid'] == '48418678' }.length rescue 0
         templated = api_data['categories'].to_a.map { |c| c.attributes['title'] }.include?('Category:Draft articles') ? 'Yes' : 'No'
@@ -32,17 +34,21 @@ module StaleDrafts
         revisions = revisions >= 50 ? '50+' : revisions
         hist_link = "{{ plainlink | url={{fullurl:Draft:#{page['page_title']}|action=history}} | name=#{revisions} }}"
 
-        content += "| [[:Draft:#{title}]] \n| #{page['page_len']}\n| #{hist_link}\n| #{date}\n" \
+        inner_content += "| [[:Draft:#{title}]] \n| #{page['page_len']}\n| #{hist_link}\n| #{date}\n" \
           "| [[Special:Whatlinkshere/Draft:#{page['page_title']}|#{links}]]\n| #{templated}\n| [[:#{title}]]\n|-\n"
       rescue => e
         puts "Error checking page #{page}: #{e.message}"
       end
     end
 
-    content = content.chomp("|-\n") + "|}\n\n" # "\n{{/Redirects}}"
+    content = "<div style='font-size:24px'>Stale non-AFC drafts as of #{@mb.today.strftime('%-d %B %Y')}</div>\n" \
+      "#{count} unedited pages since #{@mb.wiki_date(end_date)}\n\n" \
+      "{| class='wikitable sortable'\n! Page\n! Length\n! Revisions\n! style='min-width:75px' | Last edit\n! Links\n! Tagged\n! Mainspace \n|-\n" +
+      inner_content.chomp("|-\n") + "|}\n"
+
     @mb.edit('User:MusikBot/StaleDrafts/Report',
       content: content,
-      summary: "Reporting #{pages.length} stale non-AfC drafts",
+      summary: "Reporting #{count} stale non-AfC drafts",
       bot: false
     )
   end
@@ -55,7 +61,7 @@ module StaleDrafts
       rvprop: 'ids',
       lhlimit: 50,
       rvlimit: 50
-    ).elements['pages'][0].elements rescue nil
+    ).elements['pages'][0].elements rescue {}
   end
 
   def self.process_redirects
