@@ -192,13 +192,14 @@ module TAFIWeekly
       rvsection: 0,
       rvparse: true
     )
-    wikiprojects = Nokogiri::HTML(talk_text).css('.mbox-text b a').collect(&:content).select{ |text| text =~ /^WikiProject/ }
+    wikiprojects = Nokogiri::HTML(talk_text).css('.mbox-text b a').collect(&:content).select{ |text| text =~ /^WikiProject/ }.uniq
     content = '{{subst:TAFI project notice|no_heading=yes}}'
     wikiprojects.each do |wikiproject|
       @mb.edit("Wikipedia talk:#{wikiproject}",
         content: content,
         section: 'new',
-        summary: "One of your project's articles has been selected for improvement!"
+        summary: "One of your project's articles has been selected for improvement!",
+        redirect: 1
       )
     end
   end
