@@ -12,8 +12,7 @@ module StaleDrafts
   def self.process_nonredirects
     pages = fetch_drafts
 
-    inner_content_afc = ''
-    inner_content_non_afc = ''
+    inner_content = ''
     afc_count = 0
     non_afc_count = 0
 
@@ -29,6 +28,7 @@ module StaleDrafts
 
         if is_afc
           afc_count += 1
+          templated = 'Yes'
         else
           non_afc_count += 1
           templated = api_data['categories'].to_a.map { |c| c.attributes['title'] }.include?('Category:Draft articles') ? 'Yes' : 'No'
@@ -39,33 +39,22 @@ module StaleDrafts
         revisions = revisions >= 50 ? '50+' : revisions
         hist_link = "{{ plainlink | url={{fullurl:Draft:#{page['page_title']}|action=history}} | name=#{revisions} }}"
 
-        inner_content_non_afc += "| [[:Draft:#{title}]] \n| #{page['page_len']}\n| #{hist_link}\n| #{date}\n" \
-          "| [[Special:Whatlinkshere/Draft:#{page['page_title']}|#{links}]]\n| #{templated}\n| [[:#{title}]]\n|-\n"
-
-        inner_content_afc += "| [[:Draft:#{title}]] \n| #{page['page_len']}\n| #{hist_link}\n| #{date}\n" \
-          "| [[Special:Whatlinkshere/Draft:#{page['page_title']}|#{links}]]\n| [[:#{title}]]\n|-\n"
+        inner_content += "| [[:Draft:#{title}]] \n| #{page['page_len']}\n| #{hist_link}\n| #{date}\n" \
+          "| [[Special:Whatlinkshere/Draft:#{page['page_title']}|#{links}]]\n| #{templated}\n| #{is_afc ? 'Yes' : 'No'}\n" \
+          "| [[:#{title}]]\n|-\n"
       rescue => e
         puts "Error checking page #{page}: #{e.message}"
       end
     end
 
-    content_non_afc = "<div style='font-size:24px'>Stale non-AFC drafts as of #{@mb.today.strftime('%-d %B %Y')}</div>\n" \
-      "#{non_afc_count} unedited pages since #{@mb.wiki_date(end_date)}\n\n" \
-      "{| class='wikitable sortable'\n! Page\n! Length\n! Revisions\n! style='min-width:75px' | Last edit\n! Links\n! Tagged\n! Mainspace \n|-\n" +
-      inner_content_non_afc.chomp("|-\n") + "|}\n"
+    content = "<div style='font-size:24px'>Stale drafts as of #{@mb.today.strftime('%-d %B %Y')}</div>\n" \
+      "{{formatnum:#{afc_count + non_afc_count}}} unedited pages ({{formatnum:#{afc_count}}} AfC, {{formatnum:#{non_afc_count}}} " \
+      "non-AfC) since #{@mb.wiki_date(end_date)}\n\n" \
+      "{| class='wikitable sortable'\n! Page\n! Length\n! Revisions\n! style='min-width:75px' | Last edit\n!" \
+      " Links\n! Tagged\n! AfC?\n! Mainspace \n|-\n" + inner_content.chomp("|-\n") + "|}\n"
     @mb.edit('User:MusikBot/StaleDrafts/Report',
-      content: content_non_afc,
-      summary: "Reporting #{non_afc_count} stale non-AfC drafts",
-      bot: false
-    )
-
-    content_afc = "<div style='font-size:24px'>Stale AFC drafts as of #{@mb.today.strftime('%-d %B %Y')}</div>\n" \
-      "#{afc_count} unedited pages since #{@mb.wiki_date(end_date)}\n\n" \
-      "{| class='wikitable sortable'\n! Page\n! Length\n! Revisions\n! style='min-width:75px' | Last edit\n! Links\n! Mainspace \n|-\n" +
-      inner_content_afc.chomp("|-\n") + "|}\n"
-    @mb.edit('User:MusikBot/StaleDrafts/Report/AfC',
-      content: content_afc,
-      summary: "Reporting #{afc_count} stale AfC drafts",
+      content: content,
+      summary: "Reporting #{afc_count + non_afc_count} stale drafts",
       bot: false
     )
   end
@@ -116,6 +105,14 @@ module StaleDrafts
   end
 
   # Repl-related
+  def self.fetch_drafts(redirects = false)
+    query = 'SELECT DISTINCT page_title, page_len, rev_timestamp FROM enwiki_p.page ' \
+      "JOIN enwiki_p.revision WHERE page_namespace = 118 AND page_is_redirect = #{redirects ? 1 : 0} " \
+      "AND rev_id = page_latest AND rev_timestamp < '#{end_date}';"
+
+    @mb.repl_client.query(query).to_a
+  end
+
   def self.fetch_drafts(redirects = false)
     query = 'SELECT DISTINCT page_title, page_len, rev_timestamp FROM enwiki_p.page ' \
       "JOIN enwiki_p.revision WHERE page_namespace = 118 AND page_is_redirect = #{redirects ? 1 : 0} " \
