@@ -254,12 +254,13 @@ module WishlistSurvey
 
     proposer_sig = /\{\{\s*(#{@mb.config[:support_templates]})\s*\}\}.*?\[\[.*?(?:User(?: talk)?:|Special:Contributions\/)#{proposer}(?:\]\]|\|).*?\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)/
 
-    # binding.pry if proposal_content.include?('Global settings')
-
     statement, discussion = proposal_content.split(/===\s*Community discussion\s*===/)
     discussion ||= '' # If no discussion has started yet.
-    phabs = statement.scan(/\[\[:?phab(?:ricator)?:(T\d+)|.*?phabricator\.wikimedia\.org\/(T\d+)/).flatten.compact
-    related_phabs = discussion.scan(/\[\[:?phab(?:ricator)?:(T\d+)|.*?phabricator\.wikimedia\.org\/(T\d+)/).flatten.compact - phabs
+
+    phab_regex = "\\[\\[:?phab(?:ricator)?:(T\\d+)|.*?phabricator\\.wikimedia\\.org\\/(T\\d+)"
+    phabs = statement.scan(/Phabricator tickets:.*?#{phab_regex}/m).flatten.compact
+    related_phabs = statement.scan(/#{phab_regex}/).flatten.compact +
+      discussion.scan(/#{phab_regex}/).flatten.compact - phabs
 
     votes = {
       proposer: proposer,
