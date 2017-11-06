@@ -299,9 +299,6 @@ module WishlistSurvey
       end
     end
 
-    # Sort all rows by count, descending.
-    rows = rows.sort_by { |_proposal, _category, _proposer, _phabs, _rel_phabs, support| -support }
-
     rank = 0
     all_proposers = []
     all_phabs = []
@@ -309,6 +306,10 @@ module WishlistSurvey
     reported_categories = []
 
     if @mb.config[:voting_phase]
+      # Sort all rows by count, descending.
+      rows = rows.sort_by { |_proposal, _category, _proposer, _phabs, _rel_phabs, support| -support }
+
+      # Initialize counts.
       total_supports = 0
       total_neutrals = 0
       total_opposes = 0
