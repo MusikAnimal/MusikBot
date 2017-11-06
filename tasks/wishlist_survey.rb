@@ -160,7 +160,8 @@ module WishlistSurvey
         REPLACE(REPLACE(page_title, "#{category_path}/", ""), "_", " ") AS page_title
       FROM metawiki_p.page
       WHERE page_namespace = 0
-      AND page_title RLIKE "#{category_path}/";
+      AND page_title RLIKE "#{category_path}/"
+      AND page_is_redirect = 0
     }
 
     proposal_map = {}
@@ -187,33 +188,36 @@ module WishlistSurvey
     @mb.repl.query(sql).to_a.collect { |row| row['editor'] }
   end
 
-  # Rotate proposals by moving the top section to the bottom of the page.
+  # Rotate proposals by moving the top proposal to the bottom.
   def self.rotate_proposals(category, throttle = 0)
-    content = get_page(category)
-    proposals = content.split(/\n==[^=]/)
+    content = get_page("#{@survey_root}/#{category}")
+    proposals = content.scan(/#{@survey_root}\/#{category}\/(.*)}}/).flatten.uniq
+    proposals_from_db = get_proposals(category).values
 
-    intro = proposals.delete_at(0)
-    first_proposal = proposals.delete_at(0)
+    # Remove any tranclusions of non-existent proposals.
+    proposals.each do |proposal|
+      proposals.delete(proposal) if !proposals_from_db.include?(proposal)
+    end
 
-    # Move first proposal to the end.
-    proposals << first_proposal
+    # Append any proposals that aren't transcluded but should be.
+    proposals_from_db.each do |proposal|
+      proposals << proposal if !proposals.include?(proposal)
+    end
+
+    # Rotate.
+    proposals.rotate!
 
     # Rebuild the list, stripping out whitespace and extraneous new lines.
-    new_content = intro.strip.chomp('') + "\n\n" + proposals.map { |p| '== ' + p.strip.chomp('') }.join("\n\n")
+    prev_cat = categories[categories.index(category) - 1]
+    next_cat = categories[(categories.index(category) + 1) % categories.length]
+    new_content = "{{:Community Wishlist Survey/Category header|#{prev_cat}|#{next_cat}}}\n" +
+      proposals.map { |p| "\n{{:#{@survey_root}/#{category}/#{p}}}" }.join
 
-    @mb.edit(category,
+    @mb.edit("#{@survey_root}/#{category}",
       content: new_content,
       summary: "Rotating proposals to ensure fair visibility (happens every #{@mb.config[:rotation_rate]} hours)",
       conflicts: true
     )
-  rescue MediaWiki::APIError => e
-    if throttle > 3
-      @mb.report_error('Edit throttle hit', e)
-    elsif e.code.to_s == 'editconflict'
-      rotate_proposals(category, throttle + 1)
-    else
-      raise
-    end
   end
 
   # Process all proposals within a category.
@@ -380,10 +384,7 @@ module WishlistSurvey
   # This is called when looping through the proposal pages.
   def self.get_page(page)
     @page_cache ||= {}
-
-    # get_page_props will set @start_timestamp and @base_timestamp
-    # so edit conflicts can be handled when editing.
-    @page_cache[page] ||= @mb.get_page_props(page)
+    @page_cache[page] ||= @mb.get(page)
   end
 end
 
