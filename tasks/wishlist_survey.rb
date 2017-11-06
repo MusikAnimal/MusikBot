@@ -132,6 +132,12 @@ module WishlistSurvey
       report_needs_update = true
     end
 
+    @untranslated = get_proposals('Untranslated')
+    if cached_counts['untranslated'] != @untranslated.length
+      cached_counts['untranslated'] = @untranslated.length
+      report_needs_update = true
+    end
+
     create_report(all_votes) if report_needs_update
 
     @mb.local_storage(
@@ -367,6 +373,14 @@ module WishlistSurvey
     content = "{| class='wikitable sortable'\n!\n!#{rows.length} proposals\n!#{reported_categories.uniq.length} categories" \
       "\n!#{all_proposers.uniq.length} proposers\n!#{total_supports}\n!#{total_neutrals}\n!#{total_opposes}" \
       "\n!#{all_phabs.uniq.length} phab tasks, #{all_related_phabs.uniq.length} related\n#{content}\n|}"
+
+    # List of untranslated proposals.
+    if @untranslated.any?
+      content += "\n\n=== Untranslated ==="
+      @untranslated.values.each do |proposal|
+        content += "\n* [[#{@survey_root}/Untranslated/#{proposal}|#{proposal}]]"
+      end
+    end
 
     @mb.edit("#{@survey_root}/Tracking",
       content: content,
