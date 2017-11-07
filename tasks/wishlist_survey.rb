@@ -357,6 +357,9 @@ module WishlistSurvey
       # XXX: The proposal column used to have <nowiki> wrapped around #{proposal}.
       # We may not need to do this anymore.
 
+      proposal = proposal.dup.force_encoding('utf-8')
+      proposer_str = proposer_str.dup.force_encoding('utf-8')
+
       content += %Q{
         |-
         | #{rank}
