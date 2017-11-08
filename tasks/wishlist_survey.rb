@@ -382,6 +382,7 @@ module WishlistSurvey
     if @untranslated.any?
       content += "\n\n=== Untranslated ==="
       @untranslated.values.each do |proposal|
+        proposal = proposal.force_encoding('utf-8')
         content += "\n* [[#{@survey_root}/Untranslated/#{proposal}|#{proposal}]]"
       end
     end
