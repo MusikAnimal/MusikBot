@@ -263,7 +263,7 @@ module WishlistSurvey
     statement, discussion = proposal_content.split(/===\s*Community discussion\s*===/)
     discussion ||= '' # If no discussion has started yet.
 
-    phab_regex = "\\[\\[:?phab(?:ricator)?:(T\\d+)|.*?phabricator\\.wikimedia\\.org\\/(T\\d+)"
+    phab_regex = "\\[\\[:?phab(?:ricator)?:(T\\d+)|.*?phabricator\\.wikimedia\\.org\\/(T\\d+)|\\{\\{phab\\|(T\\d+)\\}\\}"
     phab_tickets_section = statement.split("''Phabricator tickets''':").last
     phabs = phab_tickets_section.scan(/#{phab_regex}/).flatten.compact
     related_phabs = statement.scan(/#{phab_regex}/).flatten.compact +
