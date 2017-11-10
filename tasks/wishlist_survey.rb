@@ -260,7 +260,7 @@ module WishlistSurvey
 
     proposer_sig = /\{\{\s*(#{@mb.config[:support_templates]})\s*\}\}.*?\[\[.*?(?:User(?: talk)?:|Special:Contributions\/)#{proposer}(?:\]\]|\|).*?\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)/
 
-    statement, discussion = proposal_content.split(/===\s*Community discussion\s*===/)
+    statement, discussion = proposal_content.split(/===\s*(?:Community )?discussion\s*===/)
     discussion ||= '' # If no discussion has started yet.
 
     phab_regex = "\\[\\[:?phab(?:ricator)?:(T\\d+)|.*?phabricator\\.wikimedia\\.org\\/(T\\d+)|\\{\\{phab\\|(T\\d+)\\}\\}"
