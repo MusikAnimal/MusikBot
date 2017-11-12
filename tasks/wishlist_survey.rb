@@ -264,7 +264,7 @@ module WishlistSurvey
     discussion ||= '' # If no discussion has started yet.
 
     phab_regex = "\\[\\[:?phab(?:ricator)?:(T\\d+)|.*?phabricator\\.wikimedia\\.org\\/(T\\d+)|\\{\\{phab\\|(T\\d+)\\}\\}"
-    phab_tickets_section = statement.split("''Phabricator tickets''':").last
+    phab_tickets_section = statement.split(/''Phabricator tickets:?''':?/).last
     phabs = phab_tickets_section.scan(/#{phab_regex}/).flatten.compact
     related_phabs = statement.scan(/#{phab_regex}/).flatten.compact +
       discussion.scan(/#{phab_regex}/).flatten.compact - phabs
@@ -386,6 +386,8 @@ module WishlistSurvey
         content += "\n* [[#{@survey_root}/Untranslated/#{proposal}|#{proposal}]]"
       end
     end
+
+    content +="\n\n[[Category:#{@survey_root}]]"
 
     @mb.edit("#{@survey_root}/Tracking",
       content: content,
