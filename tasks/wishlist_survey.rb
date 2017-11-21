@@ -302,7 +302,7 @@ module WishlistSurvey
     # Build array of proposal/category/votes for the report.
     rows = []
     cats.each do |category, proposals|
-      proposals.each do |proposal, count|
+      proposals.sort.to_h.each do |proposal, count|
         rows << [proposal, category] + count.values
       end
     end
