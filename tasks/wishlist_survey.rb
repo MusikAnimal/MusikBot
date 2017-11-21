@@ -296,8 +296,7 @@ module WishlistSurvey
   end
 
   def self.create_report(cats)
-    content = "|-\n!Rank\n!Proposal\n!Category\n!Proposer\n![[File:Symbol support vote.svg|15px]]" \
-      "\n![[File:Symbol neutral vote.svg|15px]]\n![[File:Symbol oppose vote.svg|15px]]\n!Phabs\n"
+    content = "|-\n!Rank\n!Proposal\n!Category\n!Proposer\n![[File:Symbol support vote.svg|15px]]\n!Phabs\n"
 
     # Build array of proposal/category/votes for the report.
     rows = []
@@ -368,8 +367,6 @@ module WishlistSurvey
         | [[#{@survey_root}/#{category}|#{category}]]
         | #{proposer_str}
         | #{supports}
-        | #{neutrals}
-        | #{opposes}
         | #{phabs}
       }
     end
@@ -377,6 +374,11 @@ module WishlistSurvey
     content = "{| class='wikitable sortable'\n!\n!#{rows.length} proposals\n!#{reported_categories.uniq.length} categories" \
       "\n!#{all_proposers.uniq.length} proposers\n!#{total_supports}\n!#{total_neutrals}\n!#{total_opposes}" \
       "\n!#{all_phabs.uniq.length} phab tasks, #{all_related_phabs.uniq.length} related\n#{content}\n|}"
+
+    archived_proposals = get_proposals('Archive')
+    if archived_proposals.any?
+      content += "\n\n[[#{@survey_root}/Archive|Archived proposals]] (#{archived_proposals.length})"
+    end
 
     # List of untranslated proposals.
     if @untranslated.any?
