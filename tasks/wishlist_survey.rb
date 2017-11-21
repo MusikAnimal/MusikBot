@@ -372,7 +372,7 @@ module WishlistSurvey
     end
 
     content = "{| class='wikitable sortable'\n!\n!#{rows.length} proposals\n!#{reported_categories.uniq.length} categories" \
-      "\n!#{all_proposers.uniq.length} proposers\n!#{total_supports}\n!#{total_neutrals}\n!#{total_opposes}" \
+      "\n!#{all_proposers.uniq.length} proposers\n!#{total_supports}\n" \
       "\n!#{all_phabs.uniq.length} phab tasks, #{all_related_phabs.uniq.length} related\n#{content}\n|}"
 
     archived_proposals = get_proposals('Archive')
