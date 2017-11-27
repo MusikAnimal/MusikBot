@@ -281,13 +281,13 @@ module WishlistSurvey
       end
       votes.merge!(
         support: supports,
-        netural: neutrals,
+        neutral: neutrals,
         oppose: opposes
       )
     else
       votes.merge!(
         support: '-',
-        netural: '-',
+        neutral: '-',
         oppose: '-'
       )
     end
