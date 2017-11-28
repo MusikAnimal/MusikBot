@@ -100,7 +100,7 @@ module WishlistSurvey
       rotate_proposals(category) if rotation_needed
     end
 
-    total_editors = all_editors.uniq.length
+    @total_editors = all_editors.uniq.length
 
     report_needs_update = false
 
@@ -123,12 +123,12 @@ module WishlistSurvey
       report_needs_update = true
     end
 
-    if cached_counts['total_editors'] != total_editors
+    if cached_counts['total_editors'] != @total_editors
       @mb.edit("#{@survey_root}/Total editors",
-        content: total_editors,
+        content: @total_editors,
         summary: "Updating total editor count (#{total_editors})"
       )
-      cached_counts['total_editors'] = total_editors
+      cached_counts['total_editors'] = @total_editors
       report_needs_update = true
     end
 
@@ -394,7 +394,7 @@ module WishlistSurvey
 
     @mb.edit("#{@survey_root}/Tracking",
       content: content,
-      summary: "Updating voting results (#{rows.length} proposals)"
+      summary: "Updating voting results (#{rows.length} proposals, #{@total_editors} editors, #{total_supports} support votes)"
     )
   end
 
