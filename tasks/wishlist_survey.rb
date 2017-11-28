@@ -105,12 +105,12 @@ module WishlistSurvey
     report_needs_update = false
 
     # Only attempt to edit if there's a change in the counts.
-    if @mb.config[:voting_phase] && cached_counts['total_votes'] != total_votes
+    if @mb.config[:voting_phase] && cached_counts['total_votes'] != total_support_votes
       @mb.edit("#{@survey_root}/Total votes",
-        content: total_votes,
-        summary: "Updating total vote count (#{total_votes})"
+        content: total_support_votes,
+        summary: "Updating total vote count (#{total_support_votes})"
       )
-      cached_counts['total_votes'] = total_votes
+      cached_counts['total_votes'] = total_support_votes
       report_needs_update = true
     end
 
