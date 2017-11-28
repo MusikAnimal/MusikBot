@@ -126,7 +126,7 @@ module WishlistSurvey
     if cached_counts['total_editors'] != @total_editors
       @mb.edit("#{@survey_root}/Total editors",
         content: @total_editors,
-        summary: "Updating total editor count (#{total_editors})"
+        summary: "Updating total editor count (#{@total_editors})"
       )
       cached_counts['total_editors'] = @total_editors
       report_needs_update = true
