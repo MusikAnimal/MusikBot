@@ -8,7 +8,7 @@ require 'httparty'
 # --edition 3 instructs to use the 3rd set of credentials, in this case for Community_Tech_bot.
 module WishlistSurvey
   def self.run
-    @mb = MusikBot::Session.new(inspect)
+    @mb = MusikBot::Session.new(inspect, true)
 
     # Fetches from [[User:Community_Tech_bot/WishlistSurvey/config]].
     @survey_root = @mb.config[:survey_root]
@@ -26,7 +26,8 @@ module WishlistSurvey
 
     # Rotate the proposals every N hours (as specified by rotation_rate in config).
     last_rotation = @mb.local_storage['last_rotation']
-    rotation_needed = @mb.parse_date(last_rotation) < @mb.now - (@mb.config[:rotation_rate].to_f / 24)
+    # rotation_needed = @mb.parse_date(last_rotation) < @mb.now - (@mb.config[:rotation_rate].to_f / 24)
+    rotation_needed = false
 
     total_proposals = 0
     all_editors = []
@@ -326,9 +327,14 @@ module WishlistSurvey
       total_opposes = '-'
     end
 
+    old_support_count = 0
+
     # Build markup.
     rows.each do |proposal, category, proposer, phabs, related_phabs, supports, neutrals, opposes|
-      rank += 1
+      if supports != old_support_count
+        rank += 1
+        old_support_count = supports
+      end
 
       # Strip out links and nowiki tags from section title.
       # XXX: May not need to do this anymore.
@@ -412,6 +418,190 @@ module WishlistSurvey
     @page_cache ||= {}
     @page_cache[page] ||= @mb.get(page)
   end
+
+  #################### IDENTIFYING SOCKS/INELIGIBLE VOTERS AFTER VOTING PHASE HAS ENDED ####################
+
+  def self.sock_check
+    @mb = MusikBot::Session.new(inspect, true)
+    @survey_root = @mb.config[:survey_root]
+
+    @min_editcount = 500
+    @min_days_tenure = 90
+
+    @whitelist = @mb.local_storage['whitelist'] || []
+    @user_cache = {}
+
+    support = @mb.config[:support_templates]
+    neutral = @mb.config[:neutral_templates]
+    oppose = @mb.config[:oppose_templates]
+
+    # FIXME: check for {{unsigned|(.*?)\|}}
+    @voter_regex = /\{\{\s*(#{support}|#{neutral}|#{oppose})\s*\}\}.*(?:\[\[.*?(?:(?:[Uu]ser|Benutzer|Utilisateur|:it:s:Utente|:fr:Discussion utilisateur)(?:[_ ]talk)?:(.*?)(?:[\|\]]|\/talk))|\{\{\s*unsigned\|(.*?)[\||\}]).*?\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)/i
+
+    # sock_parse_votes('Wiktionary', 'Wikisource dictionaries for Wiktionary')
+
+    categories.each do |category|
+      get_proposals(category).each do |page_id, proposal|
+        sock_parse_votes(category, proposal)
+
+        @mb.local_storage(
+          'whitelist' => @whitelist
+        )
+      end
+    end
+
+    puts @user_cache
+    puts '------------------'
+
+    filtered_users = @user_cache.select do |username, data|
+      next(true) if data == false # Globally locked or is an IP.
+      next(false) if data == true # Already determined to meet criteria.
+      (data[:global_editcount] > @min_editcount && (@mb.now - data[:min_registration]) > @min_days_tenure)
+    end
+
+    build_sock_report(filtered_users)
+  end
+
+  def self.sock_parse_votes(category, proposal)
+    puts "Parsing #{category}/#{proposal}"
+
+    content = @mb.get("#{@survey_root}/#{category}/#{proposal}")
+
+    voting_section = content.scan(/\n===\s*Voting.*?\n(.*)/m).flatten.first || ''
+    lines = voting_section.scan(/^*[^:](.*?)(?:\n)?$/).flatten
+    proposal_voters = []
+
+    lines.each do |line|
+      template, voter, unsigned = line.scan(@voter_regex).flatten
+
+      # From {{unsigned}} template.
+      voter = unsigned if voter.nil?
+
+      if template.nil? # Just a comment, most likely.
+        binding.pry
+        next
+      end
+
+      if voter.nil?
+        binding.pry
+        next
+      end
+
+      voter = CGI.unescapeHTML(voter.force_encoding('utf-8').strip.ucfirst)
+
+      # Duplicate vote
+      if proposal_voters.include?(voter)
+        puts "  ~~ DUPLICATE VOTE: #{voter}"
+        binding.pry
+        next
+      end
+
+      proposal_voters << voter
+
+      if @whitelist.include?(voter)
+        puts "  >> User:#{voter} meets criteria, from cache"
+        next
+      end
+
+      # Already fetched data for this user
+      if !@user_cache[voter].nil?
+        puts "  ======== Already fetched data for #{voter}"
+        next
+      end
+
+      puts "  ******* Fetching data for #{voter}"
+      ret = get_voter_data(voter)
+
+      # Globally locked or logged out.
+      if ret == false
+        puts "  ~~ GLOBALLY LOCKED / LOGGED OUT: #{voter}"
+        binding.pry
+        @user_cache[voter] = false
+        next
+      end
+
+      # Short-stop if they already meet qualifications.
+      if ret == true
+        next
+      end
+
+      @user_cache[voter] = ret
+      @user_cache[voter][:proposals] = [proposal]
+    end
+  end
+
+  def self.build_sock_report(data)
+    puts data
+  end
+
+  def self.get_voter_data(username)
+    data = {
+      global_editcount: 0,
+      max_editcount: 0,
+      max_editcount_wiki: 0,
+      min_registration: nil
+    }
+
+    wikis = local_wikis(username)
+
+    if wikis.empty?
+      # Logged out
+      return false
+    end
+
+    wikis.each do |wiki|
+      if wiki['gu_locked'].to_i == 1
+        puts "    ~~~ Globally locked"
+        return false
+      end
+
+      editcount = user_editcount(wiki['lu_wiki'], username)
+      data[:global_editcount] += editcount
+
+      if data[:global_editcount] > @min_editcount
+        @whitelist << username
+        puts "    short-stopping, user meets qualifications (editcount)"
+        return true
+      end
+
+      if editcount > data[:max_editcount]
+        data[:max_editcount] = editcount
+        data[:max_editcount_wiki] = wiki['lu_wiki']
+      end
+
+      reg_date = @mb.parse_date(wiki['lu_attached_timestamp'])
+
+      if data[:min_registration].nil? || reg_date < data[:min_registration]
+        data[:min_registration] = reg_date
+      end
+    end
+
+    data
+  end
+
+  def self.user_editcount(dbname, username)
+    sql = %{
+      SELECT user_editcount
+      FROM #{dbname}_p.user
+      WHERE user_name = ?
+    }
+    statement = @mb.repl.prepare(sql)
+    statement.execute(username.descore).to_a.first['user_editcount'].to_i
+  end
+
+  def self.local_wikis(username)
+    sql = %{
+      SELECT lu_wiki, lu_attached_timestamp, gu_locked
+      FROM centralauth_p.localuser
+      JOIN centralauth_p.globaluser ON lu_global_id = gu_id
+      WHERE lu_name = ?
+    }
+    statement = @mb.repl.prepare(sql)
+    statement.execute(username.descore).to_a
+  end
+
 end
 
 WishlistSurvey.run
+
+# WishlistSurvey.sock_check
