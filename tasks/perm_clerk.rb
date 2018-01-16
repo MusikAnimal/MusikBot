@@ -836,8 +836,8 @@ module PermClerk
         "edit#{'s' if params[:mainSpaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
     when :manualMainSpaceCount
       "has approximately <!-- mb-manualMainSpaceCount -->#{params[:manualMainSpaceCount]}<!-- mb-manualMainSpaceCount-end --> " \
-        "[//tools.wmflabs.org/musikanimal/nonautomated_edits?username=#{URI.escape(params[:username])}&offset=0&" \
-        "namespace=0&contribs=on&tools=on non-automated edit#{'s' if params[:manualMainSpaceCount] != 1}] in the [[WP:MAINSPACE|mainspace]]"
+        "[https://xtools.wmflabs.org/autoedits/en.wikipedia.org/#{URI.escape(params[:username])}" \
+        " non-automated edit#{'s' if params[:manualMainSpaceCount] != 1}] in the [[WP:MAINSPACE|mainspace]]"
     when :moduleSpaceCount
       "has <!-- mb-moduleSpaceCount -->#{params[:moduleSpaceCount]}<!-- mb-moduleSpaceCount-end --> " \
         "edit#{'s' if params[:moduleSpaceCount] != 1} in the [[WP:LUA|module namespace]]"

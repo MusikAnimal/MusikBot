@@ -8,7 +8,7 @@ module Repl
       @client = Mysql2::Client.new(opts)
       @db = opts[:db]
       @getter = HTTParty
-      @base_uri = 'https://tools.wmflabs.org/musikanimal/api/nonautomated_edits'
+      @base_uri = 'https://xtools.wmflabs.org/api/user'
     end
 
     def count_articles_created(username)
@@ -24,18 +24,15 @@ module Repl
     end
 
     def count_nonautomated_edits(username)
-      @getter.get(@base_uri, query: {
-        username: username,
-        norecord: true
-      })['nonautomated_count']
+      @getter.get(
+        "#{@base_uri}/automated_editcount/en.wikipedia.org/#{username}"
+      )['nonautomated_editcount']
     end
 
     def count_nonautomated_namespace_edits(username, namespace)
-      @getter.get(@base_uri, query: {
-        username: username,
-        namespace: namespace,
-        norecord: true
-      })['nonautomated_count']
+      @getter.get(
+        "#{@base_uri}/automated_editcount/en.wikipedia.org/#{username}/#{namespace}"
+      )['nonautomated_editcount']
     end
 
     def count_tool_edits(username, tool)
