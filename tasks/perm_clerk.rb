@@ -836,7 +836,7 @@ module PermClerk
         "edit#{'s' if params[:mainSpaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
     when :manualMainSpaceCount
       "has approximately <!-- mb-manualMainSpaceCount -->#{params[:manualMainSpaceCount]}<!-- mb-manualMainSpaceCount-end --> " \
-        "[https://xtools.wmflabs.org/autoedits/en.wikipedia.org/#{URI.escape(params[:username])}" \
+        "[https://xtools.wmflabs.org/autoedits/en.wikipedia.org/#{URI.escape(params[:username].score)}" \
         " non-automated edit#{'s' if params[:manualMainSpaceCount] != 1}] in the [[WP:MAINSPACE|mainspace]]"
     when :moduleSpaceCount
       "has <!-- mb-moduleSpaceCount -->#{params[:moduleSpaceCount]}<!-- mb-moduleSpaceCount-end --> " \

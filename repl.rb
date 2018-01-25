@@ -25,13 +25,13 @@ module Repl
 
     def count_nonautomated_edits(username)
       @getter.get(
-        "#{@base_uri}/automated_editcount/en.wikipedia.org/#{username}"
+        "#{@base_uri}/automated_editcount/en.wikipedia.org/#{URI.escape(username.score)}"
       )['nonautomated_editcount']
     end
 
     def count_nonautomated_namespace_edits(username, namespace)
       @getter.get(
-        "#{@base_uri}/automated_editcount/en.wikipedia.org/#{username}/#{namespace}"
+        "#{@base_uri}/automated_editcount/en.wikipedia.org/#{URI.escape(username.score)}/#{namespace}"
       )['nonautomated_editcount']
     end
 
