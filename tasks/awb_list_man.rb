@@ -101,7 +101,7 @@ module AWBListMan
       moved_info = moved_user_info(user_name)
 
       if moved_info && moved_info[:timestamp] > @last_run && @old_users.include?(user_name)
-        new_user_name = moved_info[:new_user_name]
+        new_user_name = moved_info[:new_user_name].force_encoding('utf-8')
         puts "#{user_name} - renamed to #{new_user_name}"
         @renamed_users << new_user_name
         user_name = new_user_name
@@ -135,7 +135,7 @@ module AWBListMan
     # alphabetize
     new_users.sort!
 
-    new_users_text = "\n" + new_users.map { |user| "* #{user}\n" }.join
+    new_users_text = "\n" + new_users.map { |user| "* #{user.force_encoding('utf-8')}\n" }.join
     new_text = before_lines.join("\n") + new_users_text + after_lines.join("\n")
     [new_users, new_text]
   end
