@@ -66,8 +66,8 @@ module FixPP
       expiry = get_expiry(@page_obj, type)
 
       # generic pp template is handled differently
-      if pp_type == 'pp' && type.blank?
-        # try to figure out usage of generic {{pp}}
+      if pp_type.to_s == 'pp' && type.blank?
+        # try  to figure out usage of generic {{pp}}
         type = raw_code.scan(/\{\{\s*pp\s*(?:\|.*?action\s*\=\s*(.*?)(?:\||\}\}))/i).flatten.first
 
         # if a type couldn't be parsed, assume it means edit-protection if it's pp-protected
