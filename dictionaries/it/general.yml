@@ -1,0 +1,13 @@
+it:
+  days: 'Giorni'
+  disabled: 'disattivato'
+  enabled: 'attivo'
+  new: 'nuovo'
+  'no': 'no'
+  none: 'nessuno'
+  plain_link: '[%{url} %{name}]'
+  purge_link: '{{purga}}'
+  user: 'Utente'
+  user_link: '[[Utente:%{name}|%{name}]]'
+  'yes': 'sì'
+  links: 'Link'
