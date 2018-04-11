@@ -21,7 +21,7 @@ module StaleFilters
     ).elements['pages'][0].attributes['touched'])
 
     # abort unless we have new data to report or the page was touched
-    return unless new_hash != local_status['hash'] || touched > @mb.parse_date(local_status['time'])
+    return unless new_hash != local_status['hash'] || (touched.present? && touched > @mb.parse_date(local_status['time']))
 
     generate_report
 
