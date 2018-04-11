@@ -35,7 +35,7 @@ module MusikBot
 
       I18n.load_path = Dir[dir('dictionaries/*/*.yml')]
       I18n.backend.load_translations
-      I18n.config.available_locales = [:en, :fr, :pt]
+      I18n.config.available_locales = [:en, :fr, :pt, :it]
       I18n.locale = @opts[:lang]
 
       login
@@ -324,7 +324,7 @@ module MusikBot
         STDERR.puts "#{'>' * 20} #{DateTime.now.strftime('%Y-%m-%d %H:%M:%S')}"
         STDERR.puts "Error during processing: #{$ERROR_INFO}"
         STDERR.puts "Backtrace:\n\t#{e.backtrace.join("\n\t")}"
-        message += " &mdash; in {{mono|#{e.backtrace_locations.first.label}}}: ''#{e.message}''"
+        message += " &mdash; in <code>#{e.backtrace_locations.first.label}</code>: ''#{e.message}''"
       end
 
       content = get(page) || ''
