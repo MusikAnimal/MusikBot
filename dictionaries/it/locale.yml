@@ -110,8 +110,8 @@ it:
     am: am
     formats:
       default: "%d %B %Y %Hh %Mmin %Ss"
-      long: "%A %d %B %Y %Hh%M"
-      reporting: "%Y-%m-%d %H%M"
+      long: "%A %d %B %Y %Hh:%M"
+      reporting: "%Y-%m-%d %H:%M"
       short: "%d %b %Hh%M"
       wiki_time: "%-d %B %Y à %H:%M (CET)"
     pm: pm
