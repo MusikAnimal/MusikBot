@@ -8,7 +8,7 @@ require 'httparty'
 # --edition 3 instructs to use the 3rd set of credentials, in this case for Community_Tech_bot.
 module WishlistSurvey
   def self.run
-    @mb = MusikBot::Session.new(inspect, true)
+    @mb = MusikBot::Session.new(inspect)
 
     # Fetches from [[User:Community_Tech_bot/WishlistSurvey/config]].
     @survey_root = @mb.config[:survey_root]
