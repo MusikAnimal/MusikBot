@@ -183,10 +183,16 @@ module PermClerk
     @open_timestamps << timestamps.min { |a, b| @mb.parse_date(a) <=> @mb.parse_date(b) }
     @should_update_prereq_data = should_update_prereq_data
 
-    if @section.match(/{{comment\|Automated comment}}.*MusikBot/) && !@should_update_prereq_data
+    if @section.match(/\{\{comment\|Automated comment\}\}.*MusikBot/) && !@should_update_prereq_data
       info("  MusikBot has already commented on #{username}'s request and no prerequisite data to update")
-      @new_wikitext << SPLIT_KEY + @section
-      return
+
+      # We still want to do the autorespond task.
+      if autorespond
+        return queue_changes
+      else
+        @new_wikitext << SPLIT_KEY + @section
+        return
+      end
     end
 
     # these tasks have already been ran if we're just updating prereq data
@@ -194,7 +200,6 @@ module PermClerk
       # autoformat first, especially the case for Confirmed where they have a malformed report and are already autoconfirmed
       autoformat
       if autorespond
-        @num_open_requests -= 1
         return queue_changes
       end
       fetch_declined
@@ -317,8 +322,6 @@ module PermClerk
     end
 
     info("    Found improperly formatted request for #{@username}, repairing")
-
-    binding.pry
 
     actual_reason = fragmented_match.flatten[1]
     if actual_reason.empty? && @headers_removed[@username]
