@@ -52,7 +52,7 @@ module StaleDrafts
       "non-AfC) since #{@mb.wiki_date(end_date)}\n\n" \
       "{| class='wikitable sortable'\n! Page\n! Length\n! Revisions\n! style='min-width:75px' | Last edit\n!" \
       " Links\n! Tagged\n! AfC?\n! Mainspace \n|-\n" + inner_content.chomp("|-\n") + "|}\n"
-    @mb.edit('User:MusikBot/StaleDrafts/Report',
+    @mb.edit('Wikipedia:Database reports/Stale drafts',
       content: content,
       summary: "Reporting #{afc_count + non_afc_count} stale drafts",
       bot: false
