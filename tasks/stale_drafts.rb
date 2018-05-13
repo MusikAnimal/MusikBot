@@ -50,6 +50,7 @@ module StaleDrafts
     content = "<div style='font-size:24px'>Stale drafts as of #{@mb.today.strftime('%-d %B %Y')}</div>\n" \
       "{{formatnum:#{afc_count + non_afc_count}}} unedited pages ({{formatnum:#{afc_count}}} AfC, {{formatnum:#{non_afc_count}}} " \
       "non-AfC) since #{@mb.wiki_date(end_date)}\n\n" \
+      "Prepared by {{subst:User:MusikBot/Username}} <onlyinclude>~~~~~</onlyinclude>\n\n" \
       "{| class='wikitable sortable'\n! Page\n! Length\n! Revisions\n! style='min-width:75px' | Last edit\n!" \
       " Links\n! Tagged\n! AfC?\n! Mainspace \n|-\n" + inner_content.chomp("|-\n") + "|}\n"
     @mb.edit('Wikipedia:Database reports/Stale drafts',
