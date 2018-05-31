@@ -22,6 +22,7 @@ module MusikBot
         args.banner = 'Usage: script.rb [options]'
 
         args.on('-p', '--project PROJECT', 'Project name (en.wikipedia)') { |v| @opts[:project] = v }
+        args.on('-db', '--database DATABASE', 'Database name (enwiki)') { |v| @opts[:database] = v }
         args.on('-l', '--lang LANGUAGE', 'Language code (en)') { |v| @opts[:lang] = v.to_sym }
         args.on('-b', '--nobot', 'Don\'t assert as bot') { @opts[:nobot] = true }
         args.on('-e', '--env ENVIRONMENT', 'production to use specified wiki, or test to use testwiki')
@@ -55,6 +56,10 @@ module MusikBot
 
     def lang
       @opts[:lang]
+    end
+
+    def database
+      @opts[:database]
     end
 
     def bot?
