@@ -6,7 +6,7 @@ module StaleFilters
     @mb = MusikBot::Session.new(inspect)
 
     run_status = @mb.local_storage
-    local_status = run_status[@mb.lang.to_s]
+    local_status = run_status[@mb.database]
 
     @report_page = "#{t('User')}:MusikBot/StaleFilters/Report"
     @total_page = "#{t('User')}:MusikBot/StaleFilters/Total"
@@ -25,7 +25,7 @@ module StaleFilters
 
     generate_report
 
-    run_status[@mb.lang.to_s] = {
+    run_status[@mb.database] = {
       'hash' => new_hash,
       'time' => @mb.now.to_s
     }

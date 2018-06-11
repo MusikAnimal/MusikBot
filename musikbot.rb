@@ -59,7 +59,7 @@ module MusikBot
     end
 
     def database
-      @opts[:database]
+      @opts[:database].present? ? @opts[:database] : "#{@mb.lang}wiki"
     end
 
     def bot?
