@@ -159,19 +159,10 @@ module PermClerk
                    false
                  end
 
-    resolution_timestamp = @mb.parse_date(
-      @section.scan(/(?:#{@mb.config[:archive_config][resolution.to_sym]}).*(\d\d:\d\d, \d+ \w+ \d{4} \(UTC\))/i).flatten.drop(1).last
-    ) if resolution
-
-    # use newest timestamp when forcing resolution and no resolution template exists
-    if resolution_timestamp.nil? && overriden_resolution
-      resolution_timestamp = @newest_timestamp
-    end
-
     @num_open_requests += 1 unless resolution
 
     # archiving has precedence; e.g. if we are archiving, we don't do anything else for this section
-    return if archiving(resolution, overriden_resolution, resolution_timestamp)
+    return if archiving(resolution, overriden_resolution, @newest_timestamp)
 
     # determine if there's any else to be done
     if resolution
@@ -852,9 +843,9 @@ module PermClerk
       end
     when :saidPermission
       if params[:permission] == 'autowikibrowser'
-        "is still one the [[#{AWB_CHECKPAGE}|CheckPage]]<!-- mbHasPerm -->"
+        "is still on the [[#{AWB_CHECKPAGE}|CheckPage]]<!-- mbHasPerm -->"
       else
-        "still holds the <tt>#{params[:permission]} right</tt><!-- mbHasPerm -->"
+        "still holds the <tt>#{params[:permission]}</tt> right<!-- mbHasPerm -->"
       end
     when :templateSpaceCount
       "has <!-- mb-templateSpaceCount -->#{params[:templateSpaceCount]}<!-- mb-templateSpaceCount-end --> " \
