@@ -59,6 +59,7 @@ module MusikBot
     end
 
     def database
+      return 'testwiki' if env == 'test'
       @opts[:database].present? ? @opts[:database] : "#{lang}wiki"
     end
 

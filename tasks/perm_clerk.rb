@@ -190,7 +190,9 @@ module PermClerk
     unless @should_update_prereq_data
       # autoformat first, especially the case for Confirmed where they have a malformed report and are already autoconfirmed
       autoformat
-      if autorespond
+      # 1) Checks if the right was already temporarily granted, and comments if so.
+      # 2) Otherwise, run the autorespond task to close the request if they already have the right.
+      if !check_temp_granted && autorespond
         return queue_changes
       end
       fetch_declined
@@ -255,7 +257,10 @@ module PermClerk
   end
 
   def self.autorespond
-    return false unless @mb.config[:run][:autorespond] && api_relevant_permission
+    unless @mb.config[:run][:autorespond] && api_relevant_permission && !@section.match(/<\!-- (mb-autorespond|mb-temp-perm) -->/)
+      return false
+    end
+
     info("    User has permission #{@permission}")
 
     if sysop? || @permission == 'AutoWikiBrowser'
@@ -275,6 +280,7 @@ module PermClerk
         type: :autorespond,
         resolution: '{{already done}}'
       }
+    # Check if the permission was granted within the past N hours.
     elsif @mb.now > time_granted + Rational(@mb.config[:autorespond_config][:offset].to_i, 24)
       info('      Admin apparently forgot to respond to the request')
       request_change = {
@@ -295,6 +301,30 @@ module PermClerk
 
     @num_open_requests -= 1
     @edit_summaries << :autorespond
+    true
+  end
+
+  def self.check_temp_granted
+    expiry = get_user_info(@username)[:userGroups][@mb.config[:pages][@permission.to_sym]]
+    return false if expiry.nil?
+
+    info("    User currently has the permission temporarily")
+
+    event = fetch_last_granted
+    log_timestamp = @mb.parse_date(event.attributes['timestamp'])
+
+    # offset by 1 second since it will show everything _before_ the given timestamp
+    time_granted = log_timestamp.strftime('%Y%m%d%H%M') + (log_timestamp.second + 1).to_s
+
+    @request_changes << {
+      type: :temp_granted,
+      permission: @permission.downcase,
+      admin: event.attributes['user'],
+      granted: time_granted,
+      expiry: expiry
+    }
+    @edit_summaries << :temp_granted
+
     true
   end
 
@@ -728,7 +758,7 @@ module PermClerk
 
   # Helpers
   def self.sysop?
-    get_user_info(@username)[:userGroups].include?('sysop')
+    get_user_info(@username)[:userGroups].keys.include?('sysop')
   end
 
   def self.should_update_prereq_data
@@ -814,6 +844,10 @@ module PermClerk
       'An extraneous header or other inappropriate text was removed from this request'
     when :autorespond
       "#{'is a sysop and' if params[:sysop]} already has #{params[:permission] == 'AutoWikiBrowser' ? 'AutoWikiBrowser access' : "the \"#{params[:permission]}\" user right"}"
+    when :temp_granted
+      log_link = "#{@mb.gateway.wiki_url.chomp('api.php')}index.php?title=Special:Log&" \
+        "page=User:#{@username.score}&type=rights&offset=#{params[:granted]}&limit=1"
+      "was [#{log_link} granted] temporary #{params[:permission]} rights by {{no ping|#{params[:admin]}}} (expires #{@mb.wiki_date(params[:expiry])})<!-- mb-temp-perm -->"
     when :autorespond_admin_forgot
       "by {{no ping|#{params[:admin]}}}"
     when :checkrevoked
@@ -866,9 +900,9 @@ module PermClerk
     end
 
     str += if index = request_data.index { |obj| obj[:type] == :autorespond }
-             "#{COMMENT_INDENT}#{request_data[index][:resolution]} (automated response): This user "
+             "#{COMMENT_INDENT}#{request_data[index][:resolution]}<!-- mb-autorespond --> (automated response): This user "
            elsif index = request_data.index { |obj| obj[:type] == :autorespond_admin_forgot }
-             "#{COMMENT_INDENT}#{request_data[index][:resolution]} (automated response) "
+             "#{COMMENT_INDENT}#{request_data[index][:resolution]}<!-- mb-autorespond --> (automated response) "
            else
              COMMENT_INDENT + COMMENT_PREFIX + 'This user '
            end
@@ -934,7 +968,7 @@ module PermClerk
     if @permission == 'AutoWikiBrowser'
       awb_checkpage_content =~ /\n\*\s*#{Regexp.escape(@username)}\s*\n/ ? 'AutoWikiBrowser' : nil
     else
-      get_user_info(@username)[:userGroups].grep(/#{@mb.config[:pages][@permission.to_sym]}/).first
+      get_user_info(@username)[:userGroups].keys.grep(/#{@mb.config[:pages][@permission.to_sym]}/).first
     end
   end
 
@@ -956,13 +990,25 @@ module PermClerk
 
     # get basic info if we haven't already and query the repl database as needed for other info
     unless @user_info_cache[username] && @user_info_cache[username][:editCount]
-      api_obj = @mb.gateway.custom_query(
-        list: 'users',
-        ususers: username,
-        usprop: 'groups|editcount|registration'
-      ).elements['users'][0]
+      sql = %{
+        SELECT user_id, user_registration AS registration, user_editcount AS editcount
+        FROM #{@mb.database}_p.user
+        WHERE user_name = ?
+      }
+      user_info = @mb.repl_query(sql, username).to_a.first
+      user_info['groups'] = {}
 
-      user_info = api_obj.attributes
+      # User groups and expiries.
+      sql = %{
+        SELECT ug_group, ug_expiry
+        FROM #{@mb.database}_p.user_groups
+        WHERE ug_user = #{user_info['user_id']}
+      }
+      rows = @mb.repl_query(sql).to_a
+      rows.each do |row|
+        user_info['groups'][row['ug_group']] = @mb.parse_date(row['ug_expiry'])
+      end
+
       registration_date = user_info['registration'] ? @mb.parse_date(user_info['registration']) : nil
 
       @user_info_cache[username] = {
@@ -970,7 +1016,7 @@ module PermClerk
         accountAge: registration_date ? (@mb.today - registration_date).to_i : 1_000_000,
         editCount: user_info['editcount'].to_i,
         registration: registration_date,
-        userGroups: api_obj.elements['groups'].to_a.collect { |g| g[0].to_s },
+        userGroups: user_info['groups'],
         username: username
       }
     end
@@ -1019,6 +1065,15 @@ module PermClerk
     logevents.each do |event|
       in_old = event.elements['params/oldgroups'].collect(&:text).grep(normalized_perm).any?
       in_new = event.elements['params/newgroups'].collect(&:text).grep(normalized_perm).any?
+
+      # Check if the expiry of the right was changed with this log entry.
+      # If it was, this should be treated as the last time it was granted.
+      if in_old && in_new
+        old_expiry = event.elements['params/oldmetadata'].select { |r| r.attributes['group'] =~ normalized_perm }[0].attributes['expiry']
+        new_expiry = event.elements['params/newmetadata'].select { |r| r.attributes['group'] =~ normalized_perm }[0].attributes['expiry']
+
+        return event if old_expiry != new_expiry
+      end
 
       return event if !in_old && in_new
     end
