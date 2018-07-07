@@ -611,7 +611,7 @@ module PermClerk
         end
 
         info("    Attempting to write to page [[#{log_page_name}]]")
-        log_page_wikitext = log_page.split('===')[0] + log_page_wikitext
+        log_page_wikitext = log_page.split('===')[0].gsub(/^\n/, '') + "\n" + log_page_wikitext.gsub(/^\n/, '')
 
         @mb.edit(log_page_name,
           content: log_page_wikitext,
