@@ -200,6 +200,23 @@ module PermClerk
     end
     prerequisites
     queue_changes
+  rescue => e
+    @new_wikitext << SPLIT_KEY + @section
+
+    if e.message == 'unknown_user'
+      return record_error(
+        group: 'fatal',
+        message: "[[User:#{@username}]] not found! There may be a typo or the account was renamed.",
+        log_message: 'User not found'
+      )
+    end
+
+    record_error(
+      group: 'fatal',
+      message: "Unknown error occurred when processing section for [[User:#{@username}]]. " \
+        'Check the [[User:MusikBot/PermClerk/Error log|error log]] and contact the ' \
+        '[[User talk:MusikAnimal|bot operator]] if you are unable to resolve the issue.'
+    )
   end
 
   # Core tasks
@@ -996,6 +1013,9 @@ module PermClerk
         WHERE user_name = ?
       }
       user_info = @mb.repl_query(sql, username).to_a.first
+
+      raise 'unknown_user' if user_info.nil?
+
       user_info['groups'] = {}
 
       # User groups and expiries.
