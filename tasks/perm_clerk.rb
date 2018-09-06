@@ -1007,23 +1007,38 @@ module PermClerk
 
     # get basic info if we haven't already and query the repl database as needed for other info
     unless @user_info_cache[username] && @user_info_cache[username][:editCount]
-      sql = %{
-        SELECT user_id, user_registration AS registration, user_editcount AS editcount
-        FROM #{@mb.database}_p.user
-        WHERE user_name = ?
+      api_obj = @mb.gateway.custom_query(
+        list: 'users',
+        ususers: username,
+        usprop: 'groups|editcount|registration'
+      ).elements['users'][0]
+
+      raise 'unknown_user' if api_obj.attributes['missing']
+
+      # HUGE UGLY HACK BECAUSE YOU APPARENTLY CAN'T F'ING CONVERT A REGXML::Element into a Hash!
+      user_info = {
+        'user_id' => api_obj.attributes['userid'].to_i,
+        'editcount' => api_obj.attributes['editcount'].to_i,
+        'registration' => api_obj.attributes['registration'],
+        'groups' => {}
       }
-      user_info = @mb.repl_query(sql, username).to_a.first
 
-      raise 'unknown_user' if user_info.nil?
+      # Get the names of the user groups as an array.
+      groups = api_obj.elements['groups'].to_a.collect { |g| g[0].to_s }
 
-      user_info['groups'] = {}
+      # Pick out the special 'autoconfirmed'. Other user groups are fetched via the database
+      # because we also need the expiries (and autoconfirmed isn't recorded in the database).
+      if groups.include?('autoconfirmed')
+        user_info['groups']['autoconfirmed'] = nil; # No expiry
+      end
 
       # User groups and expiries.
-      sql = %{
+      sql = %(
         SELECT ug_group, ug_expiry
         FROM #{@mb.database}_p.user_groups
         WHERE ug_user = #{user_info['user_id']}
-      }
+      )
+
       rows = @mb.repl_query(sql).to_a
       rows.each do |row|
         user_info['groups'][row['ug_group']] = @mb.parse_date(row['ug_expiry'])
@@ -1034,7 +1049,7 @@ module PermClerk
       @user_info_cache[username] = {
         # use 1,000,000 for account age if it is nil, since that usually means a really old account
         accountAge: registration_date ? (@mb.today - registration_date).to_i : 1_000_000,
-        editCount: user_info['editcount'].to_i,
+        editCount: user_info['editcount'],
         registration: registration_date,
         userGroups: user_info['groups'],
         username: username
