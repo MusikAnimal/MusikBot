@@ -1,0 +1,7 @@
+en:
+  geonotice:
+    parser: 'Parser'
+    last_synced: 'Last synced at %{date}'
+    sync_summary: 'Syncing from %{link}'
+    errors:
+      parser: '[[%{config_page}|Config page]] is invalid JSON! Please review for errors.'

@@ -3,3 +3,7 @@ en:
   purge_link: '{{purge|purge}}'
   user_link: '[[User:%{name}|%{name}]]'
   links: 'Links'
+  errors:
+    reporting_errors: 'Reporting {{plural:%{num}|error|errors}}'
+    fatal: 'Fatal'
+    fatal_msg: 'Failed for unknown reasons. Check the [[%{log_page}|error log]] and contact the [[User talk:MusikAnimal|bot operator]] if you are unable to resolve the issue.'
