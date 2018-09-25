@@ -21,24 +21,26 @@ module GeonoticeSync
 
     return if synced_at > @mb.parse_date(@current_edit.attributes['timestamp'])
 
-    sync
-    generate_report
+    begin
+      sync
+      generate_report
+    rescue => e
+      @errors << [
+        group: I18n.t('errors.fatal'),
+        message: I18n.t('errors.fatal_msg',
+          log_page: "#{t('User')}:MusikBot II/GeonoticeSync/Error log"
+        )
+      ]
+      generate_report
+      raise e
+    end
 
     @mb.local_storage(
       'last_revid' => @current_edit.attributes['revid'],
       'synced' => @mb.now.to_s
     )
   rescue => e
-    # Goes to the bot's error log.
     @mb.report_error(t('Fatal error'), e)
-
-    # Also add to report page.
-    @errors << [
-      group: I18n.t('errors.fatal'),
-      message: I18n.t('errors.fatal_msg',
-        log_page: "#{t('User')}:MusikBot II/GeonoticeSync/Error log"
-      )
-    ]
   end
 
   def self.sync
@@ -46,7 +48,7 @@ module GeonoticeSync
 
     # TODO: validate format...
 
-    content = "window.GeoNotice = {};\nwindow.GeoNotice.notices = {\n\n" + JSON.pretty_generate(json) + "\n};"
+    content = "window.GeoNotice = {};\nwindow.GeoNotice.notices = " + JSON.pretty_generate(json) + ';'
 
     @mb.edit(@geonotice_page,
       content: content,
@@ -64,10 +66,9 @@ module GeonoticeSync
     false
   end
 
+  # Work in progress...
   def self.generate_report
     content = ''
-
-    binding.pry
 
     if @errors.any?
       content = "<div style='color:red;font-weight:bold'>#{num_errors} error#{'s' if num_errors > 1} as of ~~~~~</div>\n"
