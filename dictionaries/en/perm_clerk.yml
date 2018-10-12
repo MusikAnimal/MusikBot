@@ -1,0 +1,58 @@
+en:
+  errors:
+    edit_throttle: 'Edit throttle hit'
+    fatal: 'fatal'
+    fatal_error: 'Fatal error'
+    fatal_msg: 'Failed for unknown reasons. Check the [[User:MusikBot/PermClerk/Error log|error log]] and contact the [[User talk:MusikAnimal|bot operator]] if you are unable to resolve the issue.'
+    no_permissions: 'User:%{user} does not have the permission %{permission}'
+    not_on_checkpage: 'User:%{user} has not been added to the %{check_page}'
+    force_archiving: 'Use %{approved_code} to archive as approved or %{denied_code} to archive as declined'
+  tasks:
+    archive: 'Archive'
+  automated comment: 'Automated comment'
+  approved: 'Approved'
+  denied: 'Denied'
+  archiving: 'Archiving %{num} requests'
+  date_entry: 'Adding entry for %{page_link}'
+  reporting:
+    updating_report: Updating %{task_name} report
+    request_header: 'Unable to process page! A request heading is not on its own line:'
+    invalid_subst: 'Possible unsubstituted or improperly substituted request. Bot may be unable to parse the page.'
+    page_missing: 'The page %{page} does not exist!'
+  clerk_reports:
+    account_age: 'has had an account for %{account_age} days'
+    article_count: 'has created roughly %{article_count} [[WP:ARTICLE|articles]]'
+    auto_format: 'An extraneous header or other inappropriate text was removed from this request'
+    has_permission:
+      sysop:
+        permission: 'is a sysop and already has the %{permission} user right'
+        awb: 'is a sysop and already has the AutoWikiBrowser access'
+      non_sysop:
+        permission: 'already has the %{permission} user right'
+        awb: 'already has the AutoWikiBrowser access'
+    revoked: 'has had this permission revoked in the past %{days} days (%{revoked_links})'
+    awb_revoked: 'has had their access to AutoWikiBrowser automatically revoked (%{revoked_links})'
+    total_edits: 'has %{edits} total edits'
+    declined: 'has had %{num} requests for %{permission} declined in the past %{days} days (%{declined_links})'
+    mainspace_count: 'has %{num} edits in the [[WP:MAINSPACE|mainspace]]'
+    manual_mainspace_count: 'has %{num} %{non_automated_link_text} in the [[WP:MAINSPACE|mainspace]]'
+    non_automated_link_text: 'non-automated edits'
+    module_count: 'has %{num} edits in the [[WP:LUA|module namespace]]'
+    no_permission:
+      permission: 'does not appear to have the permission %{permission}'
+      awb: 'does not appear to have been added to the %{check_page}'
+    has_permission:
+      permission: 'still holds the %{permission} right'
+      awb: 'is still on the ${check_page}'
+    template_count: 'has %{num} edits in the [[WP:TMP|template namespace]]'
+    template_and_module_count: 'has %{num} edits in the [[WP:TMP|template]] and [[WP:LUA|module]] namespaces'
+  edit_summaries:
+    bot_clerking: 'Bot clerking on %{num} requests'
+    already_done: 'marked requests as already done'
+    malformed: 'repaired malformed requests'
+    prereq_data: 'prerequisite data updated'
+    unmet_prereqs: 'unmet prerequisites'
+    prev_declined: 'found previously declined requests'
+    prev_revocations: 'found previous revocations'
+    cant_archive: 'unable to archive one or more requests'
+    open_requests: '%{num} open requests remaining'

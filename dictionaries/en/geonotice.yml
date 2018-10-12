@@ -4,4 +4,16 @@ en:
     last_synced: 'Last synced at %{date}'
     sync_summary: 'Syncing from %{link}'
     errors:
+      keys: "Keys may only include <code>begin</code>, <code>end</code>, <code>country</code>, <code>corners</code> and <code>text</code>."
+      coords_country: 'You may only use either <code>country</code> or <code>corners</code>, not both.'
+      text: '<code>text</code> is missing.'
+      syntax: 'Syntax error'
+      date: '%{field} is not a valid date format'
+      country: "''%{country}'' is not a valid country code. See http://dev.maxmind.com/geoip/legacy/codes/iso3166 for a full list."
+      corners:
+        length: '%{field} should contain exactly two sets of coordinates.'
+        coord_length: 'Each value for %{field} should be an array containing both the latitude and longitude'
+        numeric: 'Latitude and longitude in %{field} should be numbers containing a decimal separator (such as <code>45.3</code> or <code>45.0</code>)'
       parser: '[[%{config_page}|Config page]] is invalid JSON! Please review for errors.'
+      no_errors: 'No errors!'
+      num_errors: '%{num} {{plural:%{num}|error|errors}}'
