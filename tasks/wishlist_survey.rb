@@ -26,8 +26,7 @@ module WishlistSurvey
 
     # Rotate the proposals every N hours (as specified by rotation_rate in config).
     last_rotation = @mb.local_storage['last_rotation']
-    # rotation_needed = @mb.parse_date(last_rotation) < @mb.now - (@mb.config[:rotation_rate].to_f / 24)
-    rotation_needed = false
+    rotation_needed = @mb.config[:voting_phase] && @mb.parse_date(last_rotation) < @mb.now - (@mb.config[:rotation_rate].to_f / 24)
 
     total_proposals = 0
     all_editors = []
@@ -47,10 +46,10 @@ module WishlistSurvey
       total_proposals += proposals.length
       all_editors += editors
 
-      if @mb.config[:voting_phase]
-        # Get votes for this category.
-        category_votes = parse_category(category)
+      # Get votes for this category.
+      category_votes = parse_category(category)
 
+      if @mb.config[:voting_phase]
         # Sort proposals by number of support votes.
         category_votes = category_votes.sort_by {|_k, v| -v[:support]}.to_h
 
@@ -60,10 +59,10 @@ module WishlistSurvey
         oppose_votes = category_votes.values.map { |v| v[:oppose] }.inject(:+)
         total_votes += support_votes + neutral_votes + oppose_votes
         total_support_votes += support_votes
-
-        # Store votes in the category's hash.
-        all_votes[category] = category_votes
       end
+
+      # Store votes in the category's hash.
+      all_votes[category] = category_votes
 
       # Get counts for this category from previous run, with defaults if they haven't been set yet.
       cached_counts[category] = {
@@ -77,7 +76,7 @@ module WishlistSurvey
       if @mb.config[:voting_phase] && cached_counts[category]['votes'] != support_votes
         @mb.edit("#{@survey_root}/Vote counts/#{category}",
           content: support_votes,
-          summary: "Updating support vote count"
+          summary: 'Updating support vote count'
         )
         cached_counts[category]['votes'] = support_votes
       end
@@ -121,7 +120,7 @@ module WishlistSurvey
         summary: "Updating total proposal count (#{total_proposals})"
       )
       cached_counts['total_proposals'] = total_proposals
-      report_needs_update = @mb.config[:voting_phase]
+      report_needs_update = true
     end
 
     if cached_counts['total_editors'] != @total_editors
@@ -130,13 +129,13 @@ module WishlistSurvey
         summary: "Updating total editor count (#{@total_editors})"
       )
       cached_counts['total_editors'] = @total_editors
-      report_needs_update = @mb.config[:voting_phase]
+      report_needs_update = true
     end
 
     @untranslated = get_proposals('Untranslated')
     if cached_counts['untranslated'] != @untranslated.length
       cached_counts['untranslated'] = @untranslated.length
-      report_needs_update = @mb.config[:voting_phase]
+      report_needs_update = true
     end
 
     create_report(all_votes) if report_needs_update
@@ -377,7 +376,9 @@ module WishlistSurvey
       }
     end
 
-    content = "Voting results as of ~~~~~\n\n{{/Heading}}\n\n" \
+    heading = @mb.config[:voting_phase] ? 'Voting results' : 'Results'
+
+    content = "#{heading} as of ~~~~~\n\n{{/Heading}}\n\n" \
       "{| class='wikitable sortable'\n!\n!#{rows.length} proposals\n!#{reported_categories.uniq.length} categories" \
       "\n!#{all_proposers.uniq.length} proposers\n!#{total_supports}\n" \
       "\n!#{all_phabs.uniq.length} phab tasks, #{all_related_phabs.uniq.length} related\n#{content}\n|}"
