@@ -47,10 +47,10 @@ module WishlistSurvey
       total_proposals += proposals.length
       all_editors += editors
 
-      # Get votes for this category.
-      category_votes = parse_category(category)
-
       if @mb.config[:voting_phase]
+        # Get votes for this category.
+        category_votes = parse_category(category)
+
         # Sort proposals by number of support votes.
         category_votes = category_votes.sort_by {|_k, v| -v[:support]}.to_h
 
@@ -60,10 +60,10 @@ module WishlistSurvey
         oppose_votes = category_votes.values.map { |v| v[:oppose] }.inject(:+)
         total_votes += support_votes + neutral_votes + oppose_votes
         total_support_votes += support_votes
-      end
 
-      # Store votes in the category's hash.
-      all_votes[category] = category_votes
+        # Store votes in the category's hash.
+        all_votes[category] = category_votes
+      end
 
       # Get counts for this category from previous run, with defaults if they haven't been set yet.
       cached_counts[category] = {
@@ -112,7 +112,7 @@ module WishlistSurvey
         summary: "Updating total vote count (#{total_support_votes})"
       )
       cached_counts['total_votes'] = total_support_votes
-      report_needs_update = true
+      report_needs_update = @mb.config[:voting_phase]
     end
 
     if cached_counts['total_proposals'] != total_proposals
@@ -121,7 +121,7 @@ module WishlistSurvey
         summary: "Updating total proposal count (#{total_proposals})"
       )
       cached_counts['total_proposals'] = total_proposals
-      report_needs_update = true
+      report_needs_update = @mb.config[:voting_phase]
     end
 
     if cached_counts['total_editors'] != @total_editors
@@ -130,13 +130,13 @@ module WishlistSurvey
         summary: "Updating total editor count (#{@total_editors})"
       )
       cached_counts['total_editors'] = @total_editors
-      report_needs_update = true
+      report_needs_update = @mb.config[:voting_phase]
     end
 
     @untranslated = get_proposals('Untranslated')
     if cached_counts['untranslated'] != @untranslated.length
       cached_counts['untranslated'] = @untranslated.length
-      report_needs_update = true
+      report_needs_update = @mb.config[:voting_phase]
     end
 
     create_report(all_votes) if report_needs_update
@@ -396,7 +396,7 @@ module WishlistSurvey
       end
     end
 
-    content +="\n\n[[Category:#{@survey_root}]]"
+    content += "\n\n[[Category:#{@survey_root}]]"
 
     @mb.edit("#{@survey_root}/Tracking",
       content: content,
