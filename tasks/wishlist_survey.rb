@@ -296,7 +296,11 @@ module WishlistSurvey
   end
 
   def self.create_report(cats)
-    content = "|-\n!Rank\n!Proposal\n!Category\n!Proposer\n![[File:Symbol support vote.svg|15px]]\n!Phabs\n"
+    content = "|-\n"
+    content += "!Rank\n" if @mb.config[:voting_phase]
+    content += "!Proposal\n!Category\n!Proposer\n"
+    content += "![[File:Symbol support vote.svg|15px]]\n" if @mb.config[:voting_phase]
+    content += "!Phabs\n"
 
     # Build array of proposal/category/votes for the report.
     rows = []
@@ -365,23 +369,23 @@ module WishlistSurvey
       proposal = proposal.dup.force_encoding('utf-8')
       proposer_str = proposer_str.dup.force_encoding('utf-8')
 
-      content += %Q{
-        |-
-        | #{rank}
-        | [[#{@survey_root}/#{category}/#{proposal}|#{proposal}]]
-        | [[#{@survey_root}/#{category}|#{category}]]
-        | #{proposer_str}
-        | #{supports}
-        | #{phabs}
-      }
+      content += "|-\n"
+      content += "| #{rank}\n" if @mb.config[:voting_phase]
+      content += "| [[#{@survey_root}/#{category}/#{proposal}|#{proposal}]]\n" \
+        "| [[#{@survey_root}/#{category}|#{category}]]\n" \
+        "| #{proposer_str}\n"
+      content += "#{supports}\n" if @mb.config[:voting_phase]
+      content += "| #{phabs}\n"
     end
 
     heading = @mb.config[:voting_phase] ? 'Voting results' : 'Results'
-
-    content = "#{heading} as of ~~~~~\n\n{{/Heading}}\n\n" \
-      "{| class='wikitable sortable'\n!\n!#{rows.length} proposals\n!#{reported_categories.uniq.length} categories" \
-      "\n!#{all_proposers.uniq.length} proposers\n!#{total_supports}\n" \
-      "\n!#{all_phabs.uniq.length} phab tasks, #{all_related_phabs.uniq.length} related\n#{content}\n|}"
+    heading_content = "#{heading} as of ~~~~~\n\n{{/Heading}}\n\n" \
+      "{| class='wikitable sortable'\n"
+    heading_content += "!\n" if @mb.config[:voting_phase]
+    heading_content += "!#{rows.length} proposals\n!#{reported_categories.uniq.length} categories\n" \
+      "!#{all_proposers.uniq.length} proposers\n"
+    heading_content += "!#{total_supports}\n" if @mb.config[:voting_phase]
+    content = "#{heading_content}!#{all_phabs.uniq.length} phab tasks, #{all_related_phabs.uniq.length} related\n#{content}\n|}"
 
     archived_proposals = get_proposals('Archive')
     if archived_proposals.any?
