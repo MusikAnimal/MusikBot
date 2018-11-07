@@ -1,6 +1,7 @@
 $LOAD_PATH << '..'
 require 'musikbot'
 require 'countries'
+require 'nokogiri'
 
 module GeonoticeSync
   def self.run
@@ -67,6 +68,21 @@ module GeonoticeSync
         valid = false
       end
 
+      # Parse text
+      begin
+        parsed_text = CGI.unescapeHTML(@mb.gateway.send_request(
+          action: 'parse',
+          text: config['text'],
+          contentmodel: 'wikitext',
+          wrapoutputclass: 0,
+          disablelimitreport: 1
+        )[0][0][0].to_s)
+        json[title]['text'] = Nokogiri::XML(parsed_text).css('div p').inner_html
+      rescue => _e
+        add_error(title, I18n.t('geonotice.errors.invalid_text'))
+        valid = false
+      end
+
       # Dates
       %w(begin end).each do |field|
         if (Date.parse(config['begin']) rescue nil).nil?
@@ -87,7 +103,7 @@ module GeonoticeSync
       end
     end
 
-    valid
+    valid == false ? false : json
   end
 
   def self.validate_corners(title, corners)
@@ -121,7 +137,8 @@ module GeonoticeSync
   def self.sync
     json = JSON.parse(@mb.get(@config_page))
 
-    return false unless validate(json)
+    json = validate(json)
+    return false unless json
 
     comment = @mb.get(@geonotice_page).scan(/(\/\*.*?\*\/)/m).flatten[0]
     content = "#{comment}\n\nwindow.GeoNotice = {};\nwindow.GeoNotice.notices = " + JSON.pretty_generate(json) + ';'
@@ -142,7 +159,6 @@ module GeonoticeSync
     false
   end
 
-  # Work in progress...
   def self.generate_report
     content = ''
 

@@ -7,6 +7,7 @@ en:
       keys: "Keys may only include <code>begin</code>, <code>end</code>, <code>country</code>, <code>corners</code> and <code>text</code>."
       coords_country: 'You may only use either <code>country</code> or <code>corners</code>, not both.'
       text: '<code>text</code> is missing.'
+      invalid_text: '<code>text</code> could not be parsed. Ensure only valid wikitext is used.'
       syntax: 'Syntax error'
       date: '%{field} is not a valid date format'
       country: "''%{country}'' is not a valid country code. See http://dev.maxmind.com/geoip/legacy/codes/iso3166 for a full list."
