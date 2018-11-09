@@ -18,7 +18,7 @@ module WishlistSurvey
       'total_proposals' => 0,
       'total_editors' => 0
     }
-    if @mb.config[:voting_phase]
+    if voting_phase?
       cached_counts['total_support_votes'] = 0
       cached_counts['total_votes'] = 0
     end
@@ -49,7 +49,7 @@ module WishlistSurvey
       # Get votes for this category.
       category_votes = parse_category(category)
 
-      if @mb.config[:voting_phase]
+      if voting_phase?
         # Sort proposals by number of support votes.
         category_votes = category_votes.sort_by {|_k, v| -v[:support]}.to_h
 
@@ -73,7 +73,7 @@ module WishlistSurvey
 
       # Only attempt to edit if there's a change in the counts.
 
-      if @mb.config[:voting_phase] && cached_counts[category]['votes'] != support_votes
+      if voting_phase? && cached_counts[category]['votes'] != support_votes
         @mb.edit("#{@survey_root}/Vote counts/#{category}",
           content: support_votes,
           summary: 'Updating support vote count'
@@ -105,13 +105,13 @@ module WishlistSurvey
     report_needs_update = false
 
     # Only attempt to edit if there's a change in the counts.
-    if @mb.config[:voting_phase] && cached_counts['total_votes'] != total_support_votes
+    if voting_phase? && cached_counts['total_votes'] != total_support_votes
       @mb.edit("#{@survey_root}/Total votes",
         content: total_support_votes,
         summary: "Updating total vote count (#{total_support_votes})"
       )
       cached_counts['total_votes'] = total_support_votes
-      report_needs_update = @mb.config[:voting_phase]
+      report_needs_update = voting_phase?
     end
 
     if cached_counts['total_proposals'] != total_proposals
@@ -207,7 +207,7 @@ module WishlistSurvey
 
     # Append any proposals that aren't transcluded but should be.
     proposals_from_db.each do |proposal|
-      proposals << proposal if !proposals.include?(proposal)
+      proposals << proposal.force_encoding('utf-8') if !proposals.include?(proposal)
     end
 
     # Rotate.
@@ -216,7 +216,9 @@ module WishlistSurvey
     # Rebuild the list, stripping out whitespace and extraneous new lines.
     prev_cat = categories[categories.index(category) - 1]
     next_cat = categories[(categories.index(category) + 1) % categories.length]
-    new_content = "{{:Community Wishlist Survey/Category header|#{prev_cat}|#{next_cat}}}\n" +
+
+    new_content = "{{:Community Wishlist Survey/Category header|#{prev_cat}|#{next_cat}" +
+      "|year=#{@mb.config[:year]}|#{@mb.config[:phase]}=yes}}\n" +
       proposals.map { |p| "\n{{:#{@survey_root}/#{category}/#{p}}}" }.join
 
     @mb.edit("#{@survey_root}/#{category}",
@@ -245,7 +247,7 @@ module WishlistSurvey
 
     proposer = proposal_content.scan(/\n\*\s*'''Proposer'''\s*:.*?\[\[.*?(?:User(?: talk)?:|Special:Contributions\/)(.*?)(?:\]\]|\|)/i).flatten.first
 
-    if @mb.config[:voting_phase]
+    if voting_phase?
       voting_section = proposal_content.scan(/\n===\s*Voting.*?\n(.*)/m).flatten.first || ''
       lines = voting_section.scan(/^*[^:](.*?)(?:\n)?$/).flatten
 
@@ -275,7 +277,7 @@ module WishlistSurvey
       related_phabs: related_phabs.uniq
     }
 
-    if @mb.config[:voting_phase]
+    if voting_phase?
       unless proposer_voted = lines.select { |l| l =~ proposer_sig }.length == 1
         supports += 1
       end
@@ -297,9 +299,9 @@ module WishlistSurvey
 
   def self.create_report(cats)
     content = "|-\n"
-    content += "!Rank\n" if @mb.config[:voting_phase]
+    content += "!Rank\n" if voting_phase?
     content += "!Proposal\n!Category\n!Proposer\n"
-    content += "![[File:Symbol support vote.svg|15px]]\n" if @mb.config[:voting_phase]
+    content += "![[File:Symbol support vote.svg|15px]]\n" if voting_phase?
     content += "!Phabs\n"
 
     # Build array of proposal/category/votes for the report.
@@ -316,7 +318,7 @@ module WishlistSurvey
     all_related_phabs = []
     reported_categories = []
 
-    if @mb.config[:voting_phase]
+    if voting_phase?
       # Sort all rows by count, descending.
       rows = rows.sort_by { |_proposal, _category, _proposer, _phabs, _rel_phabs, support| -support }
 
@@ -348,7 +350,7 @@ module WishlistSurvey
       all_related_phabs += related_phabs
       reported_categories << category
 
-      if @mb.config[:voting_phase]
+      if voting_phase?
         total_supports += supports
         total_neutrals += neutrals
         total_opposes += opposes
@@ -370,21 +372,21 @@ module WishlistSurvey
       proposer_str = proposer_str.dup.force_encoding('utf-8')
 
       content += "|-\n"
-      content += "| #{rank}\n" if @mb.config[:voting_phase]
+      content += "| #{rank}\n" if voting_phase?
       content += "| [[#{@survey_root}/#{category}/#{proposal}|#{proposal}]]\n" \
         "| [[#{@survey_root}/#{category}|#{category}]]\n" \
         "| #{proposer_str}\n"
-      content += "#{supports}\n" if @mb.config[:voting_phase]
+      content += "#{supports}\n" if voting_phase?
       content += "| #{phabs}\n"
     end
 
-    heading = @mb.config[:voting_phase] ? 'Voting results' : 'Results'
+    heading = voting_phase? ? 'Voting results' : 'Results'
     heading_content = "#{heading} as of ~~~~~\n\n{{/Heading}}\n\n" \
       "{| class='wikitable sortable'\n"
-    heading_content += "!\n" if @mb.config[:voting_phase]
+    heading_content += "!\n" if voting_phase?
     heading_content += "!#{rows.length} proposals\n!#{reported_categories.uniq.length} categories\n" \
       "!#{all_proposers.uniq.length} proposers\n"
-    heading_content += "!#{total_supports}\n" if @mb.config[:voting_phase]
+    heading_content += "!#{total_supports}\n" if voting_phase?
     content = "#{heading_content}!#{all_phabs.uniq.length} phab tasks, #{all_related_phabs.uniq.length} related\n#{content}\n|}"
 
     archived_proposals = get_proposals('Archive')
@@ -422,6 +424,10 @@ module WishlistSurvey
   def self.get_page(page)
     @page_cache ||= {}
     @page_cache[page] ||= @mb.get(page)
+  end
+
+  def self.voting_phase?
+    @mb.config[:phase] == 'voting'
   end
 
   #################### IDENTIFYING SOCKS/INELIGIBLE VOTERS AFTER VOTING PHASE HAS ENDED ####################
