@@ -4,7 +4,7 @@ en:
     last_synced: 'Last synced at %{date}'
     sync_summary: 'Syncing from %{link}'
     errors:
-      keys: "Keys may only include <code>begin</code>, <code>end</code>, <code>country</code>, <code>corners</code> and <code>text</code>."
+      keys: "Keys may only include <code>begin</code>, <code>end</code>, <code>country</code>, <code>corners</code> <code>text</code>, and <code>comments</code>."
       coords_country: 'You may only use either <code>country</code> or <code>corners</code>, not both.'
       text: '<code>text</code> is missing.'
       invalid_text: '<code>text</code> could not be parsed. Ensure only valid wikitext is used.'

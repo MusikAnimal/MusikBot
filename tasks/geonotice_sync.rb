@@ -53,7 +53,7 @@ module GeonoticeSync
 
     json.each do |title, config|
       # Keys
-      if (config.keys - %w(begin end country text corners)).any?
+      if (config.keys - %w(begin end country text corners comments)).any?
         add_error(title, I18n.t('geonotice.errors.keys'))
         valid = false
       end
@@ -61,6 +61,9 @@ module GeonoticeSync
         add_error(title, I18n.t('geonotice.errors.coords_country'))
         valid = false
       end
+
+      # Remove 'comments' key/value (this is only for the JSON page).
+      json.delete('comments')
 
       # Text
       if config['text'].blank?
@@ -77,7 +80,7 @@ module GeonoticeSync
           wrapoutputclass: 0,
           disablelimitreport: 1
         )[0][0][0].to_s)
-        json[title]['text'] = Nokogiri::XML(parsed_text).css('div p').inner_html
+        json[title]['text'] = Nokogiri::XML(parsed_text).css('div p').inner_html.chomp("\n")
       rescue => _e
         add_error(title, I18n.t('geonotice.errors.invalid_text'))
         valid = false
@@ -116,6 +119,8 @@ module GeonoticeSync
           add_error(title, I18n.t('geonotice.errors.corners.coord_length', field: '<code>corners</code>'))
           return false
         end
+
+        corner.map! {|num| num.is_a?(Integer) ? num+0.0 : num}
 
         if !corner[0].is_a?(Float) || !corner[1].is_a?(Float)
           add_error(title, I18n.t('geonotice.errors.corners.numeric', field: '<code>corners</code>'))
