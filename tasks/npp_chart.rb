@@ -8,12 +8,10 @@ module NPPChart
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    last_runs = {}
-
     [:monthly, :weekly, :daily, :hourly].each do |type|
       offset = @mb.config["#{type}_offset".to_sym]
 
-      next unless get_start_date(type, 1) > get_last_date(type)
+      next unless should_refresh_data(type)
 
       start_date = get_start_date(type, offset)
 
@@ -33,17 +31,16 @@ module NPPChart
     end
   end
 
-  def self.get_last_date(type)
-    now = @mb.now
+  def self.should_refresh_data(type)
     case type
       when :hourly
-        return @mb.parse_date((now + (1.0 / 24)).strftime('%Y-%m-%d %H:00'))
+        return true
       when :daily
-        return @mb.parse_date(now.strftime('%Y-%m-%d 00:00'))
+        return @mb.now.hour == 0
       when :weekly
-        return @mb.parse_date((now - now.wday).strftime('%Y-%m-%d 00:00'))
+        return @mb.now.wday == 0
       when :monthly
-        return @mb.parse_date((now - now.mday + 1).strftime('%Y-%m-01 00:00'))
+        return @mb.now.mday == 1
     end
   end
 
