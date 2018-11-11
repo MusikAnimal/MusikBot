@@ -218,7 +218,7 @@ module WishlistSurvey
     next_cat = categories[(categories.index(category) + 1) % categories.length]
 
     new_content = "{{:Community Wishlist Survey/Category header|#{prev_cat}|#{next_cat}" +
-      "|year=#{@mb.config[:year]}|#{@mb.config[:phase]}=yes}}\n" +
+      "|year=#{@mb.config[:year]}|phase=#{@mb.config[:phase]}}}\n" +
       proposals.map { |p| "\n{{:#{@survey_root}/#{category}/#{p}}}" }.join
 
     @mb.edit("#{@survey_root}/#{category}",
