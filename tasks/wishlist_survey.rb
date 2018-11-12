@@ -223,7 +223,7 @@ module WishlistSurvey
 
     @mb.edit("#{@survey_root}/#{category}",
       content: new_content,
-      summary: "Shuffling proposals to ensure fair visibility (happens every #{@mb.config[:rotation_rate]} hours)",
+      summary: "Shuffling proposals to ensure fair visibility",
       conflicts: true
     )
   end
