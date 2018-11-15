@@ -26,7 +26,7 @@ module WishlistSurvey
 
     # Rotate the proposals every N hours (as specified by rotation_rate in config).
     last_rotation = @mb.local_storage['last_rotation']
-    rotation_needed = false # @mb.parse_date(last_rotation) < @mb.now - (@mb.config[:rotation_rate].to_f / 24)
+    rotation_needed = @mb.parse_date(last_rotation) < @mb.now - (@mb.config[:rotation_rate].to_f / 24)
 
     total_proposals = 0
     all_editors = []
