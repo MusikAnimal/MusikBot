@@ -138,7 +138,7 @@ module WishlistSurvey
       report_needs_update = true
     end
 
-    create_report(all_votes) if report_needs_update
+    create_report(all_votes) if false #report_needs_update
 
     @mb.local_storage(
       'counts' => cached_counts,
