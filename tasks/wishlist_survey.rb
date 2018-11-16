@@ -138,7 +138,7 @@ module WishlistSurvey
       report_needs_update = true
     end
 
-    create_report(all_votes) if false #report_needs_update
+    create_report(all_votes) if report_needs_update
 
     @mb.local_storage(
       'counts' => cached_counts,
@@ -376,7 +376,7 @@ module WishlistSurvey
       content += "| [[#{@survey_root}/#{category}/#{proposal}|#{proposal}]]\n" \
         "| [[#{@survey_root}/#{category}|#{category}]]\n" \
         "| #{proposer_str}\n"
-      content += "#{supports}\n" if voting_phase?
+      content += "| #{supports}\n" if voting_phase?
       content += "| #{phabs}\n"
     end
 
@@ -405,10 +405,30 @@ module WishlistSurvey
 
     content += "\n\n[[Category:#{@survey_root}]]"
 
-    @mb.edit("#{@survey_root}/Tracking",
-      content: content,
-      summary: "Updating voting results (#{rows.length} proposals, #{@total_editors} editors, #{total_supports} support votes)"
+    gateway ||= MediaWiki::Gateway.new('https://www.mediawiki.org/w/api.php',
+      bot: true,
+      retry_count: 5,
+      user_agent: 'User:Community_Tech_bot/1.1 (https://www.mediawiki.org/wiki/User:Community_Tech_bot/)',
+      ignorewarnings: true
     )
+    credentials = YAML.load(
+      File.open(
+        File.dirname(__FILE__) + '/../config/application.yml'
+      ).read
+    ).symbolize_keys
+    gateway.login(
+      credentials[:api][:edition_3][:username],
+      credentials[:api][:edition_3][:password]
+    )
+
+    gateway.edit('User:Community_Tech_bot/Survey_tracking', content,
+      summary: 'Survey tracking - to be moved to Meta after a few days of voting'
+    )
+
+    # @mb.edit("#{@survey_root}/Tracking",
+    #   content: content,
+    #   summary: "Updating voting results (#{rows.length} proposals, #{@total_editors} editors, #{total_supports} support votes)"
+    # )
   end
 
   # Get page ID for given page title, necessary to query revision table.
