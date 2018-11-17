@@ -336,10 +336,11 @@ module WishlistSurvey
 
     # Build markup.
     rows.each do |proposal, category, proposer, phabs, related_phabs, supports, neutrals, opposes|
-      if supports != old_support_count
-        rank += 1
-        old_support_count = supports
-      end
+      # if supports != old_support_count
+      #   rank += 1
+      #   old_support_count = supports
+      # end
+      rank += 1
 
       # Strip out links and nowiki tags from section title.
       # XXX: May not need to do this anymore.
