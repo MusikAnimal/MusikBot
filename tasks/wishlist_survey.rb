@@ -251,9 +251,9 @@ module WishlistSurvey
       voting_section = proposal_content.scan(/\n===\s*Voting.*?\n(.*)/m).flatten.first || ''
       lines = voting_section.scan(/^*[^:](.*?)(?:\n)?$/).flatten
 
-      supports = proposal_content.downcase.scan(/\{\{\s*(#{@mb.config[:support_templates]})\s*\}\}/).flatten.length
-      neutrals = proposal_content.downcase.scan(/\{\{\s*(#{@mb.config[:neutral_templates]})\s*\}\}/).flatten.length
-      opposes = proposal_content.downcase.scan(/\{\{\s*(#{@mb.config[:oppose_templates]})\s*\}\}/).flatten.length
+      supports = proposal_content.downcase.scan(/\{\{\s*(#{@mb.config[:support_templates]})(?:\s*\|.*?)?\s*\}\}/).flatten.length
+      neutrals = proposal_content.downcase.scan(/\{\{\s*(#{@mb.config[:neutral_templates]})(?:\s*\|.*?)?\s*\}\}/).flatten.length
+      opposes = proposal_content.downcase.scan(/\{\{\s*(#{@mb.config[:oppose_templates]})(?:\s*\|.*?)?\s*\}\}/).flatten.length
     else
       supports = '-'
       neutrals = '-'
