@@ -24,7 +24,7 @@ module NPPChart
         }
       end
 
-      @mb.edit("User:MusikBot/NPPChart/Sources/#{type}",
+      @mb.edit("Wikipedia:New pages patrol/Reviewers/Backlog chart/#{type}",
         content: data.to_json,
         summary: "Updating #{type} data for NPP backlog size"
       )
