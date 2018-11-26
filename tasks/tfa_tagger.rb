@@ -16,7 +16,7 @@ module TFATagger
     # Add to current TFA.
     current_tfa = @mb.get("Template:TFA title/#{today}")
     @mb.edit(current_tfa,
-      content: @mb.get(current_tfa) + "\n{{Current TFA}}",
+      content: @mb.get(current_tfa).chomp + "\n{{Current TFA}}",
       summary: 'Tagging as {{Current TFA}}'
     )
 
