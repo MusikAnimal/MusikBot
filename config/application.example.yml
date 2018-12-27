@@ -30,3 +30,7 @@ local_db:
 redis:
   host: 127.0.0.1
   port: 4712
+irc:
+  nick: Foobar
+  password: password
+  user: 'Foobar 0 * :Foobar'

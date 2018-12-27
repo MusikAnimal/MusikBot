@@ -7,3 +7,5 @@ env
 .ruby-version
 disk_cache
 application.yml
+vendor
+.idea
