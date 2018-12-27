@@ -1,4 +1,13 @@
 GIT
+  remote: git://github.com/MusikAnimal/em-eventsource.git
+  revision: 3af86d5a7b4a52dd142de9deff204152e81df869
+  branch: master
+  specs:
+    em-eventsource (0.3.0)
+      em-http-request (~> 1.0)
+      eventmachine (~> 1.0)
+
+GIT
   remote: git://github.com/MusikAnimal/mediawiki-gateway.git
   revision: e809559f5b796b73f534e51235b5e4c8c06f6ab0
   branch: master
@@ -22,9 +31,6 @@ GEM
       unicode_utils (~> 1.4)
     domain_name (0.5.20180417)
       unf (>= 0.0.5, < 1.0.0)
-    em-eventsource (0.3.0)
-      em-http-request (~> 1.0)
-      eventmachine (~> 1.0)
     em-http-request (1.1.5)
       addressable (>= 2.3.4)
       cookiejar (!= 0.3.1)
@@ -37,12 +43,10 @@ GEM
     http-cookie (1.0.3)
       domain_name (~> 0.5)
     http_parser.rb (0.6.0)
-    httparty (0.13.7)
-      json (~> 1.8)
+    httparty (0.16.2)
       multi_xml (>= 0.5.2)
     i18n (0.7.0)
     i18n_data (0.8.0)
-    json (1.8.6)
     method_source (0.9.2)
     mime-types (3.2.2)
       mime-types-data (~> 3.2015)
@@ -51,7 +55,7 @@ GEM
     money (6.13.1)
       i18n (>= 0.6.4, <= 2)
     multi_xml (0.6.0)
-    mysql2 (0.4.5)
+    mysql2 (0.5.2)
     netrc (0.11.0)
     nokogiri (1.8.1)
       mini_portile2 (~> 2.3.0)
@@ -80,11 +84,11 @@ PLATFORMS
 DEPENDENCIES
   cinch (= 2.3.4)
   countries (= 2.1.4)
-  em-eventsource (= 0.3.0)
-  httparty (= 0.13.7)
+  em-eventsource!
+  httparty (= 0.16.2)
   i18n (= 0.7.0)
   mediawiki-gateway!
-  mysql2 (= 0.4.5)
+  mysql2 (= 0.5.2)
   nokogiri (= 1.8.1)
   pry-byebug (= 3.3.0)
   redis (= 3.2.2)

@@ -26,13 +26,12 @@ module AbuseFilterIRC
 
       on :connect do
         EM.run do
-          puts 'EM.run'
           source = EventMachine::EventSource.new('https://stream.wikimedia.org/v2/stream/recentchange')
 
           source.on "message" do |message|
             data = JSON.parse(message)
             if data['wiki'] == 'enwiki' && data['log_action'] == 'hit'
-              msg = "User:#{data['user'].tr(' ', '_')} tripped *filter #{data['log_params']['filter']}* on [[#{data['title']}]]: " \
+              msg = "User:#{data['user'].tr(' ', '_')} tripped *filter-#{data['log_params']['filter']}* on [[#{data['title']}]]: " \
               "https://en.wikipedia.org/wiki/Special:AbuseLog/#{data['log_params']['log']}"
 
               Channel(CHANNEL).send(msg)

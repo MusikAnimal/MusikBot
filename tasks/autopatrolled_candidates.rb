@@ -15,7 +15,7 @@ REPORT_PAGE = 'Wikipedia:Database reports/Editors eligible for Autopatrol privil
 
 module AutopatrolledCandidates
   def self.run
-    @mb = MusikBot::Session.new(inspect, true)
+    @mb = MusikBot::Session.new(inspect)
 
     users = {}
 
@@ -336,7 +336,7 @@ module AutopatrolledCandidates
             AND ( ug_group = 'autoreviewer' OR ug_group = 'sysop' )
           )
     }
-    @page_creators = @mb.repl.query(sql).to_a
+    @page_creators = @mb.repl_query(sql).to_a
   end
 end
 
