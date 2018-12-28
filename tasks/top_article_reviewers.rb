@@ -5,7 +5,7 @@ REPORT_PAGE = 'Wikipedia:Database reports/Top new article reviewers'
 
 module TopArticleReviewers
   def self.run
-    @mb = MusikBot::Session.new(inspect, true)
+    @mb = MusikBot::Session.new(inspect)
 
     markup = <<~END
       {{TOC right}}

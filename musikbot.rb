@@ -15,7 +15,7 @@ module MusikBot
       @task = task
       @opts = {
         prodonly: prodonly,
-        project: 'test.wikipedia',
+        project: env == 'test' && !prodonly ? 'test.wikipedia' : 'en.wikipedia',
         edition: 1
       }
       OptionParser.new do |args|
