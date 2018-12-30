@@ -165,6 +165,7 @@ module AutopatrolledCandidates
     sql = %{
       SELECT rev_id
       FROM revision_userindex
+      LEFT OUTER JOIN comment ON rev_comment_id = comment_id
       WHERE rev_page = (
         SELECT page_id
         FROM page
@@ -172,7 +173,7 @@ module AutopatrolledCandidates
         AND page_namespace = 3
       )
       AND rev_timestamp > #{@mb.db_date(@mb.today - 365)}
-      AND rev_comment REGEXP "[Cc]opy(right|vio)"
+      AND comment_text REGEXP "[Cc]opy(right|vio)"
     }
     @mb.repl_query(sql, username.score).to_a.collect { |r| r['rev_id'] }
   end
@@ -187,8 +188,9 @@ module AutopatrolledCandidates
   # }
   def self.deleted_counts(username)
     sql = %{
-      SELECT log_comment
+      SELECT comment_text
       FROM logging_logindex
+      LEFT OUTER JOIN comment ON log_comment_id = comment_id
       LEFT JOIN archive_userindex ON ar_page_id = log_page
       WHERE log_type = 'delete'
       AND ar_user_text = ?
@@ -206,11 +208,11 @@ module AutopatrolledCandidates
 
     @mb.repl_query(sql, username.score).to_a.each do |data|
       # don't count technical or user-requested deletions
-      next if data['log_comment'] =~ /\[\[WP:CSD#G(6|7)\|/
+      next if data['comment_text'] =~ /\[\[WP:CSD#G(6|7)\|/
 
       counts[:total] += 1
 
-      case data['log_comment']
+      case data['comment_text']
       when /\[\[WP:CSD#/
         counts[:Speedy] += 1
       when /\[\[WP:(BLP)?PROD/
