@@ -7,17 +7,29 @@ module AbuseFilterIRC
   include Cinch::Plugin
 
   CHANNEL = '#wikipedia-en-abuse-log-all'
+  UNSUBSCRIBE_MSG = 'To unsubscribe, use !unsubscribe [filter ID] or !unsubscribe all'
 
   def self.run
-    mb = MusikBot::Session.new(inspect, true, true)
+    $mb = MusikBot::Session.new(inspect, true, true)
 
     bot = Cinch::Bot.new do
       configure do |c|
         c.server = 'chat.freenode.org'
         c.channels = [CHANNEL]
-        c.nick = mb.app_config[:irc][:nick]
-        c.password = mb.app_config[:irc][:password]
-        c.user = mb.app_config[:irc][:user]
+        c.nick = $mb.app_config[:irc][:nick]
+        c.password = $mb.app_config[:irc][:password]
+        c.user = $mb.app_config[:irc][:user]
+      end
+
+      helpers do
+        def authed(user)
+          unless user.authed?
+            user.send "Your IRC nick must be identified to subscribe to filters. See https://freenode.net/kb/answer/registration"
+            return false
+          end
+
+          true
+        end
       end
 
       on :connect do
@@ -32,7 +44,7 @@ module AbuseFilterIRC
 
               Channel(CHANNEL).send(msg)
 
-              mb.local_storage['subscriptions'].each do |user, filter_ids|
+              $mb.local_storage['subscriptions'].each do |user, filter_ids|
                 if filter_ids.include?(data['log_params']['filter'].to_i)
                   User(user).send msg
                 end
@@ -57,37 +69,39 @@ module AbuseFilterIRC
       end
 
       on :message, /!subscribe (\d+)/ do |m, filter_id|
-        unless m.user.authed?
-          m.user.send "Your IRC account must be identified to subscribe to filters. See https://freenode.net/kb/answer/registration"
-          return
-        end
+        return unless authed(m.user)
 
-        storage = mb.local_storage
-        storage['subscriptions'][m.user.to_s] ||= []
-        storage['subscriptions'][m.user.to_s] << filter_id.to_i
-        mb.local_storage(storage)
+        storage = $mb.local_storage
+        storage['subscriptions'][m.user.nick] ||= []
+        storage['subscriptions'][m.user.nick] |= [filter_id.to_i]
+        storage['subscriptions']
+        $mb.local_storage(storage)
 
         m.user.send "You have subscribed to filter #{filter_id}"
-        m.user.send "To unsubscribe, use !unsubscribe [filter ID] or !unsubscribe all"
+        m.user.send UNSUBSCRIBE_MSG
       end
 
       on :message, /!unsubscribe (\d+|all)/ do |m, filter_id|
-        storage = mb.local_storage
-        storage['subscriptions'][m.user.to_s] ||= []
+        return unless authed(m.user)
+
+        storage = $mb.local_storage
+        storage['subscriptions'][m.user.nick] ||= []
         if 'all' == filter_id
-          storage['subscriptions'][m.user.to_s] = []
+          storage['subscriptions'][m.user.nick] = []
           m.user.send "You have unsubscribed to all filters"
         else
-          storage['subscriptions'][m.user.to_s].delete(filter_id.to_i)
+          storage['subscriptions'][m.user.nick].delete(filter_id.to_i)
           m.user.send "You have unsubscribed to filter #{filter_id}"
         end
-        mb.local_storage(storage)
+        $mb.local_storage(storage)
       end
 
       on :message, /!subscriptions/ do |m|
-        subscriptions = (mb.local_storage['subscriptions'][m.user.to_s] rescue []).map(&:to_i).sort.join(', ')
+        return unless authed(m.user)
+
+        subscriptions = ($mb.local_storage['subscriptions'][m.user.nick] rescue []).map(&:to_i).sort.join(', ')
         m.user.send "You are subscribed to the following filters: #{subscriptions}"
-        m.user.send "To unsubscribe, use !unsubscribe [filter ID] or !unsubscribe all"
+        m.user.send UNSUBSCRIBE_MSG
       end
     end
 
