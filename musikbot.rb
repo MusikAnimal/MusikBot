@@ -11,7 +11,7 @@ require 'pry-byebug'
 
 module MusikBot
   class Session
-    def initialize(task, prodonly = false)
+    def initialize(task, prodonly = false, no_login = false)
       @task = task
       @opts = {
         prodonly: prodonly,
@@ -39,7 +39,7 @@ module MusikBot
       I18n.config.available_locales = [:en, :fr, :pt, :it]
       I18n.locale = @opts[:lang]
 
-      login
+      login unless no_login
 
       unless @task =~ /Console|SoundSearch/ || @opts[:prodonly] || env == 'test' || get("User:#{username}/#{@task}/Run") == 'true'
         report_error("#{@task} disabled")
@@ -349,18 +349,18 @@ module MusikBot
       app_config[:api][:"edition_#{@opts[:edition]}"][:wiki_user]
     end
 
+    def app_config
+      @app_config ||= YAML.load(
+          File.open(
+              dir('config/application.yml')
+          ).read
+      ).symbolize_keys
+    end
+
     private
 
     def dir(path = '')
       File.dirname(__FILE__) + '/' + path
-    end
-
-    def app_config
-      @app_config ||= YAML.load(
-        File.open(
-          dir('config/application.yml')
-        ).read
-      ).symbolize_keys
     end
 
     def login(throttle = 0)
