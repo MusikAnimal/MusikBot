@@ -1,26 +1,24 @@
 GIT
-  remote: git://github.com/MusikAnimal/em-eventsource.git
-  revision: 474aee702d0effad5d87cf4d5e578ccd3a73348b
+  remote: git://github.com/MusikAnimal/mediawiki-gateway.git
+  revision: e809559f5b796b73f534e51235b5e4c8c06f6ab0
   branch: master
   specs:
-    em-eventsource (0.3.1)
+    mediawiki-gateway (1.2.5)
+      rest-client (~> 2.0)
+
+PATH
+  remote: ../em-eventsource
+  specs:
+    em-eventsource (0.3.0)
       em-http-request (~> 1.0)
       eventmachine (~> 1.0)
-
-GIT
-  remote: git://github.com/MusikAnimal/mediawiki-gateway.git
-  revision: 6bc2bc54be694e0c4fa4caef2d3bd5b3492b4946
-  branch: master
-  specs:
-    mediawiki-gateway (1.2.6)
-      rest-client (~> 2.0)
 
 GEM
   remote: https://rubygems.org/
   specs:
-    addressable (2.6.0)
+    addressable (2.5.2)
       public_suffix (>= 2.0.2, < 4.0)
-    byebug (10.0.2)
+    byebug (8.2.5)
     cinch (2.3.4)
     coderay (1.1.2)
     cookiejar (0.3.3)
@@ -52,18 +50,18 @@ GEM
       mime-types-data (~> 3.2015)
     mime-types-data (3.2018.0812)
     mini_portile2 (2.3.0)
-    money (6.13.2)
+    money (6.13.1)
       i18n (>= 0.6.4, <= 2)
     multi_xml (0.6.0)
     mysql2 (0.5.2)
     netrc (0.11.0)
-    nokogiri (1.8.5)
+    nokogiri (1.8.1)
       mini_portile2 (~> 2.3.0)
     pry (0.12.2)
       coderay (~> 1.1.0)
       method_source (~> 0.9.0)
-    pry-byebug (3.6.0)
-      byebug (~> 10.0)
+    pry-byebug (3.3.0)
+      byebug (~> 8.0)
       pry (~> 0.10)
     public_suffix (3.0.3)
     redis (3.2.2)
@@ -89,10 +87,10 @@ DEPENDENCIES
   i18n (= 0.7.0)
   mediawiki-gateway!
   mysql2 (= 0.5.2)
-  nokogiri (= 1.8.5)
-  pry-byebug
+  nokogiri (= 1.8.1)
+  pry-byebug (= 3.3.0)
   redis (= 3.2.2)
   unicode (~> 0.4.4)
 
 BUNDLED WITH
-   2.0.1
+   1.17.1

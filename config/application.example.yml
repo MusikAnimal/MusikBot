@@ -17,6 +17,12 @@ replica:
   username: username
   password: password
   reconnect: true
+abusefilter_rc:
+  host: 127.0.0.1
+  port: 4713
+  username: username
+  password: password
+  reconnect: true
 copypatrol: # private database on enwiki.labsdb
   host: 127.0.0.1
   port: 4711
