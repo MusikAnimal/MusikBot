@@ -1,7 +1,7 @@
 $LOAD_PATH << '..'
 require 'musikbot'
 
-module HighRiskTemplates
+module TemplateProtector
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
@@ -26,7 +26,7 @@ module HighRiskTemplates
       "{{formatnum:#{highly_transcluded.length}}} templates with over {{formatnum:#{threshold}}} transclusions\n\n" \
       "{| class='wikitable sortable'\n! Template\n! Transclusions\n! Current protection\n" + content.chomp("|-\n") + "|}\n"
 
-    @mb.edit('User:MusikBot/HighRiskTemplates/Report',
+    @mb.edit('User:MusikBot/TemplateProtector/Report',
       content: content,
       summary: "Reporting #{highly_transcluded.length} unprotected templates",
       bot: false
@@ -45,7 +45,7 @@ module HighRiskTemplates
       WHERE tl_namespace = 10
       AND pr_page IS NULL
       GROUP BY tl_title
-      HAVING COUNT(*) >= 250 AND COUNT(*) <= 1000
+      HAVING COUNT(*) >= 500
       ORDER BY COUNT(*) DESC
     }
     @mb.repl.query(sql).to_a
@@ -63,4 +63,4 @@ module HighRiskTemplates
   end
 end
 
-HighRiskTemplates.run
+TemplateProtector.run
