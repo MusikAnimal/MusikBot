@@ -1,19 +1,17 @@
 GIT
-  remote: git://github.com/MusikAnimal/em-eventsource.git
-  revision: 3af86d5a7b4a52dd142de9deff204152e81df869
-  branch: master
-  specs:
-    em-eventsource (0.3.0)
-      em-http-request (~> 1.0)
-      eventmachine (~> 1.0)
-
-GIT
   remote: git://github.com/MusikAnimal/mediawiki-gateway.git
   revision: e809559f5b796b73f534e51235b5e4c8c06f6ab0
   branch: master
   specs:
     mediawiki-gateway (1.2.5)
       rest-client (~> 2.0)
+
+PATH
+  remote: ../em-eventsource
+  specs:
+    em-eventsource (0.3.0)
+      em-http-request (~> 1.0)
+      eventmachine (~> 1.0)
 
 GEM
   remote: https://rubygems.org/
