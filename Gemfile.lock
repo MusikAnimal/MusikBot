@@ -1,9 +1,9 @@
 GIT
   remote: git://github.com/MusikAnimal/em-eventsource.git
-  revision: 3af86d5a7b4a52dd142de9deff204152e81df869
+  revision: 474aee702d0effad5d87cf4d5e578ccd3a73348b
   branch: master
   specs:
-    em-eventsource (0.3.0)
+    em-eventsource (0.3.1)
       em-http-request (~> 1.0)
       eventmachine (~> 1.0)
 
@@ -18,9 +18,9 @@ GIT
 GEM
   remote: https://rubygems.org/
   specs:
-    addressable (2.5.2)
+    addressable (2.6.0)
       public_suffix (>= 2.0.2, < 4.0)
-    byebug (8.2.5)
+    byebug (10.0.2)
     cinch (2.3.4)
     coderay (1.1.2)
     cookiejar (0.3.3)
@@ -52,7 +52,7 @@ GEM
       mime-types-data (~> 3.2015)
     mime-types-data (3.2018.0812)
     mini_portile2 (2.3.0)
-    money (6.13.1)
+    money (6.13.2)
       i18n (>= 0.6.4, <= 2)
     multi_xml (0.6.0)
     mysql2 (0.5.2)
@@ -62,8 +62,8 @@ GEM
     pry (0.12.2)
       coderay (~> 1.1.0)
       method_source (~> 0.9.0)
-    pry-byebug (3.3.0)
-      byebug (~> 8.0)
+    pry-byebug (3.6.0)
+      byebug (~> 10.0)
       pry (~> 0.10)
     public_suffix (3.0.3)
     redis (3.2.2)
@@ -90,9 +90,9 @@ DEPENDENCIES
   mediawiki-gateway!
   mysql2 (= 0.5.2)
   nokogiri (= 1.8.1)
-  pry-byebug (= 3.3.0)
+  pry-byebug
   redis (= 3.2.2)
   unicode (~> 0.4.4)
 
 BUNDLED WITH
-   1.17.1
+   2.0.1

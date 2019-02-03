@@ -1,7 +1,7 @@
 source 'https://rubygems.org'
 
 gem 'mediawiki-gateway', github: 'MusikAnimal/mediawiki-gateway', branch: 'master'
-gem 'pry-byebug', '3.3.0'
+gem 'pry-byebug'
 gem 'unicode', '~> 0.4.4'
 gem 'mysql2', '0.5.2'
 gem 'httparty', '0.16.2'

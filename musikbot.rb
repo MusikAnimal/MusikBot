@@ -207,14 +207,21 @@ module MusikBot
     def local_storage(data = nil)
       filename = dir("disk_cache/#{@task}.yml")
 
+      unless File.exist?(filename)
+        file = File.new(filename, 'w')
+        file.puts('---')
+        file.close
+      end
+
       if data
         file = File.open(filename, 'w')
         file.write(YAML.dump(data))
         file.close
       else
-        YAML.load(
+        ret = YAML.load(
           File.open(filename, 'r').read
         )
+        return ret.nil? ? {} : ret
       end
     end
 
@@ -318,7 +325,7 @@ module MusikBot
     attr_reader :start_timestamp
 
     def report_error(message, e = nil)
-      return raise if env == 'test'
+      return raise if env == 'test' || @opts[:dry]
 
       opts = {
         contentformat: 'text/x-wiki',

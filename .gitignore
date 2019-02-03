@@ -5,7 +5,8 @@ TODO
 env
 .bundle
 .ruby-version
-disk_cache
+disk_cache/*.yml
 application.yml
 vendor
 .idea
+
