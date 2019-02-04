@@ -14,7 +14,7 @@ UPPER_PAGE_ID = 54111773
 
 module NPPReport
   def self.run
-    @mb = MusikBot::Session.new(inspect, true)
+    @mb = MusikBot::Session.new(inspect)
     @disk_cache = @mb.local_storage || {}
 
     # This script can do two things:

@@ -10,7 +10,7 @@ module AbuseFilterIRC
   UNSUBSCRIBE_MSG = 'To unsubscribe, use !unsubscribe [filter ID] or !unsubscribe all'
 
   def self.run
-    $mb = MusikBot::Session.new(inspect, true, true)
+    $mb = MusikBot::Session.new(inspect)
 
     bot = Cinch::Bot.new do
       configure do |c|

@@ -11,11 +11,10 @@ require 'pry-byebug'
 
 module MusikBot
   class Session
-    def initialize(task, prodonly = false, no_login = false)
+    def initialize(task)
       @task = task
       @opts = {
-        prodonly: prodonly,
-        project: env == 'test' && !prodonly ? 'test.wikipedia' : 'en.wikipedia',
+        project: env == 'test' ? 'test.wikipedia' : 'en.wikipedia',
         edition: 1
       }
       OptionParser.new do |args|
@@ -28,6 +27,7 @@ module MusikBot
         args.on('-e', '--env ENVIRONMENT', 'production to use specified wiki, or test to use testwiki')
         args.on('-f', '--edition EDITION', '1 for MusikBot, 2 for MusikBot II, etc.') { |v| @opts[:edition] = v }
         args.on('-d', '--dry', 'pass to disable all editing and instead invoke debugger') { @opts[:dry] = true }
+        args.on('-da', '--disable-api', "Disable used of API-releated methods. Used for tasks that don't need the API.") { @opts[:no_api] = true }
       end.parse!
 
       unless @opts[:lang]
@@ -39,9 +39,9 @@ module MusikBot
       I18n.config.available_locales = [:en, :fr, :pt, :it]
       I18n.locale = @opts[:lang]
 
-      login unless no_login
+      login unless @opts[:no_api]
 
-      unless @task =~ /Console|SoundSearch/ || @opts[:prodonly] || env == 'test' || get("User:#{username}/#{@task}/Run") == 'true'
+      unless @task =~ /Console|SoundSearch/ || @opts[:dry] || env == 'test' || get("User:#{username}/#{@task}/Run") == 'true'
         report_error("#{@task} disabled")
         exit 1
       end
@@ -119,7 +119,7 @@ module MusikBot
     end
 
     # HTTParty getter
-    def http_get(base_uri, params)
+    def http_get(base_uri, params = {})
       @getter ||= HTTParty
       @getter.get(base_uri, params)
     end
@@ -227,6 +227,10 @@ module MusikBot
 
     # API-related
     def gateway
+      if @opts[:no_api]
+        raise 'API gateway disabled when using the --disable-api option'
+      end
+
       @gateway ||= MediaWiki::Gateway.new("https://#{@opts[:project]}.org/w/api.php",
         bot: bot?,
         retry_count: 5,

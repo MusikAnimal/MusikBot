@@ -2,7 +2,7 @@ $LOAD_PATH << '..'
 require 'musikbot'
 
 module MassPageMover
-  @mb = MusikBot::Session.new(inspect, true)
+  @mb = MusikBot::Session.new(inspect)
 
   def self.run
     counter = 0
