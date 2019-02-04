@@ -24,7 +24,6 @@ module TemplateProtector
       ns_name = namespace_map[ns_id]
 
       fetch_templates(ns_id, lowest_threshold).each do |row|
-        binding.pry
         title = "#{ns_name}:#{row['title']}"
 
         # Skip if excluded.
