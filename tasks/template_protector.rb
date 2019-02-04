@@ -24,11 +24,18 @@ module TemplateProtector
       ns_name = namespace_map[ns_id]
 
       fetch_templates(ns_id, lowest_threshold).each do |row|
+        row['title'] = row['title'].force_encoding('utf-8')
         title = "#{ns_name}:#{row['title']}"
 
         # Skip if excluded.
         if exclusions.include?(title)
           puts ">> #{title} excluded"
+          next
+        end
+
+        # Skip if matches regex exclusions.
+        if regex_excluded?(title)
+          puts ">> #{title} regex-excluded"
           next
         end
 
@@ -44,17 +51,14 @@ module TemplateProtector
           next
         end
 
-        puts "#{prot_level(row['count'])} ~ #{title} ~ #{row['count']}"
+        puts "PROTECT: #{prot_level(row['count'])} ~ #{title} ~ #{row['count']}"
+
         # Protect!
-        # @mb.gateway.protect(
-        #   title,
-        #   {
-        #     action: 'edit',
-        #     protections: prot_level(row['count'])
-        #   }, {
-        #     reason: @mb.config[:summary]
-        #   }
-        # )
+        @mb.gateway.protect(
+          title,
+          { edit: prot_level(row['count']) },
+          { reason: @mb.config[:summary] }
+        )
       end
     end
   rescue => e
@@ -94,10 +98,24 @@ module TemplateProtector
   def self.title_blacklisted?(title)
     # Needs to be done while logged out.
     ret = @mb.http_get(
-      "https://#{@mb.opts[:project]}.org/w/api.php?action=titleblacklist&tbtitle=#{title}&tbaction=edit&format=json"
+      "https://#{@mb.opts[:project]}.org/w/api.php?action=titleblacklist&tbtitle=#{URI.escape(title)}&tbaction=edit&format=json"
     )
 
     ret['titleblacklist']['result'] == 'blacklisted'
+  end
+
+  def self.regex_excluded?(title)
+    unless @title_regex
+      regexes = []
+      @mb.config[:regex_exclusions].keys.each do |regex|
+        regexes << Regexp.new(regex.to_s)
+      end
+      @title_regex = Regexp.union(regexes)
+    end
+
+    !!@title_regex.match(title)
+  rescue => e
+    @mb.report_error('Regex error', e)
   end
 
   def self.prot_level(count)
@@ -111,8 +129,7 @@ module TemplateProtector
 
     api_obj = @mb.gateway.custom_query(
       meta: 'siteinfo',
-      siprop: 'namespaces',
-      formatversion: 2
+      siprop: 'namespaces'
     )
 
     ns_map = {}
