@@ -54,11 +54,13 @@ module TemplateProtector
         puts "PROTECT: #{prot_level(row['count'])} ~ #{title} ~ #{row['count']}"
 
         # Protect!
-        @mb.gateway.protect(
-          title,
-          { edit: prot_level(row['count']) },
-          { reason: @mb.config[:summary] }
-        )
+        unless @mb.opts[:dry]
+          @mb.gateway.protect(
+            title,
+            { edit: prot_level(row['count']) },
+            { reason: @mb.config[:summary] }
+          )
+        end
       end
     end
   rescue => e
@@ -67,32 +69,32 @@ module TemplateProtector
 
   def self.fetch_templates(ns, threshold)
     sql = %{
-      SELECT DISTINCT(page_title) AS title, COUNT(*) AS count
+      SELECT page_title AS title, COUNT(*) AS count
       FROM page
       JOIN templatelinks ON page_title = tl_title
         AND page_namespace = tl_namespace
       LEFT JOIN page_restrictions ON pr_page = page_id
         AND pr_level IN ('autoconfirmed', 'templateeditor', 'extendedconfirmed', 'sysop')
         AND pr_type = 'edit'
-      WHERE tl_namespace = #{ns}
+      WHERE tl_namespace = ?
         AND pr_page IS NULL
       GROUP BY tl_title
-      HAVING COUNT(*) >= #{threshold}
-      ORDER BY COUNT(*) DESC
+      HAVING COUNT(*) >= ?
     }
-    @mb.repl.query(sql).to_a
+    @mb.repl_query(sql, ns, threshold).to_a
   end
 
   def self.recently_protected?(ns, title)
     sql = %{
       SELECT 1
       FROM logging_logindex
-      WHERE log_namespace = #{ns}
+      WHERE log_namespace = ?
       AND log_title = ?
       AND log_action = 'protect'
-      AND log_timestamp > DATE_SUB(NOW(), INTERVAL #{@mb.config[:ignore_offset]} DAY)
+      AND log_timestamp > DATE_SUB(NOW(), INTERVAL ? DAY)
+      LIMIT 1
     }
-    @mb.repl_query(sql, title).any?
+    @mb.repl_query(sql, ns, title, @mb.config[:ignore_offset]).any?
   end
 
   def self.title_blacklisted?(title)
