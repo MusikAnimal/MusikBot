@@ -52,7 +52,7 @@ module TemplateProtector
         #     action: 'edit',
         #     protections: prot_level(row['count'])
         #   }, {
-        #     reason: '[[Wikipedia:High-risk templates|Highly risk template or module]]'
+        #     reason: @mb.config[:summary]
         #   }
         # )
       end
