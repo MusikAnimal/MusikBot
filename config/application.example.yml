@@ -16,6 +16,7 @@ replica:
   port: 4711
   username: username
   password: password
+  reconnect: true
 copypatrol: # private database on enwiki.labsdb
   host: 127.0.0.1
   port: 4711

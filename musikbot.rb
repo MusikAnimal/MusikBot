@@ -138,8 +138,7 @@ module MusikBot
         database: nil,
         credentials: :replica,
         log: true,
-        replicas: true,
-        reconnect: true
+        replicas: true
       }.merge(opts)
       return @repl_client if @repl_client && !opts.delete(:reload)
       suffix = opts.delete(:replicas) ? '_p' : ''

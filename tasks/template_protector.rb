@@ -78,7 +78,7 @@ module TemplateProtector
         AND pr_type = 'edit'
       WHERE tl_namespace = ?
         AND pr_page IS NULL
-      GROUP BY tl_title
+      GROUP BY page_title
       HAVING COUNT(*) >= ?
     }
     @mb.repl_query(sql, ns, threshold).to_a
