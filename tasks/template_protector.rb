@@ -2,6 +2,13 @@ $LOAD_PATH << '..'
 require 'musikbot'
 
 module TemplateProtector
+  PROTECTION_WEIGHT = {
+    :sysop => 40,
+    :templateeditor => 30,
+    :extendedconfirmed => 20,
+    :autoconfirmed => 10
+  }
+
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
@@ -26,6 +33,7 @@ module TemplateProtector
       fetch_templates(ns_id, lowest_threshold).each do |row|
         row['title'] = row['title'].force_encoding('utf-8')
         title = "#{ns_name}:#{row['title']}"
+        edit_level = prot_level(row['count'])
 
         # Skip if excluded.
         if exclusions.include?(title)
@@ -39,27 +47,35 @@ module TemplateProtector
           next
         end
 
-        # Skip if title is blacklisted.
-        if title_blacklisted?(title)
-          puts ">> #{title} already blacklisted"
-          next
-        end
-
         # Skip if recently protected.
         if recently_protected?(ns_id, row['title'])
           puts ">> #{title} recently protected"
           next
         end
 
-        puts "PROTECT: #{prot_level(row['count'])} ~ #{title} ~ #{row['count']}"
+        # Skip if title is blacklisted.
+        if title_blacklisted?(title, edit_level)
+          puts ">> #{title} already blacklisted"
+          next
+        end
+
+        old_move_level = get_move_level(row['id'])
+
+        # Use the same as edit_level for move, unless it is higher than the edit_level.
+        move_level = PROTECTION_WEIGHT[old_move_level].to_i > PROTECTION_WEIGHT[edit_level] ? old_move_level : edit_level
+
+        puts "PROTECT: #{edit_level}/#{move_level} ~ #{title} ~ #{row['count']}"
 
         # Protect!
         unless @mb.opts[:dry]
-          @mb.gateway.protect(
-            title,
-            { edit: prot_level(row['count']) },
-            { reason: @mb.config[:summary] }
-          )
+          protections = [{
+              action: 'edit',
+              group: edit_level
+            }, {
+              action: 'move',
+              group: move_level
+            }]
+          @mb.gateway.protect(title, protections, { reason: @mb.config[:summary] })
         end
       end
     end
@@ -69,7 +85,7 @@ module TemplateProtector
 
   def self.fetch_templates(ns, threshold)
     sql = %{
-      SELECT page_title AS title, COUNT(*) AS count
+      SELECT page_title AS title, page_id AS id, COUNT(*) AS count
       FROM page
       JOIN templatelinks ON page_title = tl_title
         AND page_namespace = tl_namespace
@@ -97,13 +113,14 @@ module TemplateProtector
     @mb.repl_query(sql, ns, title, @mb.config[:ignore_offset]).any?
   end
 
-  def self.title_blacklisted?(title)
+  def self.title_blacklisted?(title, level)
     # Needs to be done while logged out.
     ret = @mb.http_get(
       "https://#{@mb.opts[:project]}.org/w/api.php?action=titleblacklist&tbtitle=#{URI.escape(title)}&tbaction=edit&format=json"
     )
 
-    ret['titleblacklist']['result'] == 'blacklisted'
+    # A page is considered blacklisted only if the noedit level matches the one we want to apply.
+    ret['titleblacklist']['result'] == 'blacklisted' && ret['titleblacklist']['line'] =~ /noedit.*?#{level}/
   end
 
   def self.regex_excluded?(title)
@@ -115,15 +132,26 @@ module TemplateProtector
       @title_regex = Regexp.union(regexes)
     end
 
-    !!@title_regex.match(title)
+    !!@title_regex.match(title.descore)
   rescue => e
     @mb.report_error('Regex error', e)
   end
 
   def self.prot_level(count)
     @thresholds.each do |level, threshold|
-      return level if count > threshold
+      return level if count >= threshold
     end
+  end
+
+  def self.get_move_level(page_id)
+    sql = %{
+      SELECT pr_level
+      FROM page_restrictions
+      WHERE pr_page = ?
+      AND pr_type = 'move'
+    }
+    ret = @mb.repl_query(sql, page_id).to_a
+    ret.any? ? ret[0]['pr_level'].to_sym : nil
   end
 
   def self.namespace_map
