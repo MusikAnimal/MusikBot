@@ -68,13 +68,15 @@ module TemplateProtector
 
         # Protect!
         unless @mb.opts[:dry]
-          protections = [{
-              action: 'edit',
-              group: edit_level
-            }, {
-              action: 'move',
-              group: move_level
-            }]
+          protections = [{action: 'edit', group: edit_level}]
+
+          if move_level != :autoconfirmed
+            protections << {
+                action: 'move',
+                group: move_level
+            }
+          end
+
           @mb.gateway.protect(title, protections, { reason: @mb.config[:summary] })
         end
       end
