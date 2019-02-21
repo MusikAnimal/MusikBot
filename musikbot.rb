@@ -189,6 +189,13 @@ module MusikBot
     def disk_cache(filename, time = 3600)
       filename = dir("disk_cache/#{filename}.yml")
 
+      unless File.exist?(filename)
+        file = File.new(filename, 'w')
+        file.puts('---')
+        file.close
+        time = 0 # Act as if the cache had expired.
+      end
+
       if File.mtime(filename) < Time.now.utc - time
         ret = yield
 
@@ -270,7 +277,8 @@ module MusikBot
           drvprop: 'content',
           titles: page,
           drvstart: api_date(date),
-          drvlimit: 1
+          drvlimit: 1,
+          drvslots: '*'
         }.merge(opts)
       else
         opts = {
@@ -278,7 +286,8 @@ module MusikBot
           rvprop: 'content',
           titles: page,
           rvstart: api_date(date),
-          rvlimit: 1
+          rvlimit: 1,
+          rvslots: '*'
         }.merge(opts)
       end
 
@@ -289,10 +298,10 @@ module MusikBot
       if full_response
         page_obj
       elsif deleted
-        rev = page_obj.elements['deletedrevisions/rev']
+        rev = page_obj.elements['deletedrevisions/rev/slots/slot']
         opts[:drvprop] == 'content' ? rev.text : rev
       else
-        rev = page_obj.elements['revisions/rev']
+        rev = page_obj.elements['revisions/rev/slots/slot']
         opts[:rvprop] == 'content' ? rev.text : rev
       end
     rescue MediaWiki::APIError => e
@@ -306,23 +315,25 @@ module MusikBot
       opts = {
         prop: 'info|revisions',
         rvprop: 'timestamp|content',
+        rvslots: '*',
         titles: page
       }.merge(opts)
 
-      page_obj = gateway.custom_query(opts).elements['pages'][0]
+      page_obj = gateway.custom_query(opts).elements['pages/page']
       unless page_obj.elements['revisions']
+        binding.pry
         report_error("Unable to fetch properties of [[#{page}]] - page does not exist!")
       end
 
       unless no_conflict
         @start_timestamp = Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ')
-        @base_timestamp = page_obj.elements['revisions'][0].attributes['timestamp']
+        @base_timestamp = page_obj.elements['revisions/rev']['timestamp']
       end
 
       if full_response
         page_obj
       else
-        page_obj.elements['revisions/rev'].text
+        page_obj.elements['revisions/rev/slots/slot'].text
       end
     end
     attr_reader :base_timestamp

@@ -68,7 +68,7 @@ module NPPChart
   end
 
   def self.historical_data(start_date, type = :daily)
-    client = @mb.repl_client(credentials: :toolsdb, log: false)
+    client = @mb.repl_client(credentials: :actrial, log: false)
 
     group_sql = ''
 
@@ -85,11 +85,12 @@ module NPPChart
     sql = %{
       SELECT #{timestamp_sql} AS `timestamp`, npp_num_articles AS `count`
       FROM npp_queue_size
-      WHERE npp_timestamp > '#{start_date}'
+      WHERE npp_timestamp > ?
       #{group_sql}
     }
 
-    client.query(sql).to_a
+    statement = client.prepare(sql)
+    statement.execute(start_date).to_a
   end
 end
 

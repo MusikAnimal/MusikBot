@@ -9,10 +9,10 @@ GIT
 
 GIT
   remote: git://github.com/MusikAnimal/mediawiki-gateway.git
-  revision: e809559f5b796b73f534e51235b5e4c8c06f6ab0
+  revision: 6bc2bc54be694e0c4fa4caef2d3bd5b3492b4946
   branch: master
   specs:
-    mediawiki-gateway (1.2.5)
+    mediawiki-gateway (1.2.6)
       rest-client (~> 2.0)
 
 GEM
@@ -57,7 +57,7 @@ GEM
     multi_xml (0.6.0)
     mysql2 (0.5.2)
     netrc (0.11.0)
-    nokogiri (1.8.1)
+    nokogiri (1.8.5)
       mini_portile2 (~> 2.3.0)
     pry (0.12.2)
       coderay (~> 1.1.0)
@@ -89,7 +89,7 @@ DEPENDENCIES
   i18n (= 0.7.0)
   mediawiki-gateway!
   mysql2 (= 0.5.2)
-  nokogiri (= 1.8.1)
+  nokogiri (= 1.8.5)
   pry-byebug
   redis (= 3.2.2)
   unicode (~> 0.4.4)

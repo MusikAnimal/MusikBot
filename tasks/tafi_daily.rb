@@ -6,7 +6,7 @@ module TAFIDaily
     @mb = MusikBot::Session.new(inspect)
 
     last_run = @mb.parse_date(
-      @mb.local_storage['last_run']
+      @mb.local_storage['last_run'] || (@mb.now - 1).to_s
     )
     rotation_expired = @mb.now > last_run + Rational(23, 24) || @mb.env == :test
 

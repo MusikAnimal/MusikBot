@@ -654,7 +654,7 @@ module PermClerk
     if @permission == 'AutoWikiBrowser'
       awb_report_page = 'User:MusikBot_II/AWBListMan/Report/User'
       auto_revoke_report = @mb.get_page_props(awb_report_page, full_response: true, no_conflict: true)
-      if auto_revoke_report.elements['revisions/rev'].text =~ /\{\{no ping\|#{Regexp.escape(@username)}\}\}/
+      if auto_revoke_report.elements['revisions/rev/slots/slot'].text =~ /\{\{no ping\|#{Regexp.escape(@username)}\}\}/
         revision_id = auto_revoke_report.attributes['lastrevid']
         revoke_type = :awb_autorevoked
         revocations = ["#{@mb.gateway.wiki_url.chomp('api.php')}index.php?title=#{awb_report_page}&oldid=#{revision_id}"]
@@ -1116,9 +1116,9 @@ module PermClerk
 
   def self.page_props(page)
     page_obj = @mb.get_page_props(page, full_response: true)
-    @revision_id = page_obj.attributes['lastrevid']
-    @last_edit = @mb.parse_date(page_obj.elements['revisions'][0].attributes['timestamp'])
-    page_obj.elements['revisions/rev'].text
+    @revision_id = page_obj['lastrevid']
+    @last_edit = @mb.parse_date(page_obj.elements['revisions/rev']['timestamp'])
+    page_obj.elements['revisions/rev/slots/slot'].text
   rescue
     record_error(
       group: 'fatal',

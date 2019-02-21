@@ -6,7 +6,10 @@ module StaleFilters
     @mb = MusikBot::Session.new(inspect)
 
     run_status = @mb.local_storage
-    local_status = run_status[@mb.database]
+    local_status = run_status[@mb.database] || {
+      hash: '',
+      time: (@mb.now - 1).to_s
+    }
 
     @report_page = "#{t('User')}:MusikBot/StaleFilters/Report"
     @total_page = "#{t('User')}:MusikBot/StaleFilters/Total"
@@ -95,12 +98,20 @@ module StaleFilters
 
     db = @mb.database.present? ? "#{@mb.database}_p" : "#{@mb.lang}wiki_p"
 
-    query = 'SELECT af_id, af_user_text, afl.afl_timestamp, af_timestamp, af_public_comments, af_hidden, af_actions ' \
-      "FROM #{db}.abuse_filter af INNER JOIN (SELECT afl_id, afl_filter, MAX(afl_timestamp) afl_timestamp " \
-      "FROM #{db}.abuse_filter_log GROUP BY afl_filter) afl ON afl.afl_filter = af_id " \
-      "WHERE af_enabled = 1 AND af_deleted = 0 AND afl.afl_timestamp < #{offset_date};"
+    sql = %{
+      SELECT af_id, af_user_text, afl.afl_timestamp, af_timestamp, af_public_comments, af_hidden, af_actions
+      FROM #{db}.abuse_filter af
+      INNER JOIN (
+        SELECT afl_id, afl_filter, MAX(afl_timestamp) afl_timestamp
+        FROM #{db}.abuse_filter_log
+        GROUP BY afl_filter
+      ) afl ON afl.afl_filter = af_id
+      WHERE af_enabled = 1
+      AND af_deleted = 0
+      AND afl.afl_timestamp < ?
+    }
 
-    @stale_filters = @mb.repl_client.query(query).to_a
+    @stale_filters = @mb.repl_query(sql, offset_date).to_a
   end
 
   def self.offset

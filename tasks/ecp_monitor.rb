@@ -11,7 +11,7 @@ module ECPMonitor
     @mb = MusikBot::Session.new(inspect)
 
     last_run = @mb.parse_date(
-      @mb.local_storage['last_run']
+      @mb.local_storage['last_run'] || (@mb.now - 1)
     )
 
     @mb.edit(TOTAL_PAGE,
@@ -38,25 +38,43 @@ module ECPMonitor
   end
 
   def self.ecp_changes
-    @mb.repl.query('SELECT log_namespace AS namespace, log_title AS title, log_timestamp AS timestamp, pr_expiry AS expiry, ' \
-      'pr_type AS type, log_comment AS summary, log_user_text AS admin FROM logging ' \
-      'INNER JOIN page_restrictions ON log_page = pr_page ' \
-      "WHERE (log_action = 'protect' OR log_action = 'modify') " \
-      "AND pr_level = 'extendedconfirmed' AND log_timestamp > '#{offset_date}' " \
-      'ORDER BY log_timestamp DESC').to_a
+    sql = %{
+      SELECT log_namespace AS namespace, log_title AS title, log_timestamp AS timestamp, pr_expiry AS expiry,
+        pr_type AS type, log_comment AS summary, log_user_text AS admin
+      FROM logging
+      INNER JOIN page_restrictions ON log_page = pr_page
+      WHERE (
+        log_action = 'protect'
+        OR log_action = 'modify'
+      )
+      AND pr_level = 'extendedconfirmed'
+      AND log_timestamp > ?
+      ORDER BY log_timestamp DESC
+    }
+
+    @mb.repl_query(sql, offset_date).to_a
   end
 
   def self.ecp_titles
-    @mb.repl.query('SELECT pt_namespace AS namespace, pt_title AS title, pt_timestamp AS timestamp, pt_expiry AS expiry, ' \
-      'pt_reason AS summary, user_name AS admin FROM protected_titles ' \
-      "INNER JOIN user ON pt_user = user_id WHERE pt_create_perm = 'extendedconfirmed' " \
-      "AND pt_timestamp > '#{offset_date}'").to_a
+    sql = %{
+      SELECT pt_namespace AS namespace, pt_title AS title, pt_timestamp AS timestamp, pt_expiry AS expiry,
+        pt_reason AS summary, user_name AS admin
+      FROM protected_titles
+      INNER JOIN user ON pt_user = user_id
+      WHERE pt_create_perm = 'extendedconfirmed'
+      AND pt_timestamp > ?
+    }
+
+    @mb.repl_query(sql, offset_date).to_a
   end
 
   def self.ecp_total
-    @ecp_total ||= @mb.repl.query(
-      "SELECT COUNT(*) AS count FROM page_restrictions WHERE pr_type = 'edit' AND pr_level = 'extendedconfirmed'"
-    ).to_a[0]['count']
+    @ecp_total ||= @mb.repl.query(%{
+      SELECT COUNT(*) AS count
+      FROM page_restrictions
+      WHERE pr_type = 'edit'
+      AND pr_level = 'extendedconfirmed'
+    }).to_a[0]['count']
   end
 
   def self.group_changes(changes)

@@ -107,19 +107,17 @@ module StaleDrafts
 
   # Repl-related
   def self.fetch_drafts(redirects = false)
-    query = 'SELECT DISTINCT page_title, page_len, rev_timestamp FROM enwiki_p.page ' \
-      "JOIN enwiki_p.revision WHERE page_namespace = 118 AND page_is_redirect = #{redirects ? 1 : 0} " \
-      "AND rev_id = page_latest AND rev_timestamp < '#{end_date}';"
+    sql = %{
+      SELECT DISTINCT page_title, page_len, rev_timestamp
+      FROM enwiki_p.page
+      JOIN enwiki_p.revision
+      WHERE page_namespace = 118
+      AND page_is_redirect = #{redirects ? 1 : 0}
+      AND rev_id = page_latest
+      AND rev_timestamp < ?
+    }
 
-    @mb.repl_client.query(query).to_a
-  end
-
-  def self.fetch_drafts(redirects = false)
-    query = 'SELECT DISTINCT page_title, page_len, rev_timestamp FROM enwiki_p.page ' \
-      "JOIN enwiki_p.revision WHERE page_namespace = 118 AND page_is_redirect = #{redirects ? 1 : 0} " \
-      "AND rev_id = page_latest AND rev_timestamp < '#{end_date}';"
-
-    @mb.repl_client.query(query).to_a
+    @mb.repl_query(sql, end_date).to_a
   end
 
   # Utility

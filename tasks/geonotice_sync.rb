@@ -12,7 +12,7 @@ module GeonoticeSync
     @report_page = "#{t('User')}:MusikBot II/GeonoticeSync/Report"
     @errors = []
 
-    synced_at = @mb.parse_date(@mb.local_storage['synced'])
+    synced_at = @mb.parse_date(@mb.local_storage['synced'] || DateTime.new(0))
 
     @current_edit = @mb.gateway.custom_query(
       titles: @config_page,

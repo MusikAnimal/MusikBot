@@ -130,8 +130,8 @@ module TAFIWeekly
       rvsection: 0,
       full_response: true
     )
-    @old_tafi_new_rev = page_obj.elements['revisions'][0]
-    old_content = @old_tafi_new_rev.text
+    @old_tafi_new_rev = page_obj.elements['revisions/rev']
+    old_content = @old_tafi_new_rev.elements['slots/slot'].text
     new_content = old_content.gsub(/\{\{TAFI\}\}\n*/i, '')
 
     if old_content.length != new_content.length

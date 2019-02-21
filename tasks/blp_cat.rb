@@ -63,7 +63,11 @@ module BLPCat
   end
 
   def self.pages
-    @pages ||= @mb.repl.query(%{
+    return @pages if @pages
+
+    param_str = Array.new(categories.length).fill('?').join(', ')
+
+    sql = %{
       SELECT DISTINCT(page_title)
       FROM page
       JOIN categorylinks
@@ -73,10 +77,13 @@ module BLPCat
         SELECT cl_from
         FROM categorylinks
         WHERE cl_to = 'Living_people'
-      ) AND (
-        #{categories.map{ |cat| "cl_to = '#{cat.score}'"}.join(' OR ')}
       )
-    }).to_a.collect { |a| a['page_title'] }
+      AND cl_to IN (#{param_str})
+    }
+
+    @pages = @mb.repl_query(sql, *categories.map{ |cat| cat.score })
+      .to_a
+      .collect { |a| a['page_title'] }
   end
 
   def self.categories
