@@ -79,7 +79,8 @@ module CopyPatrol
       # Talk: namespace is always normalized to whatever it is for the given wiki
       @mb.get("Talk:#{page_title}",
         rvsection: 0,
-        rvparse: true
+        rvparse: true,
+        rvslots: '*'
       )
     )
 

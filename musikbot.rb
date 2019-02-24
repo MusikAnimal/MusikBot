@@ -321,7 +321,6 @@ module MusikBot
 
       page_obj = gateway.custom_query(opts).elements['pages/page']
       unless page_obj.elements['revisions']
-        binding.pry
         report_error("Unable to fetch properties of [[#{page}]] - page does not exist!")
       end
 
