@@ -27,7 +27,7 @@ module MusikBot
         args.on('-e', '--env ENVIRONMENT', 'production to use specified wiki, or test to use testwiki')
         args.on('-f', '--edition EDITION', '1 for MusikBot, 2 for MusikBot II, etc.') { |v| @opts[:edition] = v }
         args.on('-d', '--dry', 'pass to disable all editing and instead invoke debugger') { @opts[:dry] = true }
-        args.on('-da', '--disable-api', "Disable used of API-releated methods. Used for tasks that don't need the API.") { @opts[:no_api] = true }
+        args.on('-na', '--no-api', "Disable used of API-releated methods. Used for tasks that don't need the API.") { @opts[:no_api] = true }
       end.parse!
 
       unless @opts[:lang]
