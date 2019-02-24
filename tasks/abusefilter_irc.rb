@@ -11,7 +11,7 @@ require 'em-eventsource'
 #   project VARCHAR(30) NOT NULL,
 #   user VARCHAR(255) NOT NULL,
 #   filter_id INT NOT NULL
-# );
+# ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC;
 # CREATE UNIQUE INDEX proj_user_sub ON subscriptions (project, user, filter_id);
 ###
 
@@ -20,16 +20,15 @@ module AbuseFilterIRC
 
   CHANNELS = {
     # 'enwiki' => '#wikipedia-en-abuse-log-all',
-    # 'enwiki' => '##MusikBot',
     'commons.wikimedia.org' => '#wikimedia-commons-abuse-log',
-    'en.wikipedia.org' => '##MusikBot'
+    # 'en.wikipedia.org' => '##MusikBot'
   }
 
-  UNSUBSCRIBE_MSG = 'To unsubscribe, use !unsubscribe [filter ID] or !unsubscribe all'
+  UNSUBSCRIBE_MSG = 'To unsubscribe, use `!unsubscribe [lang.project.org] [filter ID]` or `!unsubscribe [lang.project.org] all`'
 
   def self.run
-    $mb = MusikBot::Session.new(inspect, true, true)
-    $client = $mb.repl_client(credentials: :toolsdb, log: false)
+    $mb = MusikBot::Session.new(inspect)
+    $client = $mb.repl_client(credentials: :abusefilter_irc, log: false)
     $subscriptions = nil
 
     bot = Cinch::Bot.new do
@@ -63,8 +62,9 @@ module AbuseFilterIRC
 
         def validate_project(user, project)
           if !CHANNELS.keys.include?(project)
-            user.send "#{project} is an invalid project or is currently unsupported."
+            user.send "'#{project}' is an invalid project or is currently unsupported."
             user.send "Supported projects include: " + CHANNELS.keys.join(', ')
+            user.send "Contact musikanimal about requesting new projects."
             return false
           end
 
@@ -73,20 +73,28 @@ module AbuseFilterIRC
       end
 
       on :connect do
+        load_subscriptions
+
         EM.run do
           source = EventMachine::EventSource.new('https://stream.wikimedia.org/v2/stream/recentchange')
 
           source.on "message" do |message|
             data = JSON.parse(message)
             if CHANNELS.keys.include?(data['server_name']) && data['log_action'] == 'hit'
-              msg = "User:#{data['user'].tr(' ', '_')} tripped *filter-#{data['log_params']['filter']}* on [[#{data['title']}]]: " \
+              msg = "User:#{data['user'].score} tripped *filter-#{data['log_params']['filter']}* on [[#{data['title']}]]: " \
                 "https://#{data['server_name']}/wiki/Special:AbuseLog/#{data['log_params']['log']}"
 
               Channel(CHANNELS[data['server_name']]).send(msg)
 
-              $mb.local_storage['subscriptions'].each do |user, filter_ids|
+              $subscriptions[data['server_name']] ||= {}
+              $subscriptions[data['server_name']].each do |user, filter_ids|
                 if filter_ids.include?(data['log_params']['filter'].to_i)
-                  User(user).send msg
+                  if user =~ /^#.*/
+                    Channel(user).join
+                    Channel(user).send(msg)
+                  else
+                    User(user).send(msg)
+                  end
                 end
               end
             end
@@ -108,42 +116,106 @@ module AbuseFilterIRC
         m.reply 'Pong.'
       end
 
-      on :message, /!subscribe (\w+\.\w+\.org) (\d+)/ do |m, project, filter_id|
+      # Channel subscribe
+      on :message, /^!subscribe (\w+\.\w+\.org) (\d+|all) #([#\w\-]+)$/ do |m, project, filter_id, channel|
         return unless authed(m.user)
         return unless validate_project(m.user, project)
 
-        statement = $client.prepare('INSERT INTO subscriptions VALUES(NULL, ?, ?, ?)')
+        channel = '#' + channel
+        Channel(channel).join
+
+        m.user.send "Please wait..."
+
+        # FIXME: Huge hack... need to somehow know when the bot actually joined.
+        sleep 2
+
+        unless Channel(channel).opped?(m.user)
+          Channel(channel).part
+          return m.user.send "You must be opped in #{channel} to subscribe filters to it."
+        end
+
+        statement = $client.prepare('INSERT IGNORE INTO subscriptions VALUES(NULL, ?, ?, ?)')
+        statement.execute(project, channel, filter_id.to_i)
+
+        load_subscriptions
+
+        m.user.send "#{channel} has been subscribed to filter #{filter_id} on #{project}"
+
+        Channel(channel).send("This channel has been subscribed to filter #{filter_id} on #{project}")
+        Channel(channel).send("To unsubscribe, ops can run `!unsubscribe [lang.project.org] [filter ID] [channel name]` or `!unsubscribe [lang.project.org] [channel name] all`")
+      end
+
+      # User subscribe
+      on :message, /^!subscribe (\w+\.\w+\.org) (\d+)$/ do |m, project, filter_id|
+        return unless authed(m.user)
+        return unless validate_project(m.user, project)
+
+        statement = $client.prepare('INSERT IGNORE INTO subscriptions VALUES(NULL, ?, ?, ?)')
         statement.execute(project, m.user.nick, filter_id.to_i)
 
         load_subscriptions
 
-        m.user.send "You have subscribed to filter #{filter_id}"
+        m.user.send "You have subscribed to filter #{filter_id} on #{project}"
         m.user.send UNSUBSCRIBE_MSG
       end
 
-      on :message, /!unsubscribe (\w+\.\w+\.org) (\d+|all)/ do |m, project, filter_id|
+      # Channel unsubscribe
+      on :message, /^!unsubscribe (\w+\.\w+\.org) (\d+|all) #([#\w\-]+)$/ do |m, project, filter_id, channel|
         return unless authed(m.user)
         return unless validate_project(m.user, project)
 
-        statement = $client.prepare('DELETE FROM subscriptions WHERE project = ? AND user = ? AND filter_id = ?')
-        statement.execute(project, m.user.nick, filter_id.to_i)
+        channel = '#' + channel
+        Channel(channel).join
+
+        m.user.send "Please wait..."
+
+        # FIXME: Huge hack... need to somehow know when the bot actually joined.
+        sleep 2
+
+        unless Channel(channel).opped?(m.user)
+          return m.user.send "You must be opped in #{channel} to manage subscriptions."
+        end
+
+        debug "got here"
+
+        if 'all' == filter_id
+          statement = $client.prepare('DELETE FROM subscriptions WHERE project = ? AND user = ?')
+          statement.execute(project, channel)
+          m.user.send "#{channel} has unsubscribed to all filters on #{project}"
+        else
+          statement = $client.prepare('DELETE FROM subscriptions WHERE project = ? AND user = ? AND filter_id = ?')
+          statement.execute(project, channel, filter_id.to_i)
+          m.user.send "#{channel} has unsubscribed to filter #{filter_id} on #{project}"
+        end
 
         load_subscriptions
 
-        if 'all' == filter_id
-          storage['subscriptions'][m.user.nick] = []
-          m.user.send "You have unsubscribed to all filters"
-        else
-          storage['subscriptions'][m.user.nick].delete(filter_id.to_i)
-          m.user.send "You have unsubscribed to filter #{filter_id}"
-        end
-        $mb.local_storage(storage)
+        Channel(channel).send("This channel has been unsubscribed to filter #{filter_id} on #{project}")
       end
 
-      on :message, /!subscriptions (\w+\.\w+\.org)/ do |m, project|
+      # User unsubscribe
+      on :message, /^!unsubscribe (\w+\.\w+\.org) (\d+|all)$/ do |m, project, filter_id|
+        return unless authed(m.user)
+        return unless validate_project(m.user, project)
+
+        if 'all' == filter_id
+          statement = $client.prepare('DELETE FROM subscriptions WHERE project = ? AND user = ?')
+          statement.execute(project, m.user.nick)
+          m.user.send "You have unsubscribed to all filters on #{project}"
+        else
+          statement = $client.prepare('DELETE FROM subscriptions WHERE project = ? AND user = ? AND filter_id = ?')
+          statement.execute(project, m.user.nick, filter_id.to_i)
+          m.user.send "You have unsubscribed to filter #{filter_id}"
+        end
+
+        load_subscriptions
+      end
+
+      on :message, /^!subscriptions( \w+\.\w+\.org)?/ do |m, project|
         return unless authed(m.user)
 
         if project.present?
+          project = project.strip
           return unless validate_project(m.user, project)
 
           statement = $client.prepare('SELECT filter_id FROM subscriptions WHERE project = ? AND user = ?')
@@ -152,8 +224,8 @@ module AbuseFilterIRC
           statement = $client.prepare('SELECT project, filter_id FROM subscriptions WHERE user = ?')
 
           data = {}
-          statement.execute(project, m.user.nick).to_a.each do |row|
-            data[row['project']] ||= {}
+          statement.execute(m.user.nick).to_a.each do |row|
+            data[row['project']] ||= []
             data[row['project']] << row['filter_id']
           end
 
