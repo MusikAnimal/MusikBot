@@ -326,7 +326,7 @@ module MusikBot
 
       unless no_conflict
         @start_timestamp = Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ')
-        @base_timestamp = page_obj.elements['revisions/rev']['timestamp']
+        @base_timestamp = page_obj.elements['revisions/rev'].attributes['timestamp']
       end
 
       if full_response
@@ -352,6 +352,7 @@ module MusikBot
         STDERR.puts "Error during processing: #{$ERROR_INFO}"
         STDERR.puts "Backtrace:\n\t#{e.backtrace.join("\n\t")}"
         message += " &mdash; in <code>#{e.backtrace_locations.first.label}</code>: ''#{e.message}''"
+        opts[:summary] += ": #{e.message}"
       end
 
       content = get(page) || ''
