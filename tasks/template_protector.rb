@@ -167,7 +167,7 @@ module TemplateProtector
     ns_map = {}
 
     api_obj.elements['namespaces'].each do |element|
-      ns_map[element['id'].to_i] = element[0]
+      ns_map[element.attributes['id'].to_i] = element[0]
     end
 
     @namespace_map = ns_map
