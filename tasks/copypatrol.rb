@@ -4,7 +4,7 @@ require 'nokogiri'
 require 'uri'
 
 module CopyPatrol
-  PAGE_ASSESSMENTS_PROJECTS = ['en.wikipedia']
+  PAGE_ASSESSMENTS_PROJECTS = ['en.wikipedia', 'fr.wikipedia']
 
   def self.run
     @mb = MusikBot::Session.new(inspect)
@@ -74,26 +74,7 @@ module CopyPatrol
       return assessments.collect { |pa| pa.attributes['project'] }
     end
 
-    # mw:API:Revisions, and convert to Nokogiri markup
-    talk_markup = Nokogiri::HTML(
-      # Talk: namespace is always normalized to whatever it is for the given wiki
-      @mb.get("Talk:#{page_title}",
-        rvsection: 0,
-        rvparse: true,
-        rvslots: '*'
-      )
-    )
-
-    # Parses the talk page of the given article to find WikiProjects.
-    # Uses XML query selectors to identify the WikiProject links, removing any sub-wikiprojects
-    #   and the Wikipedia: prefix
-    case @mb.opts[:project]
-      when 'fr.wikipedia'
-        talk_markup.css('td b a')
-          .collect { |link| URI.decode(link.attributes['href'].value.sub('/wiki/', '')) }
-          .select { |link| link =~ /^Projet:/ && !link.include?('/') && !link.include?('#') }
-          .map { |link| link.sub(/^Projet:/, '') }
-    end
+    []
   end
 
   def self.query(sql, *values)
