@@ -41,7 +41,7 @@ module MusikBot
 
       login unless @opts[:no_api]
 
-      unless @task =~ /Console|SoundSearch/ || @opts[:dry] || env == 'test' || get("User:#{username}/#{@task}/Run") == 'true'
+      unless @task =~ /Console|SoundSearch/ || @opts[:dry] || opts[:no_api] || env == 'test' || get("User:#{username}/#{@task}/Run") == 'true'
         report_error("#{@task} disabled")
         exit 1
       end
@@ -235,7 +235,7 @@ module MusikBot
     # API-related
     def gateway
       if @opts[:no_api]
-        raise 'API gateway disabled when using the --disable-api option'
+        raise 'API gateway disabled when using the --no-api option'
       end
 
       @gateway ||= MediaWiki::Gateway.new("https://#{@opts[:project]}.org/w/api.php",
