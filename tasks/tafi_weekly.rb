@@ -188,10 +188,14 @@ module TAFIWeekly
   end
 
   def self.notify_wikiprojects
-    talk_text = @mb.get("Talk:#{new_tafi}",
-      rvsection: 0,
-      rvparse: true
-    )
+    talk_text = @mb.gateway.send_request(
+      action: 'parse',
+      page: "Talk:#{new_tafi}",
+      wrapoutputclass: 0,
+      disablelimitreport: 1,
+      section: 0
+    ).elements['parse/text'].text
+
     wikiprojects = Nokogiri::HTML(talk_text).css('.mbox-text b a').collect(&:content).select{ |text| text =~ /^WikiProject/ }.uniq
     content = '{{subst:TAFI project notice|no_heading=yes}}'
     wikiprojects.each do |wikiproject|
