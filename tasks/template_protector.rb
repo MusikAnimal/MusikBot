@@ -108,7 +108,7 @@ module TemplateProtector
       FROM logging_logindex
       WHERE log_namespace = ?
       AND log_title = ?
-      AND log_action = 'protect'
+      AND log_action IN ('protect', 'unprotect')
       AND log_timestamp > DATE_SUB(NOW(), INTERVAL ? DAY)
       LIMIT 1
     }
