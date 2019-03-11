@@ -39,14 +39,12 @@ module ECPMonitor
 
   def self.ecp_changes
     sql = %{
-      SELECT log_namespace AS namespace, log_title AS title, log_timestamp AS timestamp, pr_expiry AS expiry,
-        pr_type AS type, log_comment AS summary, log_user_text AS admin
-      FROM logging
+      SELECT log_namespace AS namespace, log_title AS title, log_timestamp AS timestamp,
+        pr_expiry AS expiry, pr_type AS type, comment_text AS summary, log_user_text AS admin
+      FROM logging_logindex
+      LEFT OUTER JOIN comment ON (log_comment_id = comment_id)
       INNER JOIN page_restrictions ON log_page = pr_page
-      WHERE (
-        log_action = 'protect'
-        OR log_action = 'modify'
-      )
+      WHERE log_action IN ('protect', 'modify')
       AND pr_level = 'extendedconfirmed'
       AND log_timestamp > ?
       ORDER BY log_timestamp DESC
@@ -57,9 +55,10 @@ module ECPMonitor
 
   def self.ecp_titles
     sql = %{
-      SELECT pt_namespace AS namespace, pt_title AS title, pt_timestamp AS timestamp, pt_expiry AS expiry,
-        pt_reason AS summary, user_name AS admin
+      SELECT pt_namespace AS namespace, pt_title AS title, pt_timestamp AS timestamp,
+        pt_expiry AS expiry, comment_text AS summary, user_name AS admin
       FROM protected_titles
+      LEFT OUTER JOIN comment ON (pt_reason_id = comment_id)
       INNER JOIN user ON pt_user = user_id
       WHERE pt_create_perm = 'extendedconfirmed'
       AND pt_timestamp > ?
