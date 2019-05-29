@@ -40,8 +40,9 @@ module ECPMonitor
   def self.ecp_changes
     sql = %{
       SELECT log_namespace AS namespace, log_title AS title, log_timestamp AS timestamp,
-        pr_expiry AS expiry, pr_type AS type, comment_text AS summary, log_user_text AS admin
+        pr_expiry AS expiry, pr_type AS type, comment_text AS summary, actor_name AS admin
       FROM logging_logindex
+      JOIN actor ON actor_id = log_actor
       LEFT OUTER JOIN comment ON (log_comment_id = comment_id)
       INNER JOIN page_restrictions ON log_page = pr_page
       WHERE log_action IN ('protect', 'modify')
