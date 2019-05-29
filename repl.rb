@@ -12,15 +12,15 @@ module Repl
     end
 
     def count_articles_created(username)
-      count("SELECT count(*) FROM #{@db}.page JOIN #{@db}.revision_userindex ON page_id = rev_page " \
-        "WHERE rev_user_text = \"#{escape(username)}\" AND rev_timestamp > 1 AND rev_parent_id = 0 " \
-        'AND page_namespace = 0 AND page_is_redirect = 0;')
+      @getter.get(
+        "#{@base_uri}/pages_count/#{@db}"
+      )['counts']['count']
     end
 
     def count_namespace_edits(username, namespace = 0)
-      namespace_str = namespace.is_a?(Array) ? "IN (#{namespace.join(',')})" : "= #{namespace}"
-      count("SELECT count(*) FROM #{@db}.page JOIN #{@db}.revision_userindex ON page_id = rev_page " \
-        "WHERE rev_user_text = \"#{escape(username)}\" AND page_namespace #{namespace_str};")
+      @getter.get(
+        "#{@base_uri}/namespace_totals/#{@db}/#{username}"
+      )['namespace_totals'][namespace]
     end
 
     def count_nonautomated_edits(username)
@@ -37,19 +37,6 @@ module Repl
 
     def count_tool_edits(username, tool)
       countAutomatedEdits(username, false, tool)
-    end
-
-    def get_articles_created(username)
-      sql = "SELECT page_title, rev_timestamp AS timestamp FROM #{@db}.page JOIN #{@db}.revision_userindex ON page_id = rev_page " \
-        "WHERE rev_user_text = \"#{escape(username)}\" AND rev_timestamp > 1 AND rev_parent_id = 0 " \
-        'AND page_namespace = 0 AND page_is_redirect = 0;'
-      res = query(sql)
-      articles = []
-      res.each do |result|
-        result['timestamp'] = DateTime.parse(result['timestamp'])
-        articles << result
-      end
-      articles
     end
 
     def query(sql)
