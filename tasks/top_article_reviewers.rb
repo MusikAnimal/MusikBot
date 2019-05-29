@@ -81,23 +81,24 @@ module TopArticleReviewers
     end_time = @mb.now.strftime('%Y%m%d%H%M%S')
 
     sql = %{
-      SELECT logtemp.log_user_text AS `reviewer`,
+      SELECT actor_name AS `reviewer`,
       COUNT(DISTINCT(logtemp.log_page)) AS `reviews`
       FROM (
-        SELECT log_user_text, log_page
+        SELECT log_actor, log_page
         FROM logging_userindex
         WHERE log_timestamp BETWEEN #{start_time} AND #{end_time}
         AND log_type = 'patrol'
         AND log_action = 'patrol'
         AND log_namespace = 0
         UNION
-        SELECT log_user_text, log_page
+        SELECT log_actor, log_page
         FROM logging_userindex
         WHERE log_timestamp BETWEEN #{start_time} AND #{end_time}
         AND log_type = 'pagetriage-curation'
         AND log_action = 'reviewed'
         AND log_namespace = 0
       ) logtemp
+      JOIN actor ON actor_id = log_actor
       GROUP BY reviewer
       ORDER BY reviews DESC
       LIMIT 100;
