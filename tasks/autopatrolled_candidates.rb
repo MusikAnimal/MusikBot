@@ -21,19 +21,24 @@ module AutopatrolledCandidates
 
     page_creators.each_with_index do |user, i|
       username = user['user_name']
+      actor_id = user['actor_id']
 
       # not sure how this happens
       next if username.nil?
 
-      articles = articles_created(username)
+      articles = articles_created(actor_id)
+
+      # Make sure there are some articles created in the past month. Querying recent changes (30 days of data)
+      # alone isn't enough because the page could have been moved from the mainspace.
+      recent_article_count = articles.count { |a| @mb.parse_date(a['rev_timestamp']) > @mb.now - 365 }
 
       # Skip if they don't meet article count prerequisite or recently had a PERM request declined
-      next if articles.length < MIN_ARTICLE_COUNT || perm_request_declined?(username)
+      next if recent_article_count == 0 || articles.length < MIN_ARTICLE_COUNT || perm_request_declined?(username)
 
       user_data = {
         created: articles.length,
         edits: user['user_editcount'],
-        deleted: deleted_counts(username),
+        deleted: deleted_counts(actor_id),
         blocks: block_count(username),
         tagged: maintenance_count(articles),
         perm_revoked: autopatrolled_revoked?(username),
@@ -186,17 +191,17 @@ module AutopatrolledCandidates
   #   PROD: total number of articles deleted under [[WP:PROD]] or [[WP:BLPPROD]]
   #   AfD: total number of articles deleted under [[WP:AfD]]
   # }
-  def self.deleted_counts(username)
+  def self.deleted_counts(actor_id)
     sql = %{
       SELECT comment_text
       FROM logging_logindex
       LEFT OUTER JOIN comment ON log_comment_id = comment_id
       LEFT JOIN archive_userindex ON ar_page_id = log_page
-      WHERE log_type = 'delete'
-      AND ar_user_text = ?
-      AND ar_namespace = 0
-      AND ar_parent_id = 0
-      AND ar_timestamp > #{@mb.db_date(@mb.now - 365)}
+        WHERE log_type = 'delete'
+        AND ar_actor = ?
+        AND ar_namespace = 0
+        AND ar_parent_id = 0
+        AND ar_timestamp > #{@mb.db_date(@mb.now - 365)}
     }
 
     counts = {
@@ -206,7 +211,7 @@ module AutopatrolledCandidates
       AfD: 0
     }
 
-    @mb.repl_query(sql, username.score).to_a.each do |data|
+    @mb.repl_query(sql, actor_id).to_a.each do |data|
       # don't count technical or user-requested deletions
       next if data['comment_text'] =~ /\[\[WP:CSD#G(6|7)\|/
 
@@ -231,8 +236,8 @@ module AutopatrolledCandidates
       SELECT COUNT(*) AS count
       FROM logging_logindex
       WHERE log_type = 'block'
-      AND log_title = ?
-      AND log_timestamp > #{@mb.db_date(@mb.now - 365)}
+        AND log_title = ?
+        AND log_timestamp > #{@mb.db_date(@mb.now - 365)}
     }
     @mb.repl_query(sql, username.score).to_a.first['count']
   end
@@ -243,25 +248,25 @@ module AutopatrolledCandidates
       SELECT COUNT(*) AS count
       FROM logging_logindex
       WHERE log_type = 'rights'
-      AND log_title = ?
-      AND log_params REGEXP "oldgroups.*?autoreviewer.*?newgroups(?!.*?autoreviewer)"
+        AND log_title = ?
+        AND log_params REGEXP "oldgroups.*?autoreviewer.*?newgroups(?!.*?autoreviewer)"
     }
     @mb.repl_query(sql, username.score).to_a.first['count'] > 0
   end
 
   # Get the page title, ID and creation date of articles created by the given user
-  def self.articles_created(username)
+  def self.articles_created(actor_id)
     sql = %{
       SELECT page_title, page_id, rev_timestamp
       FROM revision_userindex
       LEFT JOIN page ON page_id = rev_page
       WHERE page_namespace = 0
-      AND rev_parent_id = 0
-      AND rev_user_text = ?
-      AND rev_deleted = 0
-      AND page_is_redirect = 0
+        AND rev_parent_id = 0
+        AND rev_actor = ?
+        AND rev_deleted = 0
+        AND page_is_redirect = 0
     }
-    @mb.repl_query(sql, username.score).to_a
+    @mb.repl_query(sql, actor_id).to_a
   end
 
   # Get the number of articles created by the user that are in maintenance categories
@@ -278,8 +283,8 @@ module AutopatrolledCandidates
       SELECT COUNT(DISTINCT(cl_from)) AS count
       FROM categorylinks
       WHERE cl_from IN (#{article_ids.join(',')})
-      AND cl_to IN (#{categories_sql})
-      AND cl_type = 'page'
+        AND cl_to IN (#{categories_sql})
+        AND cl_type = 'page'
     }
     @mb.repl.query(sql).to_a.first['count']
   end
@@ -318,25 +323,23 @@ module AutopatrolledCandidates
     return @page_creators if @page_creators
 
     sql = %{
-      SELECT DISTINCT(user_name), user_editcount
-      FROM recentchanges
-      LEFT JOIN user
-      ON rc_user = user_id
-      LEFT JOIN page
-      ON rc_cur_id = page_id
-      WHERE
-          rc_timestamp > #{@mb.db_date(@mb.now - 3)} AND
-          rc_namespace = 0 AND
-          rc_bot = 0 AND
-          rc_new = 1 AND
-          page_is_redirect = 0 AND
-          NOT EXISTS
-          (
-            SELECT 1
-            FROM user_groups
-            WHERE ug_user = user_id
-            AND ( ug_group = 'autoreviewer' OR ug_group = 'sysop' )
-          )
+      SELECT DISTINCT(user_name), actor_id, user_editcount
+      FROM user
+      LEFT JOIN actor ON actor_user = user_id
+      LEFT JOIN recentchanges ON rc_actor = actor_id
+      LEFT JOIN page ON rc_cur_id = page_id
+      WHERE rc_timestamp > #{@mb.db_date(@mb.now - 3)}
+        AND rc_namespace = 0
+        AND rc_bot = 0
+        AND rc_new = 1
+        AND page_is_redirect = 0
+        AND NOT EXISTS
+        (
+          SELECT 1
+          FROM user_groups
+          WHERE ug_user = user_id
+          AND ( ug_group = 'autoreviewer' OR ug_group = 'sysop' )
+        )
     }
     @page_creators = @mb.repl_query(sql).to_a
   end
