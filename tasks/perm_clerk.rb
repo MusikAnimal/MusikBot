@@ -1082,7 +1082,7 @@ module PermClerk
           when :templatespacecount
             @mb.repl_client.count_namespace_edits(username, 10)
           when :templateandmodulespacecount
-            @mb.repl_client.count_namespace_edits(username, [10, 828])
+            @mb.repl_client.count_namespace_edits(username, 10) + @mb.repl_client.count_namespace_edits(username, 828)
           end
 
         @user_info_cache[username].store(data_attr, count) if count
