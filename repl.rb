@@ -6,21 +6,21 @@ module Repl
     def initialize(opts)
       @logging = opts.delete(:log)
       @client = Mysql2::Client.new(opts)
-      @db = opts[:db]
+      @db = opts[:db] || 'enwiki_p'
       @getter = HTTParty
       @base_uri = 'https://xtools.wmflabs.org/api/user'
     end
 
     def count_articles_created(username)
       @getter.get(
-        "#{@base_uri}/pages_count/#{@db}"
+        "#{@base_uri}/pages_count/#{@db}/#{URI.escape(username.score)}"
       )['counts']['count']
     end
 
     def count_namespace_edits(username, namespace = 0)
       @getter.get(
-        "#{@base_uri}/namespace_totals/#{@db}/#{username}"
-      )['namespace_totals'][namespace]
+        "#{@base_uri}/namespace_totals/#{@db}/#{URI.escape(username.score)}"
+      )['namespace_totals'][namespace.to_s]
     end
 
     def count_nonautomated_edits(username)
@@ -51,6 +51,10 @@ module Repl
 
     def escape(string)
       @client.escape(string)
+    end
+
+    def getter
+      @getter
     end
 
     private
