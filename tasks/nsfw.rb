@@ -1,0 +1,124 @@
+$LOAD_PATH << '..'
+require 'musikbot'
+require 'cinch'
+require 'em-eventsource'
+
+module NSFW
+  def self.run
+    $mb = MusikBot::Session.new(inspect)
+
+    bot = Cinch::Bot.new do
+      configure do |c|
+        c.server = 'chat.freenode.org'
+        c.channels = ['##MusikBot_II']
+        c.nick = $mb.app_config[:nsfw_irc][:nick]
+        c.password = $mb.app_config[:nsfw_irc][:password]
+        c.user = $mb.app_config[:nsfw_irc][:user]
+      end
+
+      helpers do
+        def get_images_and_scores(log_id)
+          ret = $mb.gateway.custom_query(
+            list: 'abuselog',
+            afllogid: log_id,
+            aflprop: 'details'
+          )
+
+          images = []
+
+          # Find each image that was added and removed
+          ret.elements['abuselog'].to_a.each do |entry|
+            added = entry.elements['details'].attributes['added_lines']
+
+            images << added.scan(/(?:\=(?:\s*\[\[(?:File|Image)\s*:)|(?:File|Image)\s*:)\s*(.*?\.(?:jpe?g|svg|png|gif|webm|ogv))/).flatten
+          end
+
+          # Remove duplicates
+          images.flatten!.uniq!
+
+          # Get the URLs for the images
+          urls = get_urls(images)
+
+          # Build hash of images => scores.
+          scores = {}
+          urls.each do |title, url|
+            score = get_score(url)
+            if score > 0.5
+              scores[title] = score
+            end
+          end
+
+          scores
+        end
+
+        def get_messages(user, log_id, scores)
+          messages = [
+            "User:#{user.score} added images that are NSFW with https://en.wikipedia.org/wiki/Special:AbuseLog/#{log_id}"
+          ]
+
+          scores.each do |title, score|
+            messages << "* https://en.wikipedia.org/wiki/#{title.score} - #{score}"
+          end
+
+          messages
+        end
+
+        def get_urls(images)
+          ret = $mb.gateway.custom_query(
+            prop: 'imageinfo',
+            titles: images.map { |i| "File:#{i}" }.join('|'),
+            iiprop: 'url'
+          )
+          
+          urls = {}
+          ret.elements['pages'].to_a.each do |page|
+            urls[page['title']] = page.elements['imageinfo/ii']['url'].to_s if page.elements['imageinfo']
+          end
+
+          urls
+        end
+
+        def get_score(url)
+          $mb.repl_client.getter.post('https://nsfw.wmflabs.org',
+            body: { url: url }
+          ).to_f
+        end
+      end
+
+      on :connect do
+        EM.run do
+          source = EventMachine::EventSource.new('https://stream.wikimedia.org/v2/stream/recentchange')
+
+          source.on "message" do |message|
+            data = JSON.parse(message)
+            if data['server_name'] == 'en.wikipedia.org' && data['log_action'] == 'hit' && 637 == data['log_params']['filter'].to_i
+              scores = get_images_and_scores(data['log_params']['log'])
+
+              if scores.any?
+                msgs = get_messages(data['user'].score, data['log_params']['log'], scores)
+
+                msgs.each do |msg|
+                  User('MusikAnimal').send(msg)
+                end
+              end
+            end
+          end
+
+          source.error do |error|
+            puts "EventStreams error: #{error}"
+          end
+
+          source.open do
+            puts "EventStreams connection opened"
+          end
+
+          source.start
+        end
+      end
+    end
+
+    bot.start
+  end
+end
+
+NSFW.run
