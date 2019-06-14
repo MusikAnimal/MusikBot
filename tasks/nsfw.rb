@@ -72,7 +72,7 @@ module NSFW
 
           urls = {}
           ret.elements['pages'].to_a.each do |page|
-            urls[page['title']] = page.elements['imageinfo/ii']['url'].to_s if page.elements['imageinfo']
+            urls[page.attributes['title']] = page.elements['imageinfo'][0].attributes['url'] if page && page.elements['imageinfo']
           end
 
           urls
