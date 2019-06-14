@@ -69,7 +69,7 @@ module NSFW
             titles: images.map { |i| "File:#{i}" }.join('|'),
             iiprop: 'url'
           )
-          
+
           urls = {}
           ret.elements['pages'].to_a.each do |page|
             urls[page['title']] = page.elements['imageinfo/ii']['url'].to_s if page.elements['imageinfo']
@@ -114,6 +114,10 @@ module NSFW
 
           source.start
         end
+      end
+
+      on :message, "!ping" do |m|
+        m.reply 'Pong.'
       end
     end
 
