@@ -30,11 +30,14 @@ module NSFW
           ret.elements['abuselog'].to_a.each do |entry|
             added = entry.elements['details'].attributes['added_lines']
 
-            images << added.scan(/(?:\=(?:\s*\[\[(?:File|Image)\s*:)|(?:File|Image)\s*:)\s*(.*?\.(?:jpe?g|svg|png|gif|webm|ogv))/).flatten
+            # images << added.scan(/(?:\=(?:\s*\[\[(?:File|Image)\s*:)|(?:File|Image)\s*:)\s*(.*?\.(?:jpe?g|svg|png|gif|webm|ogv))/).flatten
+            images << added.scan(/(?:\[\[\s*(?:File|Image)\s*:\s*|(?:logo|image|image_name|cover|image_file|image_photo|insignia|photo|mark|map|range_map)\d*\s*\=|<gallery>)\s*(.*?\.(?:jpe?g|svg|png|gif|tiff|webm|ogv))/i)
           end
 
           # Remove duplicates
           images.flatten!.uniq!
+
+          return [] if images.empty?
 
           # Get the URLs for the images
           urls = get_urls(images)
@@ -43,7 +46,7 @@ module NSFW
           scores = {}
           urls.each do |title, url|
             score = get_score(url)
-            if score > 0.5
+            if score > 0.4
               scores[title] = score
             end
           end
