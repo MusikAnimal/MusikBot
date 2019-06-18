@@ -37,7 +37,10 @@ module NSFW
           # Remove duplicates
           images.flatten!.uniq!
 
-          return [] if images.empty?
+          if images.empty?
+            puts "No images parsed for log ID #{log_id}"
+            return []
+          end
 
           # Get the URLs for the images
           urls = get_urls(images)
