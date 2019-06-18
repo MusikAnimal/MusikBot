@@ -18,6 +18,7 @@ module NSFW
 
       helpers do
         def get_images_and_scores(log_id)
+          puts "get_images_and_scores for #{log_id}"
           ret = $mb.gateway.custom_query(
             list: 'abuselog',
             afllogid: log_id,
