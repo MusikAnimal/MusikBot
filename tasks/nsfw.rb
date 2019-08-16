@@ -98,7 +98,7 @@ module NSFW
 
           source.on "message" do |message|
             data = JSON.parse(message)
-            if data['server_name'] == 'en.wikipedia.org' && data['log_action'] == 'hit' && 637 == data['log_params']['filter'].to_i
+            if data['server_name'] == 'en.wikipedia.org' && data['log_action'] == 'hit' && 1001 == data['log_params']['filter'].to_i
               scores = get_images_and_scores(data['log_params']['log'])
 
               if scores.any?
