@@ -3,7 +3,6 @@ en:
     edit_throttle: 'Edit throttle hit'
     fatal: 'fatal'
     fatal_error: 'Fatal error'
-    fatal_msg: 'Failed for unknown reasons. Check the [[User:MusikBot/PermClerk/Error log|error log]] and contact the [[User talk:MusikAnimal|bot operator]] if you are unable to resolve the issue.'
     no_permissions: 'User:%{user} does not have the permission %{permission}'
     not_on_checkpage: 'User:%{user} has not been added to the %{check_page}'
     force_archiving: 'Use %{approved_code} to archive as approved or %{denied_code} to archive as declined'

@@ -175,8 +175,6 @@ module AbuseFilterIRC
           return m.user.send "You must be opped in #{channel} to manage subscriptions."
         end
 
-        debug "got here"
-
         if 'all' == filter_id
           statement = $client.prepare('DELETE FROM subscriptions WHERE project = ? AND user = ?')
           statement.execute(project, channel)
