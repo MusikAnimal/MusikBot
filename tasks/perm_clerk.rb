@@ -594,7 +594,7 @@ module PermClerk
         edit_summary += " #{request[:username]} (#{request[:permission].downcase});"
         archive_page_name = "Wikipedia:Requests for permissions/#{request[:permission]}"
         link_markup = "*{{Usercheck-short|#{request[:username]}}} [[#{archive_page_name}]] " \
-          "<sup>[http://en.wikipedia.org/wiki/Special:PermaLink/#{request[:revision_id]}#User:#{request[:username].score} link]</sup>"
+          "<sup>[https://en.wikipedia.org/wiki/Special:PermaLink/#{request[:revision_id]}#User:#{request[:username].score} link]</sup>"
 
         # add link_markup to section
         section_key = "#{month_name} #{request[:date].day}"
