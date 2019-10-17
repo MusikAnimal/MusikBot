@@ -13,6 +13,10 @@ module WishlistSurvey
     # Fetches from [[User:Community_Tech_bot/WishlistSurvey/config]].
     @survey_root = @mb.config[:survey_root]
 
+    # Detect if this is the first run by simply checking if the total counts page exists.
+    # If it doesn't, further down we'll create all the count pages with a value of 0.
+    first_run = @mb.get("#{@survey_root}/Total votes").nil?
+
     # Get counts from previous run, with defaults if they haven't been set yet.
     cached_counts = {
       'total_proposals' => 0,
@@ -25,7 +29,7 @@ module WishlistSurvey
     cached_counts.merge!(@mb.local_storage['counts'] || {})
 
     # Rotate the proposals every N hours (as specified by rotation_rate in config).
-    last_rotation = @mb.local_storage['last_rotation']
+    last_rotation = @mb.local_storage['last_rotation'] || @mb.now
     rotation_needed = @mb.parse_date(last_rotation) < @mb.now - (@mb.config[:rotation_rate].to_f / 24)
 
     total_proposals = 0
@@ -38,31 +42,36 @@ module WishlistSurvey
 
     categories.each do |category|
       proposals = get_proposals(category)
+      editors = []
 
-      # No proposals, nothing to do.
-      next if proposals.empty?
+      # No proposals, nothing to do, unless it's the first_run,
+      # where we want to put 0 values for all the count pages.
+      next if proposals.empty? && !first_run
 
-      editors = get_editors_from_pages(proposals.keys)
-      total_proposals += proposals.length
-      all_editors += editors
+      # Skip all of this if it's the first run.
+      unless first_run
+        editors = get_editors_from_pages(proposals.keys)
+        total_proposals += proposals.length
+        all_editors += editors
 
-      # Get votes for this category.
-      category_votes = parse_category(category)
+        # Get votes for this category.
+        category_votes = parse_category(category)
 
-      if voting_phase?
-        # Sort proposals by number of support votes.
-        category_votes = category_votes.sort_by {|_k, v| -v[:support]}.to_h
+        if voting_phase?
+          # Sort proposals by number of support votes.
+          category_votes = category_votes.sort_by {|_k, v| -v[:support]}.to_h
 
-        # Total votes for this category.
-        support_votes = category_votes.values.map { |v| v[:support] }.inject(:+)
-        neutral_votes = category_votes.values.map { |v| v[:neutral] }.inject(:+)
-        oppose_votes = category_votes.values.map { |v| v[:oppose] }.inject(:+)
-        total_votes += support_votes + neutral_votes + oppose_votes
-        total_support_votes += support_votes
+          # Total votes for this category.
+          support_votes = category_votes.values.map { |v| v[:support] }.inject(:+)
+          neutral_votes = category_votes.values.map { |v| v[:neutral] }.inject(:+)
+          oppose_votes = category_votes.values.map { |v| v[:oppose] }.inject(:+)
+          total_votes += support_votes + neutral_votes + oppose_votes
+          total_support_votes += support_votes
+        end
+
+        # Store votes in the category's hash.
+        all_votes[category] = category_votes
       end
-
-      # Store votes in the category's hash.
-      all_votes[category] = category_votes
 
       # Get counts for this category from previous run, with defaults if they haven't been set yet.
       cached_counts[category] = {
@@ -71,7 +80,8 @@ module WishlistSurvey
         'votes' => 0
       }.merge(cached_counts[category] || {})
 
-      # Only attempt to edit if there's a change in the counts.
+      # Only attempt to edit if there's a change in the counts, or if this is the first run.
+      # (First run would only apply to the proposals/pending phase, not voting).
 
       if voting_phase? && cached_counts[category]['votes'] != support_votes
         @mb.edit("#{@survey_root}/Vote counts/#{category}",
@@ -81,7 +91,7 @@ module WishlistSurvey
         cached_counts[category]['votes'] = support_votes
       end
 
-      if cached_counts[category]['proposals'] != proposals.length
+      if first_run || cached_counts[category]['proposals'] != proposals.length
         @mb.edit("#{@survey_root}/Proposal counts/#{category}",
           content: proposals.length,
           summary: "Updating proposal count (#{proposals.length})"
@@ -89,7 +99,7 @@ module WishlistSurvey
         cached_counts[category]['proposals'] = proposals.length
       end
 
-      if cached_counts[category]['editors'] != editors.length
+      if first_run || cached_counts[category]['editors'] != editors.length
         @mb.edit("#{@survey_root}/Editor counts/#{category}",
           content: editors.length,
           summary: "Updating editor count (#{editors.length})"
@@ -114,7 +124,7 @@ module WishlistSurvey
       report_needs_update = voting_phase?
     end
 
-    if cached_counts['total_proposals'] != total_proposals
+    if first_run || cached_counts['total_proposals'] != total_proposals
       @mb.edit("#{@survey_root}/Total proposals",
         content: total_proposals,
         summary: "Updating total proposal count (#{total_proposals})"
@@ -123,7 +133,7 @@ module WishlistSurvey
       report_needs_update = true
     end
 
-    if cached_counts['total_editors'] != @total_editors
+    if first_run || cached_counts['total_editors'] != @total_editors
       @mb.edit("#{@survey_root}/Total editors",
         content: @total_editors,
         summary: "Updating total editor count (#{@total_editors})"
@@ -133,7 +143,7 @@ module WishlistSurvey
     end
 
     @untranslated = get_proposals('Untranslated')
-    if cached_counts['untranslated'] != @untranslated.length
+    if first_run || cached_counts['untranslated'] != @untranslated.length
       cached_counts['untranslated'] = @untranslated.length
       report_needs_update = true
     end
