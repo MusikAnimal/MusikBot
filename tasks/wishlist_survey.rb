@@ -15,7 +15,7 @@ module WishlistSurvey
 
     # Detect if this is the first run by simply checking if the total counts page exists.
     # If it doesn't, further down we'll create all the count pages with a value of 0.
-    first_run = @mb.get("#{@survey_root}/Total votes").nil?
+    first_run = @mb.get("#{@survey_root}/Total editors").nil?
 
     # Get counts from previous run, with defaults if they haven't been set yet.
     cached_counts = {
@@ -50,7 +50,7 @@ module WishlistSurvey
 
       # Skip all of this if it's the first run.
       unless first_run
-        editors = get_editors_from_pages(proposals.keys)
+        editors = get_editors_from_pages(proposals.keys) - [@mb.username]
         total_proposals += proposals.length
         all_editors += editors
 
@@ -190,17 +190,14 @@ module WishlistSurvey
     @category_proposals[category] = proposal_map
   end
 
-  # Get usernames of editors to a given page ID.
-  def self.get_editors_from_page(page_id)
-    sql = 'SELECT DISTINCT(rev_user_text) AS editor ' \
-        "FROM #{@mb.db}_p.revision_userindex WHERE rev_page = #{page_id}"
-    @mb.repl.query(sql).to_a.collect { |row| row['editor'] }
-  end
-
   # Get usernames of editors to a given set of page IDs.
   def self.get_editors_from_pages(page_ids)
-    sql = 'SELECT DISTINCT(rev_user_text) AS editor ' \
-        "FROM #{@mb.db}_p.revision_userindex WHERE rev_page IN (#{page_ids.join(',')})"
+    sql = %{
+      SELECT DISTINCT(actor_name) AS editor
+      FROM #{@mb.db}_p.revision_userindex
+      JOIN #{@mb.db}_p.actor ON actor_id = rev_actor
+      WHERE rev_page IN (#{page_ids.join(',')})
+    }
     @mb.repl.query(sql).to_a.collect { |row| row['editor'] }
   end
 
