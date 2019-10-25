@@ -25,7 +25,8 @@ module MusikBot
         args.on('-l', '--lang LANGUAGE', 'Language code (en)') { |v| @opts[:lang] = v.to_sym }
         args.on('-b', '--nobot', 'Don\'t assert as bot') { @opts[:nobot] = true }
         args.on('-e', '--env ENVIRONMENT', 'production to use specified wiki, or test to use testwiki')
-        args.on('-f', '--edition EDITION', '1 for MusikBot, 2 for MusikBot II, etc.') { |v| @opts[:edition] = v }
+        args.on('-ed', '--edition EDITION', '1 for MusikBot, 2 for MusikBot II, etc.') { |v| @opts[:edition] = v }
+        args.on('-f', '--force', 'bypass check if the task is enabled') { @opts[:force] = true }
         args.on('-d', '--dry', 'pass to disable all editing and instead invoke debugger') { @opts[:dry] = true }
         args.on('-na', '--no-api', "Disable used of API-releated methods. Used for tasks that don't need the API.") { @opts[:no_api] = true }
       end.parse!
@@ -41,7 +42,7 @@ module MusikBot
 
       login unless @opts[:no_api]
 
-      unless @task =~ /Console|SoundSearch/ || @opts[:dry] || opts[:no_api] || env == 'test' || get("User:#{username}/#{@task}/Run") == 'true'
+      unless @task =~ /Console|SoundSearch/ || @opts[:force] || @opts[:dry] || opts[:no_api] || env == 'test' || get("User:#{username}/#{@task}/Run") == 'true'
         report_error("#{@task} disabled")
         exit 1
       end
