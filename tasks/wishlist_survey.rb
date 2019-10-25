@@ -638,8 +638,60 @@ module WishlistSurvey
     statement.execute(username.descore).to_a
   end
 
+  # Imports the page title translations of last year's survey to the current one, since
+  # the Translate extension otherwise won't show the transcluded translations we already have.
+  # This simply replaces the last year with the current one, so some languages that don't
+  # use Western Arabic numerals (0-9) won't get copied over. Not much we can do about that.
+  # The account that runs this script must be a translation admin.
+  def self.import_translations
+    @mb = MusikBot::Session.new(inspect)
+    last_year = DateTime.now.year.to_s
+    this_year = (DateTime.now.year + 1).to_s
+
+    # Get last year's page title translations
+    old_titles = @mb.gateway.custom_query(
+      list: 'prefixsearch',
+      pssearch: "Translations:Community Wishlist Survey #{last_year}/Page display title/",
+      pslimit: 5000
+    ).elements['prefixsearch'].to_a.collect { |t| t['title'] }
+
+    # Loop through and copy to this year, replacing the year.
+    old_titles.each do |title|
+      lang = title.split('/').last
+      translation = @mb.get(title)
+      new_title = "Translations:Community Wishlist Survey #{this_year}/Page display title/#{lang}"
+
+      # Skip if year is apparently missing, or translation for this year exists.
+      next if !translation.include?(last_year) || @mb.get(new_title).present?
+
+      # Write new translation, replacing the old year with new one.
+      @mb.edit(new_title,
+        content: translation.tr(last_year, this_year),
+        summary: "Importing translations from last year's survey"
+      )
+    end
+  end
+
+  def self.get_old_participants
+    @mb = MusikBot::Session.new(inspect)
+
+    @survey_root = 'Community Wishlist Survey 2019'
+    proposals = get_proposals('Wikisource').merge(get_proposals('Wiktionary'))
+    usernames = get_editors_from_pages(proposals.keys) - [@mb.username]
+
+    @survey_root = 'Community Wishlist Survey 2017'
+    proposals = get_proposals('Wikisource').merge(get_proposals('Wiktionary'))
+    usernames += get_editors_from_pages(proposals.keys) - [@mb.username]
+
+    puts usernames.uniq.sort
+      .select { |u| !u.include?('(WMF)') }
+      .map { |u| "# {{target | user = #{u} | site = meta.wikimedia.org}}" }
+  end
+
 end
 
 WishlistSurvey.run
 
+# WishlistSurvey.get_old_participants
 # WishlistSurvey.sock_check
+# WishlistSurvey.import_translations
