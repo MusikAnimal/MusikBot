@@ -688,10 +688,36 @@ module WishlistSurvey
       .map { |u| "# {{target | user = #{u} | site = meta.wikimedia.org}}" }
   end
 
+  def self.add_voting_sections
+    @mb = MusikBot::Session.new(inspect)
+
+    # Fetches from [[User:Community_Tech_bot/WishlistSurvey/config]].
+    @survey_root = @mb.config[:survey_root]
+
+    categories.each do |category|
+      proposals = get_proposals(category)
+
+      proposals.each do |proposal|
+        proposal_id = proposal[0]
+        proposal_title = proposal[1]
+        proposal_path = "#{@survey_root}/#{category}/#{proposal_title}"
+        content = @mb.get(proposal_path)
+
+        if !content.include?("=== Voting ===")
+          content += "\n\n=== Voting ==="
+          @mb.edit(proposal_path,
+            content: content,
+            summary: "Adding voting section"
+          )
+        end
+      end
+    end
+  end
+
 end
 
 WishlistSurvey.run
-
 # WishlistSurvey.get_old_participants
 # WishlistSurvey.sock_check
 # WishlistSurvey.import_translations
+# WishlistSurvey.add_voting_sections
