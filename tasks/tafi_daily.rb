@@ -82,12 +82,13 @@ module TAFIDaily
       next unless newest_timestamp
 
       should_archive = newest_timestamp + Rational(@mb.config[:config][:archive_offset], 24) < @mb.now
+      was_approved = entry =~ /{{\s*approved\s*}}/i
 
-      if newest_timestamp < @mb.today - @mb.config[:config][:auto_unapprove_offset]
+      if !was_approved && newest_timestamp < @mb.today - @mb.config[:config][:auto_unapprove_offset]
         unapproved_entires_count += 1
         text.gsub!(section, '')
-        archive_entries << section.chomp('') + "\n{{unapproved}} (automated closure) No further input after 21 days ~~~~"
-      elsif entry =~ /{{\s*approved\s*}}/i
+        archive_entries << section.chomp('') + "\n\n{{unapproved}} (automated closure) No further input after 21 days ~~~~"
+      elsif was_approved
         approved_entries << "# {{icon|#{assessment || 'unknown'}}} [[#{article}]]"
         text.gsub!(section, '')
         archive_entries << section if should_archive
