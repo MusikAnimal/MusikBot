@@ -77,7 +77,15 @@ module TemplateProtector
             }
           end
 
-          @mb.gateway.protect(title, protections, { reason: @mb.config[:summary] })
+          begin
+            @mb.gateway.protect(title, protections, { reason: @mb.config[:summary] })
+          rescue MediaWiki::APIError => e
+            if e.code.to_s == 'tpt-target-page'
+              next
+            else
+              raise e
+            end
+          end
         end
       end
     end
