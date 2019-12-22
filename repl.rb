@@ -14,25 +14,25 @@ module Repl
     def count_articles_created(username)
       @getter.get(
         "#{@base_uri}/pages_count/#{@db}/#{URI.escape(username.score)}"
-      )['counts']['count']
+      )['counts']['count'].to_i
     end
 
     def count_namespace_edits(username, namespace = 0)
       @getter.get(
         "#{@base_uri}/namespace_totals/#{@db}/#{URI.escape(username.score)}"
-      )['namespace_totals'][namespace.to_s]
+      )['namespace_totals'][namespace.to_s].to_i
     end
 
     def count_nonautomated_edits(username)
       @getter.get(
         "#{@base_uri}/automated_editcount/en.wikipedia.org/#{URI.escape(username.score)}"
-      )['nonautomated_editcount']
+      )['nonautomated_editcount'].to_i
     end
 
     def count_nonautomated_namespace_edits(username, namespace)
       @getter.get(
         "#{@base_uri}/automated_editcount/en.wikipedia.org/#{URI.escape(username.score)}/#{namespace}"
-      )['nonautomated_editcount']
+      )['nonautomated_editcount'].to_i
     end
 
     def count_tool_edits(username, tool)
