@@ -89,7 +89,7 @@ module AbuseFilterIRC
 
               $subscriptions[irc_wiki] ||= {}
               $subscriptions[irc_wiki].each do |user, filter_ids|
-                if filter_ids.include?(data['log_params']['filter'].to_i)
+                if filter_ids.include?(data['log_params']['filter'].to_s.scan(/\d+/)[0].to_i)
                   if user =~ /^#.*/
                     Channel(user).join
                     Channel(user).send(msg)
