@@ -80,14 +80,15 @@ module AbuseFilterIRC
 
           source.on "message" do |message|
             data = JSON.parse(message)
-            if CHANNELS.keys.include?(data['server_name']) && data['log_action'] == 'hit'
+            if data['log_action'] == 'hit' && (CHANNELS.keys.include?(data['server_name']) || data['log_params']['filter'].to_s.include?('global'))
+              irc_wiki = data['log_params']['filter'].to_s.include?('global') ? 'meta.wikimedia.org' : data['server_name']
               msg = "User:#{data['user'].score} tripped *filter-#{data['log_params']['filter']}* on [[#{data['title']}]]: " \
                 "https://#{data['server_name']}/wiki/Special:AbuseLog/#{data['log_params']['log']}"
 
-              Channel(CHANNELS[data['server_name']]).send(msg)
+              Channel(CHANNELS[irc_wiki]).send(msg)
 
-              $subscriptions[data['server_name']] ||= {}
-              $subscriptions[data['server_name']].each do |user, filter_ids|
+              $subscriptions[irc_wiki] ||= {}
+              $subscriptions[irc_wiki].each do |user, filter_ids|
                 if filter_ids.include?(data['log_params']['filter'].to_i)
                   if user =~ /^#.*/
                     Channel(user).join
