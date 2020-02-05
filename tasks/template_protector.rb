@@ -82,6 +82,9 @@ module TemplateProtector
           rescue MediaWiki::APIError => e
             if e.code.to_s == 'tpt-target-page'
               next
+            elsif e.code.to_s == 'cantedit'
+              puts "WARNING: Unable to edit [[#{title}]]"
+              next
             else
               raise e
             end
