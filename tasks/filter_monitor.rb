@@ -183,7 +183,7 @@ module FilterMonitor
     opts = {
       list: 'abusefilters',
       abfprop: 'id|description|actions|pattern|lasteditor|lastedittime|status|private',
-      abflimit: @mb.bot? ? 1000 : 500
+      abflimit: 5000
     }
 
     @current_filters = @mb.gateway.custom_query(opts).elements['abusefilters']
