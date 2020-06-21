@@ -7,8 +7,108 @@ module FixPP
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
-    category_members.each do |page|
-      page_obj = protect_info(page).first
+    add_pp
+    fix_pp
+  rescue => e
+    @mb.report_error('Fatal error', e)
+  end
+
+  def self.add_pp
+    templates = (pp_hash.keys + pp_hash.values).uniq
+      .map { |t| "'#{t.dup.to_s.ucfirst}'" }
+      .join(',')
+
+    offset = @mb.parse_date(
+      @mb.local_storage['last_run'] || (@mb.now - 1).to_s
+    ).strftime('%Y%m%d%H%M%S')
+
+    sql = %{
+      SELECT page_title, actor_name
+      FROM page
+      JOIN logging_logindex ON log_page = page_id
+      JOIN actor_logging ON log_actor = actor_id
+      WHERE log_type IN ('protect', 'stable')
+      AND log_action IN ('protect', 'config')
+      AND log_timestamp BETWEEN #{offset} AND SUBTIME(NOW(), '00:03')
+      AND log_page > 0
+      AND log_namespace = 0
+      AND NOT EXISTS (
+        SELECT 1
+        FROM templatelinks
+        WHERE tl_from = page_id
+        AND tl_title IN (#{templates})
+      )
+    }
+
+    rows = @mb.repl_query(sql).to_a
+
+    rows.each do |row|
+      title = row['page_title'].force_encoding('utf-8')
+      page_obj = get_protect_info(title)[0]
+
+      # To guard against replication lag
+      next unless get_protections(page_obj) || get_flags(page_obj)
+
+      # Leave TFAs alone
+      next if row['actor_name'] == 'TFA Protector Bot'
+
+      edit_data = get_protection_by_type(page_obj, 'edit')
+      move_data = get_protection_by_type(page_obj, 'move')
+      pc_data = get_protection_by_type(page_obj, 'flagged')
+
+      if edit_data
+        if edit_data['expiry'] == 'infinity' && edit_data['level'] == 'autoconfirmed'
+          template = 'pp-semi-indef'
+        else
+          template = 'pp'
+        end
+      elsif pc_data
+        template = 'pp-pc'
+      elsif move_data
+        if move_data['expiry'] == 'infinity'
+          template = 'pp-move-indef'
+        else
+          template = 'pp-move'
+        end
+      end
+
+      content = @mb.get(title)
+
+      next if has_redir_template?(page_obj, content)
+      if page_obj.attributes['redirect']
+        content = content.chomp('') + "\n\n{{#{template}|small=yes}}"
+      else
+        content = "{{#{template}|small=yes}}\n" + content
+      end
+
+      binding.pry
+      @mb.edit(title,
+        content: content,
+        summary: 'Adding missing protection template ([[User:MusikBot II/FixPP/FAQ|more info]])'
+      )
+    end
+
+    @mb.local_storage('last_run' => @mb.now.to_s)
+  end
+
+  def self.has_redir_template?(page_obj, content)
+    if page_obj.attributes['redirect']
+      redir_templates = (redir_hash.keys + redir_hash.values).uniq
+        .map { |t| t.downcase }
+
+      has_redir_template = false
+
+      redir_templates.each do |redir_template|
+        return true if content.downcase.include?(redir_template)
+      end
+    end
+
+    false
+  end
+
+  def self.fix_pp
+    get_category_members.each do |page|
+      page_obj = get_protect_info(page).first
 
       if page_obj.elements['revisions'][0].attributes['user'] == 'MusikBot'
         log('MusikBot was last to edit page')
@@ -16,8 +116,6 @@ module FixPP
         process_page(page_obj)
       end
     end
-  rescue => e
-    @mb.report_error('Fatal error', e)
   end
 
   def self.process_page(page_obj, throttle = 0)
@@ -72,7 +170,7 @@ module FixPP
 
         # if a type couldn't be parsed, assume it means edit-protection if it's pp-protected
         if type.blank?
-          if old_pp_type == 'pp-protected' || !protected?(@page_obj) || protection_by_type(@page_obj, 'edit').nil?
+          if old_pp_type == 'pp-protected' || !protected?(@page_obj) || get_protection_by_type(@page_obj, 'edit').nil?
             type = 'edit'
           else
             # auto generate template task is disabled, just skip and try to repair subsequent ones accordingly
@@ -214,7 +312,7 @@ module FixPP
         'pp-move'
       end
     elsif type == 'autoreview'
-      "pp-pc#{flags(@page_obj)['level'].to_i + 1}"
+      "pp-pc#{get_flags(@page_obj)['level'].to_i + 1}"
     elsif @mb.config[:config][:pp_reasons].include?(reason)
       "pp-#{reason}"
     else
@@ -223,7 +321,7 @@ module FixPP
   end
 
   def self.get_expiry(page, type)
-    protection_obj = protection_by_type(page, type)
+    protection_obj = get_protection_by_type(page, type)
     expiry_key = type == 'flagged' ? 'protection_expiry' : 'expiry'
 
     return nil unless protection_obj
@@ -235,7 +333,7 @@ module FixPP
   def self.auto_pps(existing_types = [])
     new_pps = ''
     (%w(edit move flagged) - existing_types).each do |type|
-      settings = protection_by_type(@page_obj, type)
+      settings = get_protection_by_type(@page_obj, type)
       next unless settings
 
       pp_type = if type == 'flagged'
@@ -295,24 +393,24 @@ module FixPP
     @content.gsub!(/\A\n*/, '')
   end
 
-  def self.protections(page)
+  def self.get_protections(page)
     page.elements['protection'].present? && page.elements['protection'][0].present? ? page.elements['protection'] : nil
   end
 
-  def self.flags(page)
+  def self.get_flags(page)
     page.elements['flagged'].present? ? page.elements['flagged'] : nil
   end
 
-  def self.protection_by_type(page, type)
+  def self.get_protection_by_type(page, type)
     if type == 'flagged'
-      flags(page).attributes rescue nil
+      get_flags(page).attributes rescue nil
     else
-      protections(page).select { |p| p.attributes['type'] == type }.first.attributes rescue nil
+      get_protections(page).select { |p| p.attributes['type'] == type }.first.attributes rescue nil
     end
   end
 
   def self.protected?(page)
-    (protections(page) || flags(page)).present?
+    (get_protections(page) || get_flags(page)).present?
   end
 
   # protection types
@@ -330,6 +428,22 @@ module FixPP
       end
 
       @pp_hash
+    end
+  end
+
+  # redirect shell types
+  def self.redir_hash
+    return @redir_hash if @redir_hash
+
+    # cache on disk for one week
+    @mb.disk_cache('redir_hash', 604_800) do
+      @redir_hash = {}
+
+      redirects("Template:Redirect category shell").each do |r|
+        @redir_hash[r.sub(/^Template:/, '').downcase] = 'Redirect category shell'
+      end
+
+      @redir_hash
     end
   end
 
@@ -357,7 +471,7 @@ module FixPP
   end
 
   # API-related
-  def self.protect_info(page)
+  def self.get_protect_info(page)
     @mb.gateway.custom_query(
       prop: 'info|flagged|revisions',
       inprop: 'protection',
@@ -367,7 +481,7 @@ module FixPP
     ).elements['pages']
   end
 
-  def self.category_members
+  def self.get_category_members
     return @category_members if @category_members
     @mb.gateway.purge(CATEGORY)
     @category_members = @mb.gateway.custom_query(
