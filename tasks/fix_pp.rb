@@ -29,7 +29,7 @@ module FixPP
       JOIN actor_logging ON log_actor = actor_id
       WHERE log_type IN ('protect', 'stable')
       AND log_action IN ('protect', 'config')
-      AND log_timestamp BETWEEN #{offset} AND SUBTIME(NOW(), '00:03')
+      AND log_timestamp BETWEEN #{offset} AND SUBTIME(NOW(), '00:05')
       AND log_page > 0
       AND log_namespace = 0
       AND NOT EXISTS (
@@ -81,14 +81,13 @@ module FixPP
         content = "{{#{template}|small=yes}}\n" + content
       end
 
-      binding.pry
       @mb.edit(title,
         content: content,
         summary: 'Adding missing protection template ([[User:MusikBot II/FixPP/FAQ|more info]])'
       )
     end
 
-    @mb.local_storage('last_run' => @mb.now.to_s)
+    @mb.local_storage('last_run' => (@mb.now - (5.0 / (24 * 60))).to_s)
   end
 
   def self.has_redir_template?(page_obj, content)
