@@ -15,7 +15,7 @@ module FixPP
 
   def self.add_pp
     templates = (pp_hash.keys + pp_hash.values).uniq
-      .map { |t| "'#{t.dup.to_s.ucfirst}'" }
+      .map { |t| "'#{t.to_s.dup.ucfirst}'" }
       .join(',')
 
     offset = @mb.parse_date(
@@ -38,6 +38,7 @@ module FixPP
         WHERE tl_from = page_id
         AND tl_title IN (#{templates})
       )
+      GROUP BY page_title
     }
 
     rows = @mb.repl_query(sql).to_a
