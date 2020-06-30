@@ -140,7 +140,7 @@ module FixPP
     @mb.edit(@title,
       content: @content,
       conflicts: true,
-      summary: @edit_summaries.uniq.join(', ') + ' ([[User:MusikBot/FixPP/FAQ|more info]])',
+      summary: @edit_summaries.uniq.join(', ') + ' ([[User:MusikBot II/FixPP/FAQ|more info]])',
       minor: true
     )
   rescue MediaWiki::APIError => e
