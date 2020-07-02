@@ -84,7 +84,8 @@ module FixPP
 
       @mb.edit(title,
         content: content,
-        summary: 'Adding missing protection template ([[User:MusikBot II/FixPP/FAQ|more info]])'
+        summary: 'Adding missing protection template ([[User:MusikBot II/FixPP/FAQ|more info]])',
+        minor: true
       )
     end
 
