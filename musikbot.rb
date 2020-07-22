@@ -239,10 +239,11 @@ module MusikBot
         raise 'API gateway disabled when using the --no-api option'
       end
 
-      @gateway ||= MediaWiki::Gateway.new("https://#{@opts[:project]}.org/w/api.php",
+      project = 'spcodex' === @opts[:project] ? 'spcodex.wiki' : "#{@opts[:project]}.org"
+      @gateway ||= MediaWiki::Gateway.new("https://#{project}/w/api.php",
         bot: bot?,
         retry_count: 5,
-        user_agent: "#{username}/1.1 (https://#{@opts[:project]}.org/wiki/User:#{username}/)",
+        user_agent: "#{username}/1.1 (https://#{project}/wiki/User:#{username}/)",
         ignorewarnings: true
       )
     end
