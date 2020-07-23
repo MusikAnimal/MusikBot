@@ -29,10 +29,10 @@ module NSFW
 
           # Find each image that was added and removed
           ret.elements['abuselog'].to_a.each do |entry|
-            added = entry.elements['details'].attributes['added_lines']
-
-            # images << added.scan(/(?:\=(?:\s*\[\[(?:File|Image)\s*:)|(?:File|Image)\s*:)\s*(.*?\.(?:jpe?g|svg|png|gif|webm|ogv))/).flatten
-            images << added.scan(/(?:\[\[\s*(?:File|Image)\s*:\s*|(?:logo|image|image_name|cover|image_file|image_photo|insignia|photo|mark|map|range_map)\d*\s*\=|<gallery>)\s*(.*?\.(?:jpe?g|svg|png|gif|tiff|webm|ogv))/i)
+            entry.elements['details/added_lines'].each do |line|
+              # images << added.scan(/(?:\=(?:\s*\[\[(?:File|Image)\s*:)|(?:File|Image)\s*:)\s*(.*?\.(?:jpe?g|svg|png|gif|webm|ogv))/).flatten
+              images << line[0].to_s.scan(/(?:\[\[\s*(?:File|Image)\s*:\s*|(?:logo|image|image_name|cover|image_file|image_photo|insignia|photo|mark|map|range_map)\d*\s*\=|<gallery>)\s*(.*?\.(?:jpe?g|svg|png|gif|tiff|webm|ogv))/i)
+            end
           end
 
           # Remove duplicates
