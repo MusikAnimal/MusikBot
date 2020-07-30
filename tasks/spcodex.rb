@@ -9,122 +9,318 @@ module SPCodex
   	@mb = MusikBot::Session.new(inspect)
   	@local_storage = @mb.local_storage
 
-  	import_show('The Smashing Pumpkins', '2008-10-31')
+  	# import_show('The Smashing Pumpkins', '2008-10-31')
+  	import_show('The Smashing Pumpkins', '1993-10-26')
   end
 
   def self.import_show(artist, date)
-  	old_splra_title = splra_title(artist, date)
-  	response = HTTParty.get("http://www.splra.org/wiki/api.php?action=query&prop=revisions&titles=#{old_splra_title}&rvprop=content&format=json")
+  	splra_title = splra_title(artist, date)
+  	response = HTTParty.get("http://www.splra.org/wiki/api.php?action=query&prop=revisions&titles=#{splra_title}&rvprop=content&format=json")
   	old_wikitext = response['query']['pages'][response['query']['pages'].keys[0]]['revisions'][0]['*']
 
   	parts = old_wikitext.split(/==\s*Setlist\s*==/i)
-  	setlist_part = parts[1].split('==')[0]
-  	setlist_part.sub!("\n----\n", '')
 
+  	setlist_part = parts[1].split('==')[0]
+  	if parts[1] =~ /\=\s*Notes/i
+	  	notes_part = parts[1].split(/==\s*Notes?\s*=+/)[1].split(/^==.*/)[0]
+	  end
+	  if parts[1] =~ /\=\s*Banter/i
+	  	banter_part = parts[1].split(/=\s*Banter\s*=+/)[1].split(/^==/)[0]
+	  end
+
+	  infobox, recordings = get_infobox_and_recordings(splra_title)
+
+    content = infobox
+	  content += "\n== Setlist ==\n"
+	  content += get_setlist(setlist_part)
+	  content += get_notes(notes_part)
+    content += get_banter(banter_part)
+    content += recordings
+
+  	binding.pry
+  end
+
+  def self.get_infobox_and_recordings(title)
+  	table = Nokogiri::HTML(open("http://www.splra.org/wiki/index.php?title=#{title}")).css('table')[0]
+
+  	infobox_data = {}
+  	infobox_completed = false
+  	recordings = {}
+  	recordings_key = nil
+    new_rec_data = {}
+
+  	table.css('tr').each_with_index do |tr, _i|
+  		label = tr.css('th').text.chomp('').strip.downcase
+  		value = tr.css('td').text.chomp('').strip
+
+      value = '' if value.downcase == 'unknown'
+
+  		# Infobox
+  		unless infobox_completed
+  			if value.blank? && infobox_data.blank?
+  				infobox_data[:artist] = table.css('th')[0].text.chomp('').strip
+					next
+				elsif label.include?('date')
+	  			infobox_data[:date] = @mb.parse_date(value).strftime('%B %-d, %Y')
+					next
+	  		elsif label.include?('venue')
+	  			infobox_data[:venue] = value
+					next
+	  		elsif label.include?('type')
+	  			infobox_data[:venue_type] = value
+					next
+				elsif label.include?('location')
+	  			infobox_data[:location] = value
+					next
+	  		elsif label.include?('capacity')
+	  			infobox_data[:capacity] = value.gsub(',', '')
+					next
+	  		elsif label.include?('lineup')
+	  			infobox_data[:lineup] = value
+					next
+	  		elsif label.include?('order of bands')
+	  			infobox_data[:bands] = value
+					next
+	  		else
+	  			infobox_completed = true
+				end
+			end
+
+      if value.blank? && new_rec_data.present? && (tr.to_s.include?('#ffe156') || tr.to_s.include?('#fff9de'))
+        puts "Inserting into #{recordings_key}"
+        recordings[recordings_key] << new_rec_data
+        new_rec_data = {}
+      end
+
+			# Recording info: first detect when we first hit recording info
+      if label.include?('unsurfaced record')
+        puts "  cleared unsurfaced"
+        recordings_key = :unsurfaced
+        recordings[:unsurfaced] = []
+        next
+			elsif label.include?('surfaced record')
+        puts "  cleared surfaced"
+				recordings_key = :surfaced
+				recordings[:surfaced] = []
+        next
+			elsif label.include?('circulating recording')
+        puts "  cleared circulating"
+				recordings_key = :circulating
+				recordings[:circulating] = []
+        next
+			end
+
+			value = '' if value.downcase == 'unknown'
+
+			if label.include?('source')
+        new_rec_data[:source] = value
+        next
+			elsif label.include?('format')
+				new_rec_data[:format] = value
+        next
+			elsif label.include?('equipment')
+				new_rec_data[:equipment] = value
+        next
+			elsif label.include?('length')
+        if value.blank?
+          new_rec_data[:length] = ''
+        else
+  				mins = value.scan(/\d+/).flatten.first.to_i
+          mod = mins % 60
+    			new_rec_data[:length] = "#{mins / 60}:#{mod < 10 ? '0' + mod.to_s : mod}:00"
+        end
+        next
+			elsif label.include?('complete')
+				new_rec_data[:complete] = value
+        next
+			elsif label.include?('lowest')
+				new_rec_data[:lowest_gen] = value
+        next
+			elsif label.include?('archive')
+        uri = URI.extract(tr.css('td').to_s).first rescue nil
+        if uri.present?
+          new_rec_data[:archive] = "[#{uri} #{value}]"
+        end
+        next
+			elsif label.include?('notes')
+				new_rec_data[:notes] = value
+        next
+			end
+  	end
+
+    if new_rec_data.present?
+      recordings[recordings_key] << new_rec_data
+    end
+
+  	[get_infobox(infobox_data), get_recordings(recordings)]
+  end
+
+  def self.get_infobox(data)
+  	%{{{infobox live show
+| artist = #{data[:artist]}
+| date = #{data[:date]}
+| venue = [[w:#{data[:venue]}|#{data[:venue]}]]
+| location = #{data[:location]}
+| venue_type = #{data[:venue_type]}
+| location = #{data[:location]}
+| venue_type = #{data[:venue_type]}
+| capacity = #{data[:capacity]}
+| lineup = #{data[:lineup]}
+| bands = #{data[:bands]}
+}}
+}
+  end
+
+  def self.get_recordings(data)
+  	out = "== Recordings ==\n"
+
+  	data.keys.each do |type|
+  		out += "\n=== #{type.to_s.ucfirst} ==="
+      out += "\n{{live recordings top" + (type == :unsurfaced ? "|unsurfaced=yes" : "") + "}}"
+
+  		data[type].each do |datum|
+  			out += "\n{{live recording|source=#{datum[:source]}|format=#{datum[:format]}|equipment=#{datum[:equipment]}|length=#{datum[:length]}|complete=#{datum[:complete]}"
+  			if [:circulating, :surfaced].include?(type)
+  				out += "|lowest_gen=#{datum[:lowest_gen]}|archive=#{datum[:archive]}"
+  			end
+  			out += "|notes=#{datum[:notes]}}}"
+  		end
+
+      out += "\n{{live recordings bottom}}\n"
+  	end
+
+  	out
+  end
+
+  def self.get_banter(banter_part)
+  	banter_part.sub!('<blockquote>', '{{banter|1=')
+  	banter_part.sub!('</blockquote>', '}}')
+  	banter_part.gsub!(/<\s*br\s\/?\s*>/, '')
+  	banter_part.gsub!(/\n+/, "\n")
+  	"\n== Banter ==\n" + banter_part
+  end
+
+  def self.get_notes(notes_part) #, songs)
+  	# songs.each do |song|
+  	# 	notes_part.gsub!(song, "\"#{song}\"")
+  	# end
+  	"\n=== Notes ===\n" + notes_part
+  end
+
+  def self.get_setlist(setlist_part)
+  	setlist_part.sub!("\n----\n", '')
   	new_setlist = ''
+  	songs = []
   	setlist_part.split("\n").each do |line|
-  		puts line
   		if line =~ /\s*(Set|Encore).*?:$/
-  			heading = "\n=== #{line.chomp('').chomp(':').downcase.ucfirst} ===\n"
+        heading_text = line.chomp('').chomp(':').downcase.ucfirst
+        next if heading_text == 'Set' # redundant
+
+  			heading = "\n=== #{heading_text} ===\n"
   			puts heading
   			new_setlist += heading
   			next
-		end
+		  end
 
-		if line =~ /^\*+ \(/
-			# Probably not a song
-			new_setlist += line + "\n"
-			next
-		end
+  		if line =~ /^\*+ \(/
+  			# Probably not a song
+  			new_setlist += line + "\n"
+  			next
+  		end
 
-		level = line.scan(/^\*+/).flatten.first.length
-		# input_song_name = line.scan(/\*[^\*]\s*(.*?)\s*([\[\n])/).flatten.first.to_s.chomp('')
-		input_song_name = line.scan(/\*[^\*]\s*(.*?)\s*(?:\[.*)?$/).flatten.first.to_s.chomp('')
-		page_title = nil
+  		level = line.scan(/^\*+/).flatten.first.length
+  		# input_song_name = line.scan(/\*[^\*]\s*(.*?)\s*([\[\n])/).flatten.first.to_s.chomp('')
+  		input_song_name = line.scan(/\*[^\*]\s*(.*?)\s*(?:\[.*)?$/).flatten.first.to_s.chomp('')
+  		page_title = nil
 
-		song_matches = get_song_matches(input_song_name)
-		if song_matches.length > 1
-			puts "\n____________MULTIPLE POSSIBLE SONGS__________________"
-			print 'song name? '
-			song_name = gets.chomp('')
-			print 'page title? '
-			page_title = gets.chomp('')
-			@local_storage['songs'][song_name.to_s] = page_title
-			binding.pry
-		elsif song_matches.length == 0
-			puts "\n________________NO SONGS FOUND__________________"
+  		song_matches = get_song_matches(input_song_name)
+  		if song_matches.length > 1
+  			puts "\n____________MULTIPLE POSSIBLE SONGS__________________ (#{input_song_name})"
+  			print 'song name? '
+  			song_name = gets.chomp('')
+  			print 'page title? '
+  			page_title = gets.chomp('')
+  			@local_storage['songs'][song_name.to_s] = page_title
+  		elsif song_matches.length == 0
+  			puts "\n________________NO SONGS FOUND__________________ (#{input_song_name})"
 
-			# Typo
-			print "Typo? (y/n)"
-			if 'y' == gets.chomp('')
-				print "Correct name: "
-				song_name = gets.chomp('')
-				page_title = @local_storage['songs'][song_name.to_s]
+  			print "Is a song? (y/n) "
+  			if 'n' == gets.chomp('')
+  				new_setlist += line + "\n"
+  				next
+  			end
 
-				unless page_title
-					print "Page title: "
-					page_title = gets.chomp('')
-					@local_storage['songs'][song_name.to_s] = page_title
-				end
+  			# Ask for fixes, just in case.
+  			print "Correct name: "
+  			song_name = gets.chomp('')
+  			page_title = @local_storage['songs'][song_name.to_s]
 
-				binding.pry
-				@local_storage['aliases'][input_song_name] = song_name
-				@mb.local_storage(@local_storage)
-			else
-				song_name = input_song_name
-			end
-		else
-			# Exact match.
-			song_name = song_matches.keys.first
-		end
+  			unless page_title
+  				print "Page title: "
+  				page_title = gets.chomp('')
+  				@local_storage['songs'][song_name.to_s] = page_title
+  			end
 
-		new_line = ('#' * level) + " {{live song|#{song_name}"
+  			# Save this alias, if needed.
+  			if input_song_name != song_name
+  				@local_storage['aliases'][input_song_name] = song_name
+  			end
 
-		# Song title
-		if page_title && song_name != page_title
-			new_line += "|title=#{page_title}"
-		end
+  			# Save!
+  			@mb.local_storage(@local_storage)
+		  else
+        # Exact match.
+        song_name = song_matches.keys.first
+		  end
 
-		# Tease?
-		if line.include?('(tease)')
-			line.sub!('(tease)', '')
-			new_line += "|tease=1"
-		end
+  		new_line = ('#' * level) + " {{live song|#{song_name}"
+  		songs << song_name
 
-		# Cover
-		cover = line.scan(/\[(.*?)\]/).flatten.first.to_s.chomp('')
-		if @local_storage['covers_aliases'][cover]
-			cover = @local_storage['covers_aliases'][cover]
-		end
-		if cover.present? && @local_storage['covers'].keys.include?(cover)
-			cover_wp = @local_storage['covers'][cover]
-			new_line += "|cover=[[w:#{cover_wp}|#{cover}]]"
-		elsif cover.present?
-			puts "\n____________UNKNOWN COVER:________________"
-			print "Artist (from input)? "
-			cover_artist = gets.chomp('')
-			print "Wikipedia article? "
-			artist_wp = gets.chomp('')
-			@local_storage['covers'][cover_artist.chomp('')] = artist_wp.chomp('')
-			binding.pry
-			@mb.local_storage(@local_storage)
-			new_line += "|cover=[[w:#{artist_wp}|#{cover_artist}]]"
-		end
+  		# Song title
+  		if page_title && song_name != page_title
+  			new_line += "|title=#{page_title}"
+  		end
 
-		# Notes
-		notes = line.scan(/\((.*?)\)$/).flatten.first.to_s.chomp('')
-		if notes.present?
-			new_line += "|notes=#{notes}"
-		end
-		new_line += "}}"
+  		# Tease?
+  		if line.include?('(tease)')
+  			line.sub!('(tease)', '')
+  			new_line += "|tease=1"
+  		end
 
-		puts new_line
+  		# Cover
+  		cover = line.scan(/\[(.*?)\]/).flatten.first.to_s.chomp('')
+  		if @local_storage['covers_aliases'][cover]
+  			cover = @local_storage['covers_aliases'][cover]
+  		end
+  		if cover.present? && @local_storage['covers'].keys.include?(cover)
+  			cover_wp = @local_storage['covers'][cover]
+  			new_line += "|cover=[[w:#{cover_wp}|#{cover}]]"
+  		# NOTE: intentionally trimming the song durations (which also use [] syntax), for now...
+  		elsif cover.present? && !cover =~ /(?:\d+)?:\d+(?:\d+)?/
+  			puts "\n____________UNKNOWN COVER:________________ (#{cover})"
+  			print "Artist (from input)? "
+  			cover_artist = gets.chomp('')
+  			print "Wikipedia article? "
+  			artist_wp = gets.chomp('')
+  			@local_storage['covers'][cover_artist.chomp('')] = artist_wp.chomp('')
+  			@mb.local_storage(@local_storage)
+  			new_line += "|cover=[[w:#{artist_wp}|#{cover_artist}]]"
+  		end
 
-		# Concat
-		new_setlist += new_line + "\n"
+  		# Notes
+  		notes = line.sub(song_name, '').scan(/\((.*?)\)/).flatten.first.to_s.chomp('')
+  		if notes.present?
+  			new_line += "|notes=#{notes}"
+  		end
+  		new_line += "}}"
+
+  		puts new_line
+
+  		# Concat
+  		new_setlist += new_line + "\n"
   	end
 
-  	binding.pry
+  	return new_setlist#, songs
   end
 
   def self.get_song_matches(input)
