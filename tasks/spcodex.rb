@@ -10,7 +10,7 @@ module SPCodex
   	@local_storage = @mb.local_storage
 
   	# import_show('The Smashing Pumpkins', '2008-10-31')
-  	import_show('The Smashing Pumpkins', '1993-10-26')
+  	import_show('The Smashing Pumpkins', '1994-02-25')
   end
 
   def self.import_show(artist, date)
@@ -28,6 +28,7 @@ module SPCodex
 	  	banter_part = parts[1].split(/=\s*Banter\s*=+/)[1].split(/^==/)[0]
 	  end
 
+    @infobox_data = {}
 	  infobox, recordings = get_infobox_and_recordings(splra_title)
 
     content = infobox
@@ -35,9 +36,22 @@ module SPCodex
 	  content += get_setlist(setlist_part)
 	  content += get_notes(notes_part)
     content += get_banter(banter_part)
+    content += get_images(splra_title)
     content += recordings
 
-  	binding.pry
+    binding.pry
+
+    if @infobox_data[:date].present? && @infobox_data[:location].present?
+      new_title = @infobox_data[:date] + " – " + @infobox_data[:location].gsub(/, US$/, '')
+      @mb.edit(new_title,
+        content: content,
+        summary: "Imported live show from http://www.splra.org/wiki/index.php?title=#{splra_title}"
+      )
+    else
+      binding.pry
+    end
+  rescue => e
+    binding.pry
   end
 
   def self.get_infobox_and_recordings(title)
@@ -63,17 +77,17 @@ module SPCodex
 				elsif label.include?('date')
 	  			infobox_data[:date] = @mb.parse_date(value).strftime('%B %-d, %Y')
 					next
+        elsif label.include?('type')
+          infobox_data[:venue_type] = value
+          next
 	  		elsif label.include?('venue')
 	  			infobox_data[:venue] = value
-					next
-	  		elsif label.include?('type')
-	  			infobox_data[:venue_type] = value
 					next
 				elsif label.include?('location')
 	  			infobox_data[:location] = value
 					next
 	  		elsif label.include?('capacity')
-	  			infobox_data[:capacity] = value.gsub(',', '')
+	  			infobox_data[:capacity] = value.sub('~', '').gsub(',', '')
 					next
 	  		elsif label.include?('lineup')
 	  			infobox_data[:lineup] = value
@@ -152,10 +166,14 @@ module SPCodex
       recordings[recordings_key] << new_rec_data
     end
 
+    @infobox_data = infobox_data
+
   	[get_infobox(infobox_data), get_recordings(recordings)]
   end
 
   def self.get_infobox(data)
+    coords = get_coorindates(data[:venue])
+
   	%{{{infobox live show
 | artist = #{data[:artist]}
 | date = #{data[:date]}
@@ -163,12 +181,25 @@ module SPCodex
 | location = #{data[:location]}
 | venue_type = #{data[:venue_type]}
 | location = #{data[:location]}
-| venue_type = #{data[:venue_type]}
+| lat = #{coords.present? ? coords[:lat] : ''}
+| lng = #{coords.present? ? coords[:lng] : ''}
 | capacity = #{data[:capacity]}
 | lineup = #{data[:lineup]}
 | bands = #{data[:bands]}
 }}
 }
+  end
+
+  def self.get_coorindates(venue)
+    ret = HTTParty.get("https://en.wikipedia.org/w/api.php?action=query&prop=coordinates&titles=#{venue}&redirects=1&format=json&formatversion=2")
+
+    return nil unless ret['query']['pages'][0] && ret['query']['pages'][0]['coordinates']
+    coords = ret['query']['pages'][0]['coordinates'][0]
+
+    {
+      lat: coords['lat'],
+      lng: coords['lon']
+    }
   end
 
   def self.get_recordings(data)
@@ -195,8 +226,17 @@ module SPCodex
   def self.get_banter(banter_part)
   	banter_part.sub!('<blockquote>', '{{banter|1=')
   	banter_part.sub!('</blockquote>', '}}')
-  	banter_part.gsub!(/<\s*br\s\/?\s*>/, '')
+  	banter_part.gsub!(/<\s*br\s*\/?\s*>/, '')
   	banter_part.gsub!(/\n+/, "\n")
+    banter_part.scan(/<b>(.*?)<\/b>/m).flatten.each do |part|
+      new_part = ''
+      part.split("\n").each do |song|
+        new_part += "'''#{song}'''\n"
+      end
+      banter_part.sub!(part, new_part)
+    end
+    banter_part.gsub!(/<\/?b>/, '')
+    banter_part.gsub!(/\n+/, "\n")
   	"\n== Banter ==\n" + banter_part
   end
 
@@ -204,7 +244,7 @@ module SPCodex
   	# songs.each do |song|
   	# 	notes_part.gsub!(song, "\"#{song}\"")
   	# end
-  	"\n=== Notes ===\n" + notes_part
+  	"\n=== Notes ===\n" + notes_part.chomp('') + "\n"
   end
 
   def self.get_setlist(setlist_part)
@@ -222,15 +262,17 @@ module SPCodex
   			next
 		  end
 
+      level = line.scan(/^\*+/).flatten.first.length
+
   		if line =~ /^\*+ \(/
   			# Probably not a song
-  			new_setlist += line + "\n"
+  			new_setlist += line.gsub(/^\*+/, '#' * level) + "\n"
   			next
   		end
 
-  		level = line.scan(/^\*+/).flatten.first.length
   		# input_song_name = line.scan(/\*[^\*]\s*(.*?)\s*([\[\n])/).flatten.first.to_s.chomp('')
   		input_song_name = line.scan(/\*[^\*]\s*(.*?)\s*(?:\[.*)?$/).flatten.first.to_s.chomp('')
+        .sub(' (tease)', '')
   		page_title = nil
 
   		song_matches = get_song_matches(input_song_name)
@@ -307,10 +349,16 @@ module SPCodex
   			new_line += "|cover=[[w:#{artist_wp}|#{cover_artist}]]"
   		end
 
-  		# Notes
-  		notes = line.sub(song_name, '').scan(/\((.*?)\)/).flatten.first.to_s.chomp('')
-  		if notes.present?
-  			new_line += "|notes=#{notes}"
+      # Length
+      length = line.scan(/\[(\d+:\d+)\]/).flatten.first
+      if length
+        new_line += "|length=#{length}"
+      end
+
+  		# Note
+  		note = line.sub(song_name, '').scan(/\((.*?)\)/).flatten.first.to_s.chomp('')
+  		if note.present?
+  			new_line += "|note=#{note}"
   		end
   		new_line += "}}"
 
@@ -357,6 +405,12 @@ module SPCodex
   	"#{prefix}#{date}"
   end
 
+  def self.get_images(page)
+    images = import_images(page)
+    return '' unless images.present?
+    "\n== Photos and memorabilia ==\n<gallery mode=\"packed\">\n#{images.join("\n")}\n</gallery>\n\n"
+  end
+
   def self.import_images(page)
   	ret = HTTParty.get("http://www.splra.org/wiki/api.php?action=query&prop=images&titles=#{page}&imlimit=500&format=json")
   	page_id = ret['query']['pages'].keys[0]
@@ -377,6 +431,8 @@ module SPCodex
   			'comment' => "Imported from #{source_file_url}"
   		)
   	end
+
+    images
   rescue => e
   	binding.pry
   end
