@@ -26,6 +26,9 @@ module AutopatrolledCandidates
       # not sure how this happens
       next if username.nil?
 
+      # Skip vanished users
+      next if username.downcase.include?('vanished user')
+
       articles = articles_created(actor_id)
 
       # Make sure there are some articles created in the past month. Querying recent changes (30 days of data)
@@ -101,7 +104,7 @@ module AutopatrolledCandidates
     users.each do |username, data|
       user_rights_log = "https://en.wikipedia.org/w/index.php?title=Special:Log&page=User:#{username.score}&type=rights"
       block_log = "https://en.wikipedia.org/w/index.php?title=Special:Log&action=view&page=#{username.score}&type=block"
-      xtools_link = "[https://tools.wmflabs.org/xtools/pages/?user=#{URI.escape(username)}" \
+      xtools_link = "[https://xtools.wmflabs.org/pages/?user=#{URI.escape(username)}" \
         "&project=en.wikipedia.org&namespace=0&redirects=noredirects {{FORMATNUM:#{data[:created]}}}]"
 
       deleted_str = '0'
@@ -134,8 +137,8 @@ module AutopatrolledCandidates
 
       links = [
         "[[Special:UserRights/#{username}|User rights]]",
-        "[https://tools.wmflabs.org/xtools-ec/?user=#{URI.encode(username)}&project=en.wikipedia.org EC]",
-        "[https://tools.wmflabs.org/musikanimal/blp_edits?username=#{URI.encode(username)}&offset=0&contribs=on BLP edits]"
+        "[https://xtools.wmflabs.org/ec/en.wikipedia.org?user=#{URI.encode(username)} EC]",
+        "[https://xtools.wmflabs.org/categoryedits/en.wikipedia.org?username=#{URI.encode(username)}&categories=Living_people BLP edits]"
       ].join(' &middot; ')
 
       markup += <<~END
