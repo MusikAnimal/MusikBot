@@ -109,6 +109,7 @@ module FixPP
 
   def self.fix_pp
     get_category_members.each do |page|
+      next if page =~ /\.(js|css|json)$/
       page_obj = get_protect_info(page).first
 
       if page_obj.elements['revisions'][0].attributes['user'] == 'MusikBot'
