@@ -77,7 +77,7 @@ module TAFIDaily
 
       section.gsub!(/\n==[^=].*/m, '')
 
-      timestamps = section.scan(/(?<!&lt;!-- mbdate --&gt; )\d\d:\d\d.*\d{4} \(UTC\)/)
+      timestamps = section.scan(/(?<!\<!-- mbdate --\> )\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)/)
       newest_timestamp = @mb.parse_date(timestamps.min { |a, b| @mb.parse_date(b) <=> @mb.parse_date(a) })
       next unless newest_timestamp
 
