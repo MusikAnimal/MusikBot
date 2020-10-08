@@ -9,17 +9,154 @@ module SPCodex
   	@mb = MusikBot::Session.new(inspect)
   	@local_storage = @mb.local_storage
 
-    # purge_template_uses('Template:Infobox song')
+    import_show('The Smashing Pumpkins', '2019-08-08', 'Summer 2019', '')
 
-    @original_title = '1992-11-21'
-    import_show('The Smashing Pumpkins', @original_title, '')
+    # (1995..2000).each do |year|
+    #   old_content = @mb.get("The Smashing Pumpkins #{year} tour history")
+    #   new_content = "{{year tour history intro|#{year}}}"
+    #   @mb.edit("The Smashing Pumpkins #{year} tour history",
+    #     content: old_content.sub("{{tour history", "#{new_content}\n\n{{tour history"),
+    #     summary: 'Adding content to year tour page'
+    #   )
+    # end
+
+#     (2008..2017).each do |year|
+#       content = %{{{main|Billy Corgan tour history}}
+# {{infobox tour
+# | year = #{year}
+# | artist = Billy Corgan
+# | prev_year = #{year - 1}
+# | next_year = #{year + 1}
+# }}
+
+# {{year tour history intro|#{year}|artist=Billy Corgan}}
+
+# {{tour history|artist=Billy Corgan|year=#{year}}}
+# }
+#       @mb.edit("Billy Corgan #{year} tour history",
+#         content: content,
+#         summary: "Creating tour history page for the year #{year}"
+#       )
+#     end
   end
 
-  def self.import_show(artist, date, tour)
+  def self.festival_fixes
+    categories = @mb.gateway.custom_query(
+      list: 'categorymembers',
+      cmtitle: 'Category:Live performances by festival',
+      cmprop: 'title',
+      cmlimit: 5000
+    )[0].to_a.collect { |s| s['title'] }
+
+    categories.each do |category|
+      festival = category.gsub(/^Category:/, '')
+      pages = @mb.gateway.custom_query(
+        list: 'categorymembers',
+        cmtitle: category,
+        cmprop: 'title',
+        cmlimit: 5000
+      )[0].to_a.collect { |s| s['title'] }
+
+      puts "#{category} (#{pages.length})"
+
+      pages.each do |page|
+        puts "  > #{page}"
+        content = @mb.get(page)
+        next if content.include?("| festival = ")
+        content.sub!('| location =', "| festival = #{festival}\n| location =")
+        content.sub!("[[#{category}]]", '')
+        content.chomp!('')
+
+        notes = content.scan(/\| notes = (.*)\n/).flatten.first
+        puts notes
+        # content.gsub!(/\| notes = .*?\n/, "| notes = \n")
+
+        binding.pry if notes.present?
+        @mb.edit(page,
+          content: content,
+          summary: "Tagging festival=#{festival} in infobox"
+        )
+      end
+    end
+  end
+
+  ARTIST_MAP = {
+    'Aronoff' => 'Kenny Aronoff',
+    'Auf der Maur' => 'Melissa Auf der Maur',
+    'Bates' => 'Jack Bates',
+    'Bowie' => 'David Bowie',
+    'Bradley' => 'Stephen Bradley',
+    'Byrne' => 'Mike Byrne',
+    'Carlos' => 'Bun E. Carlos',
+    'Chamberlin' => 'Jimmy Chamberlin',
+    'Cole' => 'Katie Cole',
+    'Corgan' => 'Billy Corgan',
+    'Fiorentino' => 'Nicole Fiorentino',
+    'Flemion' => 'Dennis Flemion',
+    'Garson' => 'Mike Garson',
+    'Harriton' => 'Lisa Harriton',
+    'Hodges' => 'Stephen Hodges',
+    'Holmes' => 'Chris Holmes',
+    'Iha' => 'James Iha',
+    'Lenchantin' => 'Paz Lenchantin',
+    'McNair' => 'Gabrial McNair',
+    'Melvoin' => 'Jonathan Melvoin',
+    'Navarro' => 'Dave Navarro',
+    # 'Morris' => 'Dan Morris',
+    'Nielsen' => 'Rick Nielsen',
+    'Petersson' => 'Tom Petersson',
+    'Pajo' => 'David Pajo',
+    'Pooley' => 'Kristopher Pooley',
+    'Remschneider' => 'Eric Remschneider',
+    'Reyes' => 'Ginger Pooley',
+    'Schroeder' => 'Jeff Schroeder',
+    'Shankar' => 'Gingger Shankar',
+    'Spevack' => 'Ysanne Spevack',
+    'Stoermer' => 'Mark Stoermer',
+    'Strawberry' => 'Linda Strawberry',
+    'Swan' => 'Sierra Swan',
+    'Sweeney' => 'Matt Sweeney',
+    'Tulin' => 'Mark Tulin',
+    'Walker' => 'Matt Walker',
+    'Wilk' => 'Brad Wilk',
+    'Wretzky' => "D'arcy Wretzky",
+    'Yemchuk' => 'Yelena Yemchuk',
+    'Zander' => 'Robin Zander',
+    'Lisegang' => 'Brian Liesegang',
+    'Weitz' => 'Mark Weitz',
+    'Dippold' => 'Kevin Dippold',
+    'others' => 'others',
+    # Temporary
+    # 'Murphy' => 'Peter Murphy',
+    # 'Ash' => 'Daniel Ash',
+    # 'Haskins' => 'Kevin Haskins'
+    # 'Tremulis' => 'Nicholas Tremulis'
+    # 'Middleton' => 'Neal Middleton',
+    # 'Richards' => 'Taylor Richards',
+    # 'Smith' => 'Jake Smith',
+    # 'Harding' => 'Chris Harding',
+    # 'Sumner' => 'Bernard Sumner',
+    # 'Hook' => 'Peter Hook',
+    # 'Morris' => 'Stephen Morris',
+    # 'Cunningham' => 'Phil Cunningham',
+    'Brown' => 'Kerry Brown',
+  }
+
+  def self.import_show(artist, date, tour, festival, opts = {})
   	splra_title = splra_title(artist, date)
   	old_wikitext = @mb.get(splra_title)
+    old_wikitext.gsub!(/Thirty\-three/, 'Thirty-Three')
+    old_wikitext.sub!('Jesus, I [Lyte]', 'Jesus, I [traditional]')
+
+    # @intro = ''
+    # if old_wikitext.include?('* In Plainsong: An Acoustic-Electro Evening')
+    #   old_wikitext.sub!("* In Plainsong: An Acoustic-Electro Evening\n", '')
+    #   @intro = "''[[In Plainsong tour|In Plainsong]]: An Acoustic-Electro Evening''."
+    # end
+
 
   	parts = old_wikitext.split(/==\s*Setlist\s*==/i)
+    @songs = []
 
   	setlist_part = parts[1].split('==')[0]
   	if parts[1] =~ /\=\s*Notes/i
@@ -30,23 +167,41 @@ module SPCodex
 	  end
 
     @infobox_data = {}
-	  infobox, recordings = get_infobox_and_recordings(splra_title, tour)
+	  infobox, recordings = get_infobox_and_recordings(splra_title, tour, festival)
 
     content = infobox
+    
+    if @intro.present?
+      content += "\n#{@intro}\n"
+    end
+
 	  content += "\n== Setlist ==\n"
     setlist_content = get_setlist(setlist_part)
 	  content += setlist_content
 	  content += get_notes(notes_part)
-    content += recordings
+    # content += recordings
     content += get_banter(banter_part)
     content += get_images(splra_title)
 
+    if @poster.present?
+      content.sub!("}}\n\n== Setlist", "| poster = #{@poster.sub('File:', '')}\n}}\n\n== Setlist")
+    end
+
+    # Extra categories
+    categories = []
     if setlist_content == "(unknown)\n"
-      content = content.chomp('') + "\n\n[[Category:Live performances with missing setlists]]"
+      categories << "[[Category:Live performances with missing setlists]]"
+    end
+    if opts[:tv]
+      categories << '[[Category:Televised live performances]]'
+    end
+    if categories.present?
+      content = content.chomp('') + "\n\n" + categories.join("\n")
     end
 
     if @infobox_data[:date].present? && @infobox_data[:location].present?
-      new_title = @infobox_data[:date] + " – " + @infobox_data[:location]
+      new_title = artist + " " + date #@infobox_data[:date] + " – " + @infobox_data[:location]
+
       @mb.edit(splra_title,
         content: content,
         summary: "Converting to new syntax; Original URL http://www.splra.org/wiki/index.php?title=#{splra_title}"
@@ -62,8 +217,8 @@ module SPCodex
     binding.pry
   end
 
-  def self.get_infobox_and_recordings(title, tour)
-  	table = Nokogiri::HTML(open("http://www.splra.org/wiki/index.php?title=#{title}")).css('table')[0]
+  def self.get_infobox_and_recordings(title, tour, festival)
+  	table = Nokogiri::HTML(open("https://spcodex.wiki/w/index.php?title=#{title}")).css('table')[0]
 
   	infobox_data = {}
   	infobox_completed = false
@@ -84,28 +239,43 @@ module SPCodex
 					next
 				elsif label.include?('date')
           parsed_date = value.scan(/\d{4}-\d+-\d+/).first
-	  			infobox_data[:date] = 'September 1992' #@mb.parse_date(parsed_date).strftime('%B %-d, %Y')
+	  			infobox_data[:date] = @mb.parse_date(parsed_date).strftime('%B %-d, %Y')
 					next
         elsif label.include?('type')
           infobox_data[:venue_type] = value
           next
 	  		elsif label.include?('venue')
           value = 'Whisky a Go Go' if value == 'Whisky Á Go-Go'
+          value = "[[Madame ZuZu's]]" if value == "Madame Zuzu's"
+          value = '' if value.include?('unknown venue')
 	  			infobox_data[:venue] = value
 					next
 				elsif label.include?('location')
 	  			infobox_data[:location] = value
 					next
 	  		elsif label.include?('capacity')
-	  			infobox_data[:capacity] = value.sub('~', '').gsub(',', '')
+	  			infobox_data[:capacity] = value.sub('~', '').gsub(/[,\.]/, '')
 					next
 	  		elsif label.include?('lineup')
-	  			infobox_data[:lineup] = value
+          new_lineup = []
+          value.split(',').each do |v|
+            v.strip!
+            if ARTIST_MAP[v]
+              new_lineup << ARTIST_MAP[v]
+            else
+              binding.pry
+            end
+          end
+          new_lineup = new_lineup.join(', ')
+          new_lineup.sub!('Dennis Flemion, Dennis Flemion', 'Dennis Flemion, Jimmy Flemion')
+	  			infobox_data[:lineup] = new_lineup
 					next
 	  		elsif label.include?('order of bands')
           if value.include?('Smashing Pumpkins') && !value.include?('The Smashing Pumpkins')
             value.sub!('Smashing Pumpkins', 'The Smashing Pumpkins')
           end
+          value.sub!('Smashing  Pumpkins', 'Smashing Pumpkins')
+          value.gsub!(/\[?(…|\.\.\.)\]?/, 'others, ')
 	  			infobox_data[:bands] = value
 					next
 	  		else
@@ -119,77 +289,78 @@ module SPCodex
         new_rec_data = {}
       end
 
-      if new_rec_data.blank? && tr.to_s.include?('#fff9de') && label =~ /\w+ #\d+/
-        new_rec_data[:id] = label.upcase
-      end
+   #    if new_rec_data.blank? && tr.to_s.include?('#fff9de') && label =~ /\w+ #\d+/
+   #      new_rec_data[:id] = label.upcase
+   #    end
 
-			# Recording info: first detect when we first hit recording info
-      if label.include?('unsurfaced record')
-        puts "  cleared unsurfaced"
-        recordings_key = :unsurfaced
-        recordings[:unsurfaced] = []
-        next
-			elsif label.include?('surfaced record')
-        puts "  cleared surfaced"
-				recordings_key = :surfaced
-				recordings[:surfaced] = []
-        next
-			elsif label.include?('circulating recording')
-        puts "  cleared circulating"
-				recordings_key = :circulating
-				recordings[:circulating] = []
-        next
-			end
+			# # Recording info: first detect when we first hit recording info
+   #    if label.include?('unsurfaced record')
+   #      puts "  cleared unsurfaced"
+   #      recordings_key = :unsurfaced
+   #      recordings[:unsurfaced] = []
+   #      next
+			# elsif label.include?('surfaced record')
+   #      puts "  cleared surfaced"
+			# 	recordings_key = :surfaced
+			# 	recordings[:surfaced] = []
+   #      next
+			# elsif label.include?('circulating recording')
+   #      puts "  cleared circulating"
+			# 	recordings_key = :circulating
+			# 	recordings[:circulating] = []
+   #      next
+			# end
 
-			value = '' if value.downcase == 'unknown'
+			# value = '' if value.downcase == 'unknown'
 
-			if label.include?('source')
-        new_rec_data[:source] = value
-        next
-			elsif label.include?('format')
-				new_rec_data[:format] = value
-        next
-			elsif label.include?('equipment')
-				new_rec_data[:equipment] = value
-        next
-			elsif label.include?('length')
-        if value.blank?
-          new_rec_data[:length] = ''
-        else
-  				mins = value.scan(/\d+/).flatten.first.to_i
-          mod = mins % 60
-    			new_rec_data[:length] = "#{mins / 60}:#{mod < 10 ? '0' + mod.to_s : mod}:00"
-        end
-        next
-			elsif label.include?('complete')
-				new_rec_data[:complete] = value
-        next
-			elsif label.include?('lowest')
-				new_rec_data[:lowest_gen] = value
-        next
-			elsif label.include?('archive')
-        uri = URI.extract(tr.css('td').to_s).first rescue nil
-        if uri.present?
-          new_rec_data[:archive] = "[#{uri} #{value}]"
-        end
-        next
-			elsif label.include?('notes')
-				new_rec_data[:notes] = value
-        next
-      elsif label.include?('Video')
-        puts "--- VIDEO LINK ---"
-        new_rec_data[:notes] += "; #{value}"
-			end
+			# if label.include?('source')
+   #      new_rec_data[:source] = value
+   #      next
+			# elsif label.include?('format')
+			# 	new_rec_data[:format] = value
+   #      next
+			# elsif label.include?('equipment')
+			# 	new_rec_data[:equipment] = value
+   #      next
+			# elsif label.include?('length')
+   #      if value.blank?
+   #        new_rec_data[:length] = ''
+   #      else
+  	# 			mins = value.scan(/\d+/).flatten.first.to_i
+   #        mod = mins % 60
+   #  			new_rec_data[:length] = "#{mins / 60}:#{mod < 10 ? '0' + mod.to_s : mod}:00"
+   #      end
+   #      next
+			# elsif label.include?('complete')
+			# 	new_rec_data[:complete] = value
+   #      next
+			# elsif label.include?('lowest')
+			# 	new_rec_data[:lowest_gen] = value
+   #      next
+			# elsif label.include?('archive')
+   #      uri = URI.extract(tr.css('td').to_s).first rescue nil
+   #      if uri.present?
+   #        new_rec_data[:archive] = "[#{uri} #{value}]"
+   #      end
+   #      next
+			# elsif label.include?('notes')
+			# 	new_rec_data[:notes] = value
+   #      next
+   #    elsif label.include?('video')
+   #      puts "--- VIDEO LINK ---"
+   #      new_rec_data[:notes] = (new_rec_data[:notes] || '') + "; #{value}"
+			# end
   	end
 
-    if new_rec_data.present?
-      recordings[recordings_key] << new_rec_data
-    end
+    # if new_rec_data.present?
+    #   recordings[recordings_key] << new_rec_data
+    # end
 
     infobox_data[:tour] = tour
+    infobox_data[:festival] = festival
     @infobox_data = infobox_data
 
-  	[get_infobox(infobox_data), get_recordings(recordings)]
+  	[get_infobox(infobox_data), '']
   end
 
   def self.get_infobox(data)
@@ -210,13 +381,31 @@ module SPCodex
         lat: known_venue[:lat],
         lng: known_venue[:lng]
       }
-    else
-      coords = get_coorindates(data[:venue])
+    elsif data[:venue].present?
+      coords = get_coordinates(data[:venue])
       venue = coords.present? ? "[[w:#{data[:venue]}|#{data[:venue]}]]" : data[:venue]
+    else
+      venue = ''
+    end
+
+    if data[:artist].include?('featuring')
+      artist, featuring = data[:artist].scan(/(.*?) \(featuring (.*?)\)/).flatten
+      if ['Billy Corgan'].include?(featuring)
+        artist = "#{artist}\n| featuring_artist = #{featuring}"
+      else
+        binding.pry
+      end
+    else
+      artist = data[:artist]
+    end
+
+    festival = ''
+    if data[:festival].present?
+      festival = "\n| festival = #{data[:festival]}"
     end
 
   	%{{{infobox live show
-| artist = #{data[:artist]}
+| artist = #{artist}
 | date = #{data[:date]}
 | venue = #{venue}
 | location = #{data[:location]}
@@ -224,15 +413,15 @@ module SPCodex
 | lat = #{coords.present? ? coords[:lat] : ''}
 | lng = #{coords.present? ? coords[:lng] : ''}
 | capacity = #{data[:capacity]}
-| lineup = #{data[:lineup]}
+| personnel = #{data[:lineup]}
 | bands = #{data[:bands]}
-| tour = #{data[:tour]}
+| tour = #{data[:tour]}#{festival}
 }}
 }
   end
 
-  def self.get_coorindates(venue)
-    ret = HTTParty.get("https://en.wikipedia.org/w/api.php?action=query&prop=coordinates&titles=#{venue}&redirects=1&format=json&formatversion=2")
+  def self.get_coordinates(venue)
+    ret = HTTParty.get("https://en.wikipedia.org/w/api.php?action=query&prop=coordinates&titles=#{URI.escape(venue)}&redirects=1&format=json&formatversion=2")
 
     return nil unless ret['query']['pages'][0] && ret['query']['pages'][0]['coordinates']
     coords = ret['query']['pages'][0]['coordinates'][0]
@@ -278,11 +467,11 @@ module SPCodex
   end
 
   def self.get_banter(banter_part)
-    if banter_part.include?('(unknown)')
+    if banter_part.blank? || banter_part.downcase.include?('(unknown)')
       return "\n== Banter ==\n(unknown)\n"
     end
   	banter_part.sub!('<blockquote>', '{{banter|1=')
-  	banter_part.sub!('</blockquote>', '}}')
+  	banter_part.sub!(/(.*)<\/blockquote>/, '\1}}')
   	banter_part.gsub!(/<\s*br\s*\/?\s*>/i, '')
   	banter_part.gsub!(/\n+/, "\n")
     banter_part.scan(/<b>(.*?)<\/b>/im).flatten.each do |part|
@@ -294,14 +483,25 @@ module SPCodex
     end
     banter_part.gsub!(/<\/?b>/, '')
     banter_part.gsub!(/\n+/, "\n")
+    banter_part.gsub!(/^\s+\n+/m, "\n")
   	"\n== Banter ==\n" + banter_part
   end
 
-  def self.get_notes(notes_part) #, songs)
-  	# songs.each do |song|
-  	# 	notes_part.gsub!(song, "\"#{song}\"")
-  	# end
+  def self.get_notes(notes_part)
   	return '' if notes_part.nil? || notes_part.empty?
+    notes_part.sub!(/the frogs/i, '[[The Frogs]]')
+    notes_part.sub!(/Billy/, "[[Billy Corgan]]")
+    notes_part.sub!(/James/, "[[James Iha]]")
+    notes_part.sub!(/Jimmy/, "[[Jimmy Chamberlin]]")
+    notes_part.sub!(/Jeff/, "[[Jeff Schroeder]]")
+    notes_part.sub!(/Lisa/, "[[Lisa Harriton]]")
+
+    @songs.uniq.each do |song|
+      notes_part.gsub!(/#{Regexp.escape(song)}/i, "\"#{song}\"")
+    end
+
+    notes_part.gsub!(/(\d{4}-\d{2}-\d{2})/, "[[The Smashing Pumpkins \\1|\\1]]")
+
     "\n=== Notes ===\n" + notes_part.chomp('') + "\n"
   end
 
@@ -309,22 +509,26 @@ module SPCodex
   	setlist_part.sub!("\n----\n", '')
   	new_setlist = ''
   	songs = []
-  	setlist_part.split("\n").each do |line|
-      binding.pry
-  		if line =~ /\s*(Set|Encore|Soundcheck).*?:$/
-        heading_text = line.chomp('').chomp(':').downcase.ucfirst
-        next if heading_text == 'Set' # redundant
+    soundcheck = false
 
+  	setlist_part.split("\n").each_with_index do |line, i|
+  		if line =~ /\s*(Set|Encore|Soundcheck).*?:?\s*$/
+        heading_text = line.chomp('').strip.chomp(':').downcase.ucfirst
+        next if heading_text == 'Set' && i == 0 # redundant
+
+        soundcheck = heading_text.downcase.include?('soundcheck')
   			heading = "\n=== #{heading_text} ===\n"
   			puts heading
   			new_setlist += heading
   			next
 		  end
 
-      binidng.pry
+      next if line.blank? || line.scan(/^\*+/).flatten.first.blank?
+
+      # binding.pry
       level = line.scan(/^\*+/).flatten.first.length
 
-  		if line =~ /^\*+ \(/
+  		if line =~ /^\*+ \(.*?\)$/
   			# Probably not a song
   			new_setlist += line.gsub(/^\*+/, '#' * level) + "\n"
   			next
@@ -333,6 +537,7 @@ module SPCodex
   		# input_song_name = line.scan(/\*[^\*]\s*(.*?)\s*([\[\n])/).flatten.first.to_s.chomp('')
   		input_song_name = line.scan(/\*[^\*]\s*(.*?)\s*(?:\[.*)?$/).flatten.first.to_s.chomp('')
         .sub(' (tease)', '')
+        .sub(' (over PA)', '')
   		page_title = nil
 
   		song_matches = get_song_matches(input_song_name)
@@ -367,7 +572,7 @@ module SPCodex
   			end
 
   			# Save this alias, if needed.
-  			if input_song_name != song_name
+  			if input_song_name.to_s != song_name.to_s
   				@local_storage['aliases'][input_song_name] = song_name
   			end
 
@@ -376,14 +581,17 @@ module SPCodex
 		  else
         # Exact match.
         song_name = song_matches.keys.first
+        page_title = song_matches[song_name]
+        line.sub!(input_song_name, song_name)
 		  end
 
-  		new_line = ('#' * level) + " {{live song|#{song_name}"
+      page_title = song_name if page_title.nil?
+  		new_line = ('#' * level) + " {{live song|#{page_title}"
   		songs << song_name
 
   		# Song title
-  		if page_title && song_name != page_title
-  			new_line += "|title=#{page_title}"
+  		if page_title && song_name.to_s != page_title.to_s
+  			new_line += "|title=#{song_name}"
   		end
 
   		# Tease?
@@ -392,14 +600,35 @@ module SPCodex
   			new_line += "|tease=1"
   		end
 
+      # Abandoned?
+      if line.include?('(abandoned)')
+        line.sub!('(abandoned)', '')
+        new_line += "|abandoned=1"
+      end
+
   		# Cover
-  		cover = line.scan(/\[(.*?)\]/).flatten.first.to_s.chomp('')
+  		cover = line.scan(/\[(.*?)\]/).flatten.first.to_s.chomp('').sub('#', '')
   		if @local_storage['covers_aliases'][cover]
   			cover = @local_storage['covers_aliases'][cover]
   		end
   		if cover.present? && @local_storage['covers'].keys.include?(cover)
   			cover_wp = @local_storage['covers'][cover]
-  			new_line += "|cover=[[w:#{cover_wp}|#{cover}]]"
+
+        if cover_wp == 'traditional'
+          new_line_part = "|cover=traditional"
+        elsif cover_wp.include?('|')
+          new_line_part = "|cover=[[w:#{cover_wp}"
+          unless cover_wp.include?('Lonnie Chatmon')
+            new_line_part += ']]'
+          end
+        else
+          new_line_part = "|cover=[[w:#{cover_wp}|#{cover}]]"
+        end
+
+        new_line_part.sub!('|Washington/Harline', '')
+        new_line_part.sub!('|Harburg/Arlen', '')
+        new_line_part.sub!('|Hill/Hill/Coleman', '')
+  			new_line += new_line_part
   		elsif cover.present? && !(cover =~ /^\d+:\d+$/)
   			puts "\n____________UNKNOWN COVER:________________ (#{cover})"
   			print "Artist (from input)? "
@@ -408,7 +637,7 @@ module SPCodex
   			artist_wp = gets.chomp('')
   			@local_storage['covers'][cover_artist.chomp('')] = artist_wp.chomp('')
   			@mb.local_storage(@local_storage)
-  			new_line += "|cover=[[w:#{artist_wp}|#{cover_artist}]]"
+        new_line += "|cover=[[w:#{artist_wp}|#{cover_artist}]]"
   		end
 
       # Length
@@ -422,7 +651,13 @@ module SPCodex
   		if note.present?
   			new_line += "|note=#{note}"
   		end
-  		new_line += "}}"
+
+      # Soundcheck
+      if soundcheck
+        new_line += "|soundcheck=1"
+      end
+
+      new_line += "}}"
 
   		puts new_line
 
@@ -433,6 +668,8 @@ module SPCodex
     if songs.empty?
       return "(unknown)\n"
     end
+
+    @songs = songs
 
   	return new_setlist#, songs
   end
@@ -456,7 +693,7 @@ module SPCodex
   end
 
   def self.splra_title(artist, date)
-  	prefix = if artist == 'The Smashing Pumpkins'
+  	prefix = if (artist == 'The Smashing Pumpkins' || artist === 'Catherine')
   		'Tsp'
   	elsif artist == 'James Iha'
   		'Ji'
@@ -472,8 +709,13 @@ module SPCodex
   end
 
   def self.get_images(page)
+    @poster = nil
     images = import_images(page)
     return '' unless images.present?
+    posters = images.select { |i| i.downcase.include?('poster') }
+    if posters.length == 1
+      @poster = posters.first
+    end
     "\n== Photos and memorabilia ==\n{{live show gallery|\n#{images.join("\n")}\n}}\n\n"
   end
 
@@ -486,6 +728,7 @@ module SPCodex
   	url_ret = HTTParty.get("http://www.splra.org/wiki/api.php?action=query&titles=#{images.join('|')}&prop=imageinfo&iiprop=url&format=json")
   	ids = url_ret['query']['pages'].keys
   	ids.each do |id|
+      next if id.to_i < 0
   		url = url_ret['query']['pages'][id]['imageinfo'][0]['url']
   		source_file_url = url_ret['query']['pages'][id]['imageinfo'][0]['descriptionurl']
   		title = URI.decode(url.split('/').last)
@@ -495,13 +738,57 @@ module SPCodex
   			nil,
   			'filename' => title,
   			'url' => url,
-  			'comment' => "Imported from #{source_file_url}"
+  			'comment' => "Imported from #{source_file_url}",
+        # 'ignorewarnings' => true
   		)
   	end
 
     images
   rescue => e
   	binding.pry
+  end
+
+  def self.normalize_live_show_titles
+    titles = @mb.gateway.custom_query(
+      list: 'categorymembers',
+      cmtitle: 'Category:Live performances',
+      cmprop: 'title',
+      cmtype: 'page',
+      cmlimit: 5000
+    )[0].to_a.collect { |s| s['title'] }
+
+    titles.each do |title|
+      next if title.include?('The Smashing Pumpkins') || title.include?('Starchildren')
+      puts title
+      date_str = title.split('–')[0]
+
+      if date_str =~ /\w+\s\d+,\s\d{4}/
+        date = @mb.parse_date(date_str).strftime('%Y-%m-%d')
+        new_title = "The Smashing Pumpkins #{date}"
+      else
+        binding.pry
+      end
+
+      # Check for backlinks
+      redirects = @mb.gateway.custom_query(
+        prop: 'redirects',
+        rdprop: 'title',
+        titles: title
+      )[0][0][0].to_a.collect { |s| s['title'] }
+
+      delete_redir = false
+
+      if redirects.any?
+        binding.pry
+      else
+        delete_redir = true
+      end
+
+      @mb.gateway.move(title, new_title,
+        movetalk: true,
+        noredirect: delete_redir
+      )
+    end
   end
 
   def self.add_availability
@@ -786,17 +1073,6 @@ module SPCodex
 		)
 		binding.pry
   	end
-  end
-
-  def self.delink_cats(page)
-  	content = @mb.get(page, rvsection: 0)
-
-  	content.gsub!(/\[\[:Category:Songs (?:produced|written) by .*?\|(.*?)\]\]/, '\1')
-  	@mb.edit(page,
-  		content: content,
-  		section: 0,
-  		summary: 'Delinking categories in infoboxes'
-  	)
   end
 
   def self.upload_image(page)
