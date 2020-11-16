@@ -666,7 +666,7 @@ module WishlistSurvey
 
       # Write new translation, replacing the old year with new one.
       @mb.edit(new_title,
-        content: translation.tr(last_year, this_year),
+        content: translation.sub(last_year, this_year),
         summary: "Importing translations from last year's survey"
       )
     end
@@ -674,16 +674,21 @@ module WishlistSurvey
 
   def self.get_old_participants
     @mb = MusikBot::Session.new(inspect)
+    usernames = []
+
+    @survey_root = 'Community Wishlist Survey 2020'
+    ['Wikibooks', 'Wikinews', 'Wikiquote', 'Wikisource', 'Wikispecies', 'Wikiversity', 'Wikivoyage', 'Wiktionary'].each do |cat|
+      proposals = get_proposals(cat)
+      usernames += get_editors_from_pages(proposals.keys)
+    end
 
     @survey_root = 'Community Wishlist Survey 2019'
-    proposals = get_proposals('Wikisource').merge(get_proposals('Wiktionary'))
-    usernames = get_editors_from_pages(proposals.keys) - [@mb.username]
+    categories.each do |cat|
+      proposals = get_proposals(cat)
+      usernames += get_editors_from_pages(proposals.keys)
+    end
 
-    @survey_root = 'Community Wishlist Survey 2017'
-    proposals = get_proposals('Wikisource').merge(get_proposals('Wiktionary'))
-    usernames += get_editors_from_pages(proposals.keys) - [@mb.username]
-
-    puts usernames.uniq.sort
+    puts (usernames - [@mb.username]).uniq.sort
       .select { |u| !u.include?('(WMF)') }
       .map { |u| "# {{target | user = #{u} | site = meta.wikimedia.org}}" }
   end
@@ -692,7 +697,7 @@ module WishlistSurvey
     @mb = MusikBot::Session.new(inspect)
 
     # Fetches from [[User:Community_Tech_bot/WishlistSurvey/config]].
-    @survey_root = @mb.config[:survey_root]
+    survey_root = @mb.config[:survey_root]
 
     categories.each do |category|
       proposals = get_proposals(category)
@@ -700,7 +705,7 @@ module WishlistSurvey
       proposals.each do |proposal|
         proposal_id = proposal[0]
         proposal_title = proposal[1]
-        proposal_path = "#{@survey_root}/#{category}/#{proposal_title}"
+        proposal_path = "#{survey_root}/#{category}/#{proposal_title}"
         content = @mb.get(proposal_path)
 
         if !content.include?("=== Voting ===")
@@ -714,10 +719,34 @@ module WishlistSurvey
     end
   end
 
+  def self.add_category_pages
+    @mb = MusikBot::Session.new(inspect)
+
+    survey_root = @mb.config[:survey_root]
+    categories = @mb.config[:categories]
+    year = (DateTime.now.year + 1).to_s
+
+    categories.each_with_index do |category, i|
+      prev_cat = categories[i - 1]
+      next_cat = categories[i + 1] || categories[0]
+      content = "{{:Community Wishlist Survey/Category header|#{prev_cat}|#{next_cat}}}\n"
+      @mb.edit("#{survey_root}/#{category}",
+        content: content,
+        summary: "Creating category pages for #{year} Wishlist Survey"
+      )
+    end
+
+    # Purge so links are up-to-date
+    categories.each do |category|
+      @mb.gateway.purge("#{survey_root}/#{category}")
+    end
+  end
+
 end
 
 WishlistSurvey.run
 # WishlistSurvey.get_old_participants
 # WishlistSurvey.sock_check
 # WishlistSurvey.import_translations
+# WishlistSurvey.add_category_pages
 # WishlistSurvey.add_voting_sections
