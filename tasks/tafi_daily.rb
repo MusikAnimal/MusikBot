@@ -144,7 +144,7 @@ module TAFIDaily
 
     # create links on archives index
     if new_month
-      index_page = "Wikipedia:Today's articles for improvement/Nominations/Archives"
+      index_page = "Wikipedia:Articles for improvement/Nominations/Archives"
       index_content = @mb.get(index_page, rvsection: 1)
       year_line = index_content.scan(/\n'''#{@mb.today.year}''':.*?$/).flatten.first || "\n'''#{@mb.today.year}''': "
       index_content.sub!(year_line, '')
@@ -165,7 +165,7 @@ module TAFIDaily
   end
 
   def self.archive_page_name
-    "Wikipedia:Today's articles for improvement/Nominations/Archives/#{@mb.today.year}/#{@mb.today.month}"
+    "Wikipedia:Articles for improvement/Nominations/Archives/#{@mb.today.year}/#{@mb.today.month}"
   end
 end
 

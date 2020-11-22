@@ -24,7 +24,7 @@ module TAFIWeekly
   end
 
   def self.add_new_scheduled_selection(throttle = 0)
-    page = "Wikipedia talk:Today's articles for improvement"
+    page = "Wikipedia talk:Articles for improvement"
     old_content = @mb.get_page_props(page, rvsection: 2)
     new_content = old_content + "\n\n{{subst:TAFI scheduled selection" \
       "|week=#{new_schedule_date.cweek}|year=#{new_schedule_date.cwyear}|date=#{new_schedule_date.strftime('%d %B %Y')}}}"
@@ -65,22 +65,22 @@ module TAFIWeekly
 
     @mb.edit(page,
       content: new_content,
-      summary: "Removing [[#{article}]] as the new [[Wikipedia:Today's articles for improvement|article for improvement]]"
+      summary: "Removing [[#{article}]] as the new [[Wikipedia:Articles for improvement|article for improvement]]"
     )
   end
 
   def self.create_schedule_page(article)
-    page = "Wikipedia:Today's articles for improvement/#{new_schedule_date.cwyear}/#{new_schedule_date.cweek}"
-    content = "{{subst:Wikipedia:Today's articles for improvement/Schedule/Preload}}"
+    page = "Wikipedia:Articles for improvement/#{new_schedule_date.cwyear}/#{new_schedule_date.cweek}"
+    content = "{{subst:Wikipedia:Articles for improvement/Schedule/Preload}}"
     @mb.edit(page + '/1', content: "[[#{article}]]")
     @mb.edit(page, content: content)
-    @mb.gateway.purge("Wikipedia:Today's articles for improvement")
-    @mb.gateway.purge("Wikipedia:Today's articles for improvement/Schedule")
-    @mb.gateway.purge("Wikipedia talk:Today's articles for improvement")
+    @mb.gateway.purge("Wikipedia:Articles for improvement")
+    @mb.gateway.purge("Wikipedia:Articles for improvement/Schedule")
+    @mb.gateway.purge("Wikipedia talk:Articles for improvement")
   end
 
   def self.archive_schedule
-    page = "Wikipedia:Today's articles for improvement/Archives/Schedule"
+    page = "Wikipedia:Articles for improvement/Archives/Schedule"
     identifier = '<!-- mb-break -->'
     content = @mb.get(page, rvsection: 1)
 
@@ -91,7 +91,7 @@ module TAFIWeekly
     end
 
     entry = "'''Week #{new_schedule_date.cweek}'''\n" \
-      "#\{\{Wikipedia:Today's articles for improvement/#{new_schedule_date.cwyear}/#{new_schedule_date.cweek}/1}}"
+      "#\{\{Wikipedia:Articles for improvement/#{new_schedule_date.cwyear}/#{new_schedule_date.cweek}/1}}"
     content.sub!(identifier, "#{entry}\n\n#{identifier}")
 
     @mb.edit(page,
@@ -107,7 +107,7 @@ module TAFIWeekly
     new_content = "{{TAFI}}\n" + old_content
 
     @mb.edit(new_tafi,
-      summary: "Tagging as the current [[Wikipedia:Today's articles for improvement|article for improvement]]",
+      summary: "Tagging as the current [[Wikipedia:Articles for improvement|article for improvement]]",
       content: new_content,
       section: 0,
       conflicts: true
@@ -136,7 +136,7 @@ module TAFIWeekly
 
     if old_content.length != new_content.length
       @mb.edit(old_tafi,
-        summary: "Removing {{TAFI}}, [[Wikipedia:Today's articles for improvement|article for improvement]] period has concluded",
+        summary: "Removing {{TAFI}}, [[Wikipedia:Articles for improvement|article for improvement]] period has concluded",
         content: new_content,
         section: 0,
         conflicts: true
@@ -163,7 +163,7 @@ module TAFIWeekly
 
     talk_content = @mb.get_page_props("Talk:#{old_tafi}", rvsection: 0)
     @mb.edit("Talk:#{old_tafi}",
-      summary: "Adding {{Former TAFI}} as previous [[Wikipedia:Today's articles for improvement|article for improvement]]",
+      summary: "Adding {{Former TAFI}} as previous [[Wikipedia:Articles for improvement|article for improvement]]",
       content: "#{talk_content}\n#{content}",
       section: 0,
       conflicts: true
@@ -179,8 +179,8 @@ module TAFIWeekly
   end
 
   def self.message_project_members
-    spamlist = "Wikipedia:Today's articles for improvement/Members/Notifications"
-    subject = "This week's [[Wikipedia:Today's articles for improvement|article for improvement]] (week #{@mb.today.cweek}, #{@mb.today.cwyear})"
+    spamlist = "Wikipedia:Articles for improvement/Members/Notifications"
+    subject = "This week's [[Wikipedia:Articles for improvement|article for improvement]] (week #{@mb.today.cweek}, #{@mb.today.cwyear})"
     sig = "<span style=\"font-family:sans-serif\"><b>[[User:MusikBot|<span style=\"color:black; font-style:italic\">MusikBot</span>]] " \
       "<sup>[[User talk:MusikAnimal|<span style=\"color:green\">talk</span>]]</sup></b></span>"
     message = "{{subst:TAFI weekly selection notice|1=#{sig} ~~~~~ using ~~~ on behalf of WikiProject TAFI}}"
@@ -229,7 +229,7 @@ module TAFIWeekly
       revision: old_tafi_old_rev_id
     )
 
-    entry = "{{Wikipedia:Today's articles for improvement/Accomplishments/row" \
+    entry = "{{Wikipedia:Articles for improvement/Accomplishments/row" \
       "|YYYY = #{last_week.cwyear}" \
       "|WW = #{last_week.cweek}" \
       "|oldid = #{old_tafi_old_rev_id}" \
@@ -253,7 +253,7 @@ module TAFIWeekly
   end
 
   def self.update_accomplishments_page(entry, throttle = 0)
-    page = "Wikipedia:Today's articles for improvement/Accomplishments"
+    page = "Wikipedia:Articles for improvement/Accomplishments"
     content = @mb.get_page_props(page)
 
     identifier = '<!-- mb-break -->'
@@ -326,13 +326,13 @@ module TAFIWeekly
 
   def self.old_tafi
     return @old_tafi if @old_tafi
-    old_tafi_page_name = "Wikipedia:Today's articles for improvement/#{last_week.cwyear}/#{last_week.cweek}/1"
+    old_tafi_page_name = "Wikipedia:Articles for improvement/#{last_week.cwyear}/#{last_week.cweek}/1"
     @old_tafi = resolve_redirect(@mb.get(old_tafi_page_name).scan(/\[\[(.*)\]\]/).flatten[0])
   end
 
   def self.new_tafi
     @new_tafi ||= resolve_redirect(
-      @mb.get("Wikipedia:Today's articles for improvement/#{@mb.today.cwyear}/#{@mb.today.cweek}/1").scan(/\[\[(.*)\]\]/).flatten[0]
+      @mb.get("Wikipedia:Articles for improvement/#{@mb.today.cwyear}/#{@mb.today.cweek}/1").scan(/\[\[(.*)\]\]/).flatten[0]
     )
   end
 
