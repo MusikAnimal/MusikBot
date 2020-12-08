@@ -86,7 +86,7 @@ module WishlistSurvey
       if voting_phase? && cached_counts[category]['votes'] != support_votes
         @mb.edit("#{@survey_root}/Vote counts/#{category}",
           content: support_votes,
-          summary: 'Updating support vote count'
+          summary: "Updating support vote count (#{support_votes})"
         )
         cached_counts[category]['votes'] = support_votes
       end
@@ -304,6 +304,90 @@ module WishlistSurvey
     votes
   end
 
+  def self.create_report_category(category_name, proposals)
+    content = "|-\n"
+    content += "!Rank\n" if voting_phase?
+    content += "!Proposal\n!Proposer\n"
+    content += "![[File:Symbol support vote.svg|15px]]\n" if voting_phase?
+    content += "!Phabs\n"
+
+    # Build array of proposal/category/votes for the report.
+    rows = []
+    proposals.sort.to_h.each do |proposal, count|
+      rows << [proposal, category_name] + count.values
+    end
+
+    rank = 0
+    all_proposers = []
+    all_phabs = []
+    all_related_phabs = []
+
+    if voting_phase?
+      # Sort all rows by count, descending.
+      rows = rows.sort_by { |_proposal, _category, _proposer, _phabs, _rel_phabs, support| -support }
+
+      # Initialize counts.
+      total_supports = 0
+      total_neutrals = 0
+      total_opposes = 0
+    else
+      total_supports = '-'
+      total_neutrals = '-'
+      total_opposes = '-'
+    end
+
+    old_support_count = 0
+
+    # Build markup.
+    rows.each do |proposal, category, proposer, phabs, related_phabs, supports, neutrals, opposes|
+      rank += 1
+
+      all_proposers << proposer if proposer.present?
+      all_phabs += phabs
+      all_related_phabs += related_phabs
+
+      if voting_phase?
+        total_supports += supports
+        total_neutrals += neutrals
+        total_opposes += opposes
+      end
+
+      proposer_str = proposer ? "[[User:#{proposer}|#{proposer}]]" : '???'
+      phabs = phabs.map { |p| "[[phab:#{p}|#{p}]]" }.join(', ')
+
+      if related_phabs.any?
+        related_phabs = related_phabs.map { |p| "[[phab:#{p}|#{p}]]" }.join(', ')
+        phabs += "#{phabs.present? ? '<br/>' : ''}<small>Related: #{related_phabs}</small>"
+      end
+
+      proposal = proposal.dup.force_encoding('utf-8')
+      proposer_str = proposer_str.dup.force_encoding('utf-8')
+
+      content += "|-\n"
+      content += "| #{rank}\n" if voting_phase?
+      content += "| [[#{@survey_root}/#{category_name}/#{proposal}|#{proposal}]]\n" \
+        "| #{proposer_str}\n"
+      content += "| #{supports}\n" if voting_phase?
+      content += "| #{phabs}\n"
+    end
+
+    heading = voting_phase? ? 'Voting results' : 'Results'
+    heading_content = "#{heading} for [[#{@survey_root}/#{category_name}|#{category_name}]] as of ~~~~~\n\n" \
+      "{| class='wikitable sortable'\n"
+    heading_content += "!\n" if voting_phase?
+    heading_content += "!#{rows.length} proposals\n" \
+      "!#{all_proposers.uniq.length} proposers\n"
+    heading_content += "!#{total_supports}\n" if voting_phase?
+    content = "#{heading_content}!#{all_phabs.uniq.length} phab tasks, #{all_related_phabs.uniq.length} related\n#{content}\n|}"
+
+    content += "\n\n[[Category:#{@survey_root}]]"
+
+    @mb.edit("#{@survey_root}/Tracking/#{category_name}",
+      content: content,
+      summary: "Updating voting results (#{rows.length} proposals, #{total_supports} support votes)"
+    )
+  end
+
   def self.create_report(cats)
     content = "|-\n"
     content += "!Rank\n" if voting_phase?
@@ -314,6 +398,7 @@ module WishlistSurvey
     # Build array of proposal/category/votes for the report.
     rows = []
     cats.each do |category, proposals|
+      create_report_category(category, proposals)
       proposals.sort.to_h.each do |proposal, count|
         rows << [proposal, category] + count.values
       end
@@ -697,7 +782,7 @@ module WishlistSurvey
     @mb = MusikBot::Session.new(inspect)
 
     # Fetches from [[User:Community_Tech_bot/WishlistSurvey/config]].
-    survey_root = @mb.config[:survey_root]
+    @survey_root = @mb.config[:survey_root]
 
     categories.each do |category|
       proposals = get_proposals(category)
@@ -705,7 +790,7 @@ module WishlistSurvey
       proposals.each do |proposal|
         proposal_id = proposal[0]
         proposal_title = proposal[1]
-        proposal_path = "#{survey_root}/#{category}/#{proposal_title}"
+        proposal_path = "#{@survey_root}/#{category}/#{proposal_title}"
         content = @mb.get(proposal_path)
 
         if !content.include?("=== Voting ===")
@@ -719,7 +804,7 @@ module WishlistSurvey
     end
   end
 
-  def self.add_category_pages
+  def self.add_category_pages()
     @mb = MusikBot::Session.new(inspect)
 
     survey_root = @mb.config[:survey_root]
@@ -736,17 +821,63 @@ module WishlistSurvey
       )
     end
 
+    # TODO: create talk page redirects to parent talk page
+
     # Purge so links are up-to-date
     categories.each do |category|
       @mb.gateway.purge("#{survey_root}/#{category}")
     end
   end
 
+  def self.add_category_talk_pages(talk = true)
+    @mb = MusikBot::Session.new(inspect)
+
+    survey_root = @mb.config[:survey_root]
+    categories = @mb.config[:categories]
+    year = (DateTime.now.year + 1).to_s
+
+    categories.each_with_index do |category, i|
+      content = "#REDIRECT [[Talk:Community Wishlist Survey 2021]]"
+      binding.pry
+      @mb.edit("Talk:#{survey_root}/#{category}",
+        content: content,
+        summary: "Redirecting to [[Talk:Community Wishlist Survey 2019]]"
+      )
+    end
+
+    # Purge so links are up-to-date
+    categories.each do |category|
+      @mb.gateway.purge("#{survey_root}/#{category}")
+    end
+  end
+
+  def self.fix_proposal_headers
+    @mb = MusikBot::Session.new(inspect)
+
+    @survey_root = @mb.config[:survey_root]
+    categories = @mb.config[:categories]
+
+    categories.each do |category|
+      puts category
+      proposals = get_proposals(category)
+      proposals.each do |page_id, title|
+        puts "> #{title}"
+        content = @mb.get("#{@survey_root}/#{category}/#{title}")
+        header_title = content.scan(/\{\{:Community Wishlist Survey\/Proposal header|1=(.*?)\}\}/).flatten[1]
+        if header_title != title.force_encoding('utf-8')
+          binding.pry
+        end
+      end
+    end
+  end
+
 end
 
 WishlistSurvey.run
+# WishlistSurvey.fix_proposal_headers
 # WishlistSurvey.get_old_participants
 # WishlistSurvey.sock_check
 # WishlistSurvey.import_translations
 # WishlistSurvey.add_category_pages
 # WishlistSurvey.add_voting_sections
+# WishlistSurvey.add_category_talk_pages
