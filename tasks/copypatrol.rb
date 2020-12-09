@@ -4,7 +4,7 @@ require 'nokogiri'
 require 'uri'
 
 module CopyPatrol
-  PAGE_ASSESSMENTS_PROJECTS = ['en.wikipedia', 'fr.wikipedia']
+  PAGE_ASSESSMENTS_PROJECTS = ['en.wikipedia', 'fr.wikipedia', 'tr.wikipedia']
 
   def self.run
     @mb = MusikBot::Session.new(inspect)
