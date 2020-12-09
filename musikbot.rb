@@ -37,7 +37,7 @@ module MusikBot
 
       I18n.load_path = Dir[dir('dictionaries/*/*.yml')]
       I18n.backend.load_translations
-      I18n.config.available_locales = [:en, :fr, :pt, :it]
+      I18n.config.available_locales = [:en, :fr, :pt, :it, :tr]
       I18n.locale = @opts[:lang]
 
       login unless @opts[:no_api]
