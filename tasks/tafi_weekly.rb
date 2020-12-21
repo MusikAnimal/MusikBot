@@ -26,7 +26,7 @@ module TAFIWeekly
   def self.add_new_scheduled_selection(throttle = 0)
     page = "Wikipedia talk:Articles for improvement"
     old_content = @mb.get_page_props(page, rvsection: 2)
-    new_content = old_content + "\n\n{{subst:TAFI scheduled selection" \
+    new_content = old_content + "\n\n{{subst:AFI scheduled selection" \
       "|week=#{new_schedule_date.cweek}|year=#{new_schedule_date.cwyear}|date=#{new_schedule_date.strftime('%d %B %Y')}}}"
 
     @mb.edit(page,
@@ -85,7 +85,7 @@ module TAFIWeekly
     content = @mb.get(page, rvsection: 1)
 
     if new_schedule_date.cweek == 1
-      content = "===#{new_schedule_date.cwyear}===\nThe TAFI schedule for #{new_schedule_date.cwyear}, by week number:\n" \
+      content = "===#{new_schedule_date.cwyear}===\nThe AFI schedule for #{new_schedule_date.cwyear}, by week number:\n" \
         "{{Div col||20em}}\n\n#{identifier}\n{{div col end}}\n\n'''Notes:'''\n{{reflist|group=#{new_schedule_date.cwyear}}}" \
         "\n\n#{content}"
     end
@@ -104,7 +104,7 @@ module TAFIWeekly
   def self.tag_new_tafi(throttle = 0)
     old_content = @mb.get_page_props(new_tafi, rvsection: 0)
     return nil unless old_content
-    new_content = "{{TAFI}}\n" + old_content
+    new_content = "{{AFI}}\n" + old_content
 
     @mb.edit(new_tafi,
       summary: "Tagging as the current [[Wikipedia:Articles for improvement|article for improvement]]",
@@ -132,11 +132,11 @@ module TAFIWeekly
     )
     @old_tafi_new_rev = page_obj.elements['revisions/rev']
     old_content = @old_tafi_new_rev.elements['slots/slot'].text
-    new_content = old_content.gsub(/\{\{TAFI\}\}\n*/i, '')
+    new_content = old_content.gsub(/\{\{AFI\}\}\n*/i, '')
 
     if old_content.length != new_content.length
       @mb.edit(old_tafi,
-        summary: "Removing {{TAFI}}, [[Wikipedia:Articles for improvement|article for improvement]] period has concluded",
+        summary: "Removing {{AFI}}, [[Wikipedia:Articles for improvement|article for improvement]] period has concluded",
         content: new_content,
         section: 0,
         conflicts: true
@@ -153,7 +153,7 @@ module TAFIWeekly
   end
 
   def self.add_former_tafi(throttle = 0)
-    content = "{{Former TAFI|date=#{last_week.strftime('%e %B %Y')}|page={{PAGENAME}}|oldid2=#{old_tafi_new_rev_id}"
+    content = "{{Former AFI|date=#{last_week.strftime('%e %B %Y')}|page={{PAGENAME}}|oldid2=#{old_tafi_new_rev_id}"
     content += "|oldid1=#{old_tafi_old_rev_id}"
 
     if old_tafi_old_class != old_tafi_new_class && old_tafi_old_class.present? && old_tafi_new_class.present?
@@ -163,7 +163,7 @@ module TAFIWeekly
 
     talk_content = @mb.get_page_props("Talk:#{old_tafi}", rvsection: 0)
     @mb.edit("Talk:#{old_tafi}",
-      summary: "Adding {{Former TAFI}} as previous [[Wikipedia:Articles for improvement|article for improvement]]",
+      summary: "Adding {{Former AFI}} as previous [[Wikipedia:Articles for improvement|article for improvement]]",
       content: "#{talk_content}\n#{content}",
       section: 0,
       conflicts: true
@@ -183,7 +183,7 @@ module TAFIWeekly
     subject = "This week's [[Wikipedia:Articles for improvement|article for improvement]] (week #{@mb.today.cweek}, #{@mb.today.cwyear})"
     sig = "<span style=\"font-family:sans-serif\"><b>[[User:MusikBot|<span style=\"color:black; font-style:italic\">MusikBot</span>]] " \
       "<sup>[[User talk:MusikAnimal|<span style=\"color:green\">talk</span>]]</sup></b></span>"
-    message = "{{subst:TAFI weekly selection notice|1=#{sig} ~~~~~ using ~~~ on behalf of WikiProject TAFI}}"
+    message = "{{subst:AFI weekly selection notice|1=#{sig} ~~~~~ using ~~~ on behalf of WikiProject AFI}}"
     @mb.gateway.mass_message(spamlist, subject, message)
   end
 
@@ -197,7 +197,7 @@ module TAFIWeekly
     ).elements['parse/text'].text
 
     wikiprojects = Nokogiri::HTML(talk_text).css('.mbox-text b a').collect(&:content).select{ |text| text =~ /^WikiProject/ }.uniq
-    content = '{{subst:TAFI project notice|no_heading=yes}}'
+    content = '{{subst:AFI project notice|no_heading=yes}}'
     wikiprojects.each do |wikiproject|
       @mb.edit("Wikipedia talk:#{wikiproject}",
         content: content,
