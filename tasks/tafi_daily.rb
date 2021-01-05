@@ -36,7 +36,7 @@ module TAFIDaily
       nominations = nominations.drop(1) unless nominations[0] =~ /^===.*?===\s*\n/
       header = '<!-- Place new entries directly below this line, at the top of the list. -->'
 
-      if nominations.empty? && genre_without_header =~ /{{\s*TAFI nom|\d\d:\d\d.*\d{4} \(UTC\)/
+      if nominations.empty? && genre_without_header =~ /{{\s*T?AFI nom|\d\d:\d\d.*\d{4} \(UTC\)/
         error_summaries << "unable to parse section [[##{name}|#{name}]], content detected but no subheading; possible malformed nomination"
         genres << "==#{name}==\n#{header}\n\n#{genre_without_header}".chomp('')
         next
@@ -71,7 +71,7 @@ module TAFIDaily
     archive_entries = []
     text.split("\n===").each do |entry|
       section = "\n===#{entry}"
-      article, assessment = entry.scan(/{{\s*TAFI nom\s*\|\s*article\s*=(.*?)\s*(?:\||}})(?:class\s*=\s*(\w+))?/i).flatten
+      article, assessment = entry.scan(/{{\s*T?AFI nom\s*\|\s*article\s*=(.*?)\s*(?:\||}})(?:class\s*=\s*(\w+))?/i).flatten
 
       next unless article
 
