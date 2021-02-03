@@ -122,7 +122,7 @@ module TAFIDaily
   end
 
   def self.add_afti_entries(entries)
-    page = 'Wikipedia:Articles for improvement/List'
+    page = 'Wikipedia:Articles for improvement/Articles/List'
     text = @mb.get(page)
     text.sub!(/\<!--.*?--\>\n*\z/, '')
     comment = '<!-- This page is automatically updated by MusikBot. There is no need to edit directly -->'
