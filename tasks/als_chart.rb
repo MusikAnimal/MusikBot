@@ -12,8 +12,7 @@ module ALSChart
     ).elements['pages/page/categoryinfo'].attributes['size'].to_i
 
     date = @mb.now.strftime('%Y-%m-%d')
-    data = @mb.get(@mb.config[:dataset])
-    binding.pry
+    data = JSON.parse(@mb.get(@mb.config[:dataset]))
     data << {
       'date' => date,
       'value' => size
@@ -21,7 +20,7 @@ module ALSChart
 
     @mb.edit(@mb.config[:dataset],
       content: data.to_json,
-      summary: "Adding size of #{@mb.config[:category]]} as of #{date}"
+      summary: "Adding size of [[#{@mb.config[:category]}]] as of #{date} ([[User:MusikBot/ALSChart|more info]])"
     )
   end
 
