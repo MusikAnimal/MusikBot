@@ -142,9 +142,14 @@ module MusikBot
         replicas: true
       }.merge(opts)
       return @repl_client if @repl_client && !opts.delete(:reload)
+
+      credentials = app_config[opts[:credentials]]
       suffix = opts.delete(:replicas) ? '_p' : ''
+      database = opts[:database] ? opts[:database].sub('_p', '') : db
+      credentials[:host] = (opts[:host] ? opts[:host] : credentials[:host]).sub('*', database)
+
       @repl_client = Repl::Session.new(
-        { database: opts[:database] || db + suffix }.merge(app_config[opts[:credentials]])
+        { database: database + suffix }.merge(credentials)
       )
     end
     alias_method :repl, :repl_client
