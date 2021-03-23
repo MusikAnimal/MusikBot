@@ -89,7 +89,7 @@ module FixPP
       )
     end
 
-    @mb.local_storage('last_run' => (@mb.now - (5.0 / (24 * 60))).to_s)
+    @mb.local_storage('last_run' => (@mb.now - (10.0 / (24 * 60))).to_s)
   end
 
   def self.has_redir_template?(page_obj, content)
