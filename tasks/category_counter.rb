@@ -22,7 +22,6 @@ module CategoryCounter
     sizes = fetch_category_sizes(to_update)
 
     to_update.each do |entry|
-      next unless entry[:dataset] == 'Template:Orphaned articles chart/data'
       data = JSON.parse(@mb.get(entry[:dataset]))
 
       if entry[:cutoff].present?
@@ -34,7 +33,6 @@ module CategoryCounter
         'value' => sizes[entry[:category]]
       }
 
-      binding.pry
       @mb.edit(entry[:dataset],
         content: data.to_json,
         summary: "Adding size of [[:#{entry[:category]}]] as of #{date} ([[User:MusikBot/CategoryCounter|more info]])"
@@ -61,13 +59,12 @@ module CategoryCounter
 
       pages = @mb.gateway.custom_query(
         titles: titles.join('|'),
-        prop: 'categoryinfo',
-        formatversion: 2
+        prop: 'categoryinfo'
       ).elements['pages'].to_a
 
       pages.each do |page|
         if page.elements['categoryinfo']
-          sizes[page['title']] = page.elements['categoryinfo']['size'].to_i
+          sizes[page.attributes['title']] = page.elements['categoryinfo'].attributes['size'].to_i
         end
       end
     end
@@ -81,7 +78,7 @@ module CategoryCounter
       when :daily
         true
       when :weekly
-        @mb.now.wday == 4
+        @mb.now.wday == 5
       when :monthly
         @mb.now.mday == 1
     end
