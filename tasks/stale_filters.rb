@@ -102,10 +102,10 @@ module StaleFilters
       SELECT af_id, af_user_text, afl.afl_timestamp, af_timestamp, af_public_comments, af_hidden, af_actions
       FROM #{db}.abuse_filter af
       INNER JOIN (
-        SELECT afl_id, afl_filter, MAX(afl_timestamp) afl_timestamp
+        SELECT afl_id, afl_filter_id, MAX(afl_timestamp) afl_timestamp
         FROM #{db}.abuse_filter_log
-        GROUP BY afl_filter
-      ) afl ON afl.afl_filter = af_id
+        GROUP BY afl_filter_id
+      ) afl ON afl.afl_filter_id = af_id
       WHERE af_enabled = 1
       AND af_deleted = 0
       AND afl.afl_timestamp < ?
