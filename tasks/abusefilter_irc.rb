@@ -33,7 +33,8 @@ module AbuseFilterIRC
 
     bot = Cinch::Bot.new do
       configure do |c|
-        c.server = 'chat.freenode.org'
+        c.server = 'irc.libera.chat'
+        c.port = 6667
         c.channels = CHANNELS.values
         c.nick = $mb.app_config[:irc][:nick]
         c.password = $mb.app_config[:irc][:password]
