@@ -169,7 +169,7 @@ module AWBListMan
   end
 
   def self.moved_user_info(user_name)
-    log_entry = @mb.repl.query(
+    log_entry = meta_repl.query(
       "SELECT log_timestamp, log_params FROM metawiki_p.logging " \
       "WHERE log_type = 'gblrename' AND log_params LIKE '%\"#{user_name.sub("'"){ "\\'" }}\"%'"
     ).to_a.first
@@ -183,6 +183,14 @@ module AWBListMan
       timestamp: @mb.parse_date(log_entry['log_timestamp']),
       new_user_name: log_entry['log_params'].scan(/newuser";s:\d*:"(.*?)";/).flatten.first
     }
+  end
+
+  def self.meta_repl
+    return @meta_repl if @meta_repl
+    credentials = @mb.app_config[:replica]
+    credentials[:host].sub!('*', 'metawiki')
+    credentials[:database] = 'metawiki_p'
+    @meta_repl = Repl::Session.new(credentials)
   end
 
   def self.edit_summary(report = false)
