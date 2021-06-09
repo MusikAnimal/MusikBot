@@ -7,9 +7,15 @@ module NSFW
   def self.run
     $mb = MusikBot::Session.new(inspect)
 
+    USERS_TO_PING = [
+      'MusikAnimal',
+      'DannyS712'
+    ]
+
     bot = Cinch::Bot.new do
       configure do |c|
-        c.server = 'chat.freenode.org'
+        c.server = 'irc.libera.chat'
+        c.port = 6667
         c.channels = ['##MusikBot_II']
         c.nick = $mb.app_config[:nsfw_irc][:nick]
         c.password = $mb.app_config[:nsfw_irc][:password]
@@ -50,7 +56,7 @@ module NSFW
           scores = {}
           urls.each do |title, url|
             score = get_score(url)
-            if score > 0.4
+            if score > 0.5
               scores[title] = score
             end
           end
@@ -104,8 +110,10 @@ module NSFW
               if scores.any?
                 msgs = get_messages(data['user'].score, data['log_params']['log'], scores)
 
-                msgs.each do |msg|
-                  User('MusikAnimal').send(msg)
+                USERS_TO_PING.each do |nick|
+                  msgs.each do |msg|
+                    User(nick).send(msg)
+                  end
                 end
               end
             end
