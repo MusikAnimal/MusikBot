@@ -4,13 +4,13 @@ require 'cinch'
 require 'em-eventsource'
 
 module NSFW
+  USERS_TO_PING = [
+    'MusikAnimal',
+    'DannyS712'
+  ]
+
   def self.run
     $mb = MusikBot::Session.new(inspect)
-
-    USERS_TO_PING = [
-      'MusikAnimal',
-      'DannyS712'
-    ]
 
     bot = Cinch::Bot.new do
       configure do |c|
