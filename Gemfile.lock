@@ -1,5 +1,5 @@
 GIT
-  remote: git://github.com/MusikAnimal/mediawiki-gateway.git
+  remote: https://github.com/MusikAnimal/mediawiki-gateway.git
   revision: 6bc2bc54be694e0c4fa4caef2d3bd5b3492b4946
   branch: master
   specs:
@@ -9,8 +9,8 @@ GIT
 GEM
   remote: https://rubygems.org/
   specs:
-    addressable (2.6.0)
-      public_suffix (>= 2.0.2, < 4.0)
+    addressable (2.8.0)
+      public_suffix (>= 2.0.2, < 5.0)
     byebug (8.2.5)
     cinch (2.3.4)
     coderay (1.1.2)
@@ -20,7 +20,7 @@ GEM
       money (~> 6.9)
       sixarm_ruby_unaccent (~> 1.1)
       unicode_utils (~> 1.4)
-    domain_name (0.5.20180417)
+    domain_name (0.5.20190701)
       unf (>= 0.0.5, < 1.0.0)
     em-eventsource (0.3.1)
       em-http-request (~> 1.0)
@@ -34,7 +34,8 @@ GEM
     em-socksify (0.3.2)
       eventmachine (>= 1.0.0.beta.4)
     eventmachine (1.2.7)
-    http-cookie (1.0.3)
+    http-accept (1.7.0)
+    http-cookie (1.0.4)
       domain_name (~> 0.5)
     http_parser.rb (0.6.0)
     httparty (0.16.2)
@@ -42,9 +43,9 @@ GEM
     i18n (0.7.0)
     i18n_data (0.8.0)
     method_source (0.9.2)
-    mime-types (3.2.2)
+    mime-types (3.3.1)
       mime-types-data (~> 3.2015)
-    mime-types-data (3.2019.0331)
+    mime-types-data (3.2021.0704)
     mini_portile2 (2.3.0)
     money (6.13.1)
       i18n (>= 0.6.4, <= 2)
@@ -59,16 +60,17 @@ GEM
     pry-byebug (3.3.0)
       byebug (~> 8.0)
       pry (~> 0.10)
-    public_suffix (3.0.3)
+    public_suffix (4.0.6)
     redis (3.2.2)
-    rest-client (2.0.2)
+    rest-client (2.1.0)
+      http-accept (>= 1.7.0, < 2.0)
       http-cookie (>= 1.0.2, < 2.0)
       mime-types (>= 1.16, < 4.0)
       netrc (~> 0.8)
     sixarm_ruby_unaccent (1.2.0)
     unf (0.1.4)
       unf_ext
-    unf_ext (0.0.7.6)
+    unf_ext (0.0.7.7)
     unicode (0.4.4.4)
     unicode_utils (1.4.0)
 
