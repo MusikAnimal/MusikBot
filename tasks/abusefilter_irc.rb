@@ -21,7 +21,9 @@ module AbuseFilterIRC
   CHANNELS = {
     'commons.wikimedia.org' => '#wikimedia-commons-abuse-log',
     'en.wikipedia.org' => '#wikipedia-en-abuse-log-all',
-    'meta.wikimedia.org' => '#wikimedia-meta-abuse-log'
+    'meta.wikimedia.org' => '#wikimedia-meta-abuse-log',
+    'wikimania.wikimedia.org' => '#wikimania-abuse-log',
+    'en.wikisource.org' => '#wikisource-en-abuse-log'
   }
 
   UNSUBSCRIBE_MSG = 'To unsubscribe, use `!unsubscribe [lang.project.org] [filter ID]` or `!unsubscribe [lang.project.org] all`'
