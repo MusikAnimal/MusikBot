@@ -130,6 +130,10 @@ module AWBListMan
           @notified_users[user_name] = @mb.today
           notify_inactive_user(user_name) if @mb.config[user_type][:enabled]
           new_users << user_name.force_encoding('utf-8')
+        elsif notified_users[user_name].present?
+          # Hasn't been 1 week yet, so we still keep them on the CheckPage, but listed as notified.
+          @notified_users[user_name] = notified_users[user_name]
+          new_users << user_name.force_encoding('utf-8')
         end
       else
         new_users << user_name.force_encoding('utf-8')
