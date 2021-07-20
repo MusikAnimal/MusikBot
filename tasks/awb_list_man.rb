@@ -2,7 +2,7 @@ $LOAD_PATH << '..'
 require 'musikbot'
 
 module AWBListMan
-  AWB_CHECKPAGE = 'Wikipedia:AutoWikiBrowser/CheckPage'.freeze
+  AWB_CHECKPAGE = 'Wikipedia:AutoWikiBrowser/CheckPageJSON'.freeze
   REPORT_PAGE = 'User:MusikBot II/AWBListMan/Report'.freeze
 
   def self.run
@@ -19,48 +19,42 @@ module AWBListMan
     @old_report = @disk_cache['report']
     @new_report = {}
     @notified_users = {}
+    @current_users = get_users()
+    @new_users = {}
+
+    # List of users to actually be saved to the CheckPage
+    checkpage_users = {}
 
     all_new_users = []
 
+    edit_summaries = []
+
     [:bot, :user].each do |user_type|
       config = @mb.config[user_type]
-      users = @mb.get(AWB_CHECKPAGE, rvsection: config[:section]).split("\n")
       @removed_users = {
         admins: [],
         indefinitely_blocked: [],
         inactive: []
       }
       @renamed_users = []
-      @current_users = []
-      @new_users, section_text = process_users(users, user_type)
+      @new_users[user_type] = process_users(@current_users, user_type)
 
-      next unless @new_users.present?
-
-      # which list of users to go off of based on whether we're editing that section on the AWB CheckPage
-      #   or just making a report of those who would be revoked if we were editing the page
-      users_list = config[:enabled] ? @new_users : @current_users
-
-      all_new_users += users_list
-
-      user_type_str = user_type.to_s.capitalize_first
-
+      # which list of users to go off of based on whether we're editing the CheckPage
+      # or just making a report of those who would be revoked as if we were editing the page
       if config[:enabled]
-        @mb.edit(AWB_CHECKPAGE,
-          content: section_text,
-          section: config[:section],
-          summary: "#{user_type_str}s: #{edit_summary}"
-        )
+        users_list = @new_users[user_type]
+        edit_summaries << edit_summary()
+      else
+        users_list = @current_users[user_type]
       end
 
+      all_new_users += users_list
+      checkpage_users[user_type] = users_list
+
+      user_type_str = user_type.to_s.capitalize_first
       @mb.edit("#{REPORT_PAGE}/#{user_type_str}",
         content: report_page(user_type),
         summary: "#{user_type_str}s: #{edit_summary(true)}"
-      )
-
-      @mb.edit(REPORT_PAGE,
-        content: "<div style='font-size:24px'>AWB CheckPage report as of #{@mb.today} <sup>({{purge}})</sup></div>",
-        section: 0,
-        summary: 'Updating heading of report page'
       )
 
       @mb.edit("User:MusikBot II/AWBListMan/#{user_type_str} count",
@@ -68,6 +62,21 @@ module AWBListMan
         summary: "Reporting #{user_type.to_s.pluralize_num(users_list.length)} with AWB access"
       )
     end
+
+    @mb.edit(REPORT_PAGE,
+      content: "<div style='font-size:24px'>AWB CheckPage report as of #{@mb.today} <sup>({{purge}})</sup></div>",
+      section: 0,
+      summary: 'Updating heading of report page'
+    )
+
+    # Update the actual CheckPage
+    @mb.edit(AWB_CHECKPAGE,
+      content: {
+        'enabledusers' => checkpage_users[:user],
+        'enabledbots' => checkpage_users[:bot]
+      }.to_json,
+      summary: edit_summaries.join('; ')
+    )
 
     @mb.local_storage(
       'last_run' => @mb.now.to_s,
@@ -79,25 +88,20 @@ module AWBListMan
     @mb.report_error('Fatal error', e)
   end
 
-  def self.process_users(list, user_type)
+  def self.get_users
+    content = JSON.parse(@mb.get(AWB_CHECKPAGE))
+    {
+      bot: content['enabledbots'],
+      user: content['enabledusers']
+    }
+  end
+
+  def self.process_users(users, user_type)
     new_users = []
-    before_lines = []
-    after_lines = []
 
-    list.each do |line|
-      user_name = line.scan(/^\*\s*(.*?)\s*$/).flatten.first
+    current_users = users[user_type].uniq.sort
 
-      if user_name
-        @current_users << user_name
-      elsif @current_users.any? # hit the end of the list
-        after_lines << line
-      else # before the list
-        before_lines << line
-      end
-    end
-
-    @current_users.uniq!
-    @current_users.sort!.each do |user_name|
+    current_users.each do |user_name|
       moved_info = moved_user_info(user_name)
 
       if moved_info && moved_info[:timestamp] > @last_run && @old_users.include?(user_name)
@@ -125,19 +129,14 @@ module AWBListMan
           puts user_name + ' - Notifying that access may be revoked'
           @notified_users[user_name] = @mb.today
           notify_inactive_user(user_name) if @mb.config[user_type][:enabled]
-          new_users << user_name
+          new_users << user_name.force_encoding('utf-8')
         end
       else
-        new_users << user_name
+        new_users << user_name.force_encoding('utf-8')
       end
     end
 
-    # alphabetize
-    new_users.sort!
-
-    new_users_text = "\n" + new_users.map { |user| "* #{user.force_encoding('utf-8')}\n" }.join
-    new_text = before_lines.join("\n") + new_users_text + after_lines.join("\n")
-    [new_users, new_text]
+    new_users.sort_by(&:downcase)
   end
 
   def self.user_info(user_name, throttle = 0)
@@ -162,7 +161,7 @@ module AWBListMan
     }
   rescue => e
     if throttle > 3
-      @mb.report_error('Edit throttle hit', e)
+      @mb.report_error('Throttle hit', e)
     else
       user_info(user_name, throttle + 1)
     end
@@ -219,7 +218,7 @@ module AWBListMan
       summary << 'user'.pluralize(@renamed_users.length) + ' renamed'
     end
 
-    summary.join('; ')
+    summary.join(', ')
   end
 
   def self.report_page(user_type)
@@ -235,7 +234,7 @@ module AWBListMan
 
       # subtract @current_users to remove any in the old report that have been re-added
       old_report = (@old_report[user_type.to_s] || {})[section.to_s] || []
-      removed_users = (@removed_users[section] + old_report) - @new_users
+      removed_users = (@removed_users[section] + old_report) - @new_users[user_type]
       removed_users.sort!.uniq!
 
       # update local report cache
@@ -248,7 +247,7 @@ module AWBListMan
       total += removed_users.length
     end
 
-    checkpage = '[[Wikipedia:AutoWikiBrowser/CheckPage|CheckPage]]'
+    checkpage = '[[Wikipedia:AutoWikiBrowser/CheckPageJSON|CheckPage]]'
     preface = if @mb.config[user_type][:enabled]
                 "#{total} #{user_type}s have been automatically removed from the #{checkpage}. If they are re-added, they will automatically be removed from this report.\n"
               else
@@ -263,7 +262,7 @@ module AWBListMan
   def self.notify_inactive_user(user_name)
     message = "Hello '''#{user_name}'''! This message is to inform you that due to editing inactivity, your access to " \
       "[[Wikipedia:AutoWikiBrowser|AutoWikiBrowser]] may be temporarily removed. If you do not resume editing within " \
-      "the next week, your username will be removed from the [[Wikipedia:AutoWikiBrowser/CheckPage|CheckPage]]. " \
+      "the next week, your username will be removed from the [[Wikipedia:AutoWikiBrowser/CheckPageJSON|CheckPage]]. " \
       "This is purely for routine maintenance and is not indicative of wrongdoing on your part. " \
       "You may regain access at any time by simply requesting it at [[WP:PERM/AWB]]. Thank you! ~~~~"
 
