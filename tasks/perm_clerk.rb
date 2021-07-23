@@ -417,7 +417,7 @@ module PermClerk
       if pass.nil?
         record_error(
           group: 'prerequisites',
-          message: "Failed to fetch data <tt>#{key}</tt> for User:#{@username}",
+          message: "Failed to fetch data {{mono|#{key}}} for User:#{@username}",
           log_message: "      failed to fetch prerequisite data: #{key}"
         )
       elsif pass
@@ -890,13 +890,13 @@ module PermClerk
       if params[:permission] == 'autowikibrowser'
         "does not appear to have been added to the [[#{AWB_CHECKPAGE}|CheckPage]]<!-- mbNoPerm -->"
       else
-        "does not appear to have the permission <tt>#{params[:permission]}</tt><!-- mbNoPerm -->"
+        "does not appear to have the permission {{mono|#{params[:permission]}}}<!-- mbNoPerm -->"
       end
     when :saidPermission
       if params[:permission] == 'autowikibrowser'
         "is still on the [[#{AWB_CHECKPAGE}|CheckPage]]<!-- mbHasPerm -->"
       else
-        "still holds the <tt>#{params[:permission]}</tt> right<!-- mbHasPerm -->"
+        "still holds the {{mono|#{params[:permission]}}} right<!-- mbHasPerm -->"
       end
     when :templateSpaceCount
       "has <!-- mb-templateSpaceCount -->#{params[:templateSpaceCount]}<!-- mb-templateSpaceCount-end --> " \
