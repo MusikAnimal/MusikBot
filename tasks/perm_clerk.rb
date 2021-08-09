@@ -5,7 +5,7 @@ module PermClerk
   COMMENT_INDENT = "\n::".freeze
   COMMENT_PREFIX = '{{comment|Automated comment}} '.freeze
   SPLIT_KEY = '====[[User:'.freeze
-  AWB_CHECKPAGE = 'Wikipedia:AutoWikiBrowser/CheckPage'.freeze
+  AWB_CHECKPAGE = 'Wikipedia:AutoWikiBrowser/CheckPageJSON'.freeze
 
   def self.run
     @mb = MusikBot::Session.new(inspect)
@@ -712,7 +712,7 @@ module PermClerk
       @mb.today - @mb.config[:checkrevoked_config][:offset]
     ) rescue nil
 
-    if old_awb_content && old_awb_content =~ /\n\*\s*#{Regexp.escape(@username)}\s*\n/ && !(awb_checkpage_content =~ /\n\*\s*#{Regexp.escape(@username)}\s*\n/)
+    if old_awb_content && old_awb_content.include?("#{@username}") && !awb_checkpage_content.include?("#{@username}")
       return ["#{@mb.gateway.wiki_url.chomp('api.php')}index.php?title=#{AWB_CHECKPAGE}&action=history"]
     else
       return []
@@ -983,7 +983,7 @@ module PermClerk
     return @permission if sysop?
 
     if @permission == 'AutoWikiBrowser'
-      awb_checkpage_content =~ /\n\*\s*#{Regexp.escape(@username)}\s*\n/ ? 'AutoWikiBrowser' : nil
+      awb_checkpage_content.include?("#{Regexp.escape(@username)}") ? 'AutoWikiBrowser' : nil
     else
       get_user_info(@username)[:userGroups].keys.grep(/#{@mb.config[:pages][@permission.to_sym]}/).first
     end
