@@ -30,64 +30,51 @@ module TemplateProtector
 
       ns_name = namespace_map[ns_id]
 
-      fetch_templates(ns_id, lowest_threshold).each do |row|
-        row['title'] = row['title'].force_encoding('utf-8')
-        title = "#{ns_name}:#{row['title']}"
-        edit_level = prot_level(row['count'])
+      @thresholds.keys.each do |level|
+        puts "NAMESPACE #{ns_id} / THRESHOLD #{level}"
+        fetch_templates(ns_id, level).each do |row|
+          row['title'] = row['title'].force_encoding('utf-8')
+          title = "#{ns_name}:#{row['title']}"
+          edit_level = prot_level(row['count'])
 
-        # Skip if excluded.
-        if exclusions.include?(title)
-          puts ">> #{title} excluded"
-          next
-        end
-
-        # Skip if matches regex exclusions.
-        if regex_excluded?(title)
-          puts ">> #{title} regex-excluded"
-          next
-        end
-
-        # Skip if recently protected.
-        if recently_protected?(ns_id, row['title'])
-          puts ">> #{title} recently protected"
-          next
-        end
-
-        # Skip if title is blacklisted.
-        if title_blacklisted?(title, edit_level)
-          puts ">> #{title} already blacklisted"
-          next
-        end
-
-        old_move_level = get_move_level(row['id'])
-
-        # Use the same as edit_level for move, unless it is higher than the edit_level.
-        move_level = PROTECTION_WEIGHT[old_move_level].to_i > PROTECTION_WEIGHT[edit_level] ? old_move_level : edit_level
-
-        puts "PROTECT: #{edit_level}/#{move_level} ~ #{title} ~ #{row['count']}"
-
-        # Protect!
-        unless @mb.opts[:dry]
-          protections = [{action: 'edit', group: edit_level}]
-
-          if move_level != :autoconfirmed
-            protections << {
-                action: 'move',
-                group: move_level
-            }
+          # Skip if excluded.
+          if exclusions.include?(title)
+            puts ">> #{title} excluded"
+            next
           end
 
-          begin
-            @mb.gateway.protect(title, protections, { reason: @mb.config[:summary] })
-          rescue MediaWiki::APIError => e
-            if e.code.to_s == 'tpt-target-page'
-              next
-            elsif e.code.to_s == 'cantedit'
-              puts "WARNING: Unable to edit [[#{title}]]"
-              next
-            else
-              raise e
-            end
+          # Skip if matches regex exclusions.
+          if regex_excluded?(title)
+            exclusions << title
+            puts ">> #{title} regex-excluded"
+            next
+          end
+
+          # Skip if recently protected.
+          if recently_protected?(ns_id, row['title'])
+            exclusions << title
+            puts ">> #{title} recently protected"
+            next
+          end
+
+          # Skip if title is blacklisted.
+          if title_blacklisted?(title, edit_level)
+            exclusions << title
+            puts ">> #{title} already blacklisted"
+            next
+          end
+
+          old_move_level = get_move_level(row['id'])
+
+          # Use the same as edit_level for move, unless it is higher than the edit_level.
+          move_level = PROTECTION_WEIGHT[old_move_level].to_i > PROTECTION_WEIGHT[edit_level] ? old_move_level : edit_level
+
+          puts "PROTECT: #{edit_level}/#{move_level} ~ #{title} ~ #{row['count']}"
+
+          binding.pry
+          # Protect!
+          unless @mb.opts[:dry]
+            protect(title, edit_level)
           end
         end
       end
@@ -96,21 +83,77 @@ module TemplateProtector
     @mb.report_error('Fatal error', e)
   end
 
-  def self.fetch_templates(ns, threshold)
+  def self.protect(title, edit_level)
+    protections = [{action: 'edit', group: edit_level}]
+
+    if move_level != :autoconfirmed
+      protections << {
+          action: 'move',
+          group: move_level
+      }
+    end
+
+    begin
+      @mb.gateway.protect(title, protections,
+        reason: @mb.config[:summary].sub('$1', row['count'].to_s)
+      )
+    rescue MediaWiki::APIError => e
+      if e.code.to_s == 'tpt-target-page'
+        return
+      elsif e.code.to_s == 'cantedit'
+        puts "WARNING: Unable to edit [[#{title}]]"
+        return
+      else
+        raise e
+      end
+    end
+  end
+
+  def self.fetch_templates(ns, level)
+    # Minimum transclusion count to check for.
+    low_threshold = @thresholds[level]
+    having_clause = "HAVING COUNT(*) >= ? "
+
+    high_threshold = @thresholds.values.max
+    if low_threshold == high_threshold
+      # We're currently at the highest (sysop) threshold, so only need one HAVING clause.
+      high_threshold = nil
+    else
+      having_clause += " AND COUNT(*) < ?"
+    end
+
+    # Build the list of protection levels we AREN'T looking for.
+    # This should include everything of lower weight than the given 'level'.
+    # The SQL clause should include all types for autoconfirmed.
+    levels = PROTECTION_WEIGHT.keys
+    if level != :autoconfirmed
+      levels.reject! { |key| PROTECTION_WEIGHT[key] < PROTECTION_WEIGHT[level] }
+
+      # TODO: get consensus for use of EC protection for templates and remove this line.
+      levels << :extendedconfirmed unless levels.include?(:extendedconfirmed)
+    end
+    levels.map!(&:to_s)
+
     sql = %{
       SELECT page_title AS title, page_id AS id, COUNT(*) AS count
       FROM page
       JOIN templatelinks ON page_title = tl_title
         AND page_namespace = tl_namespace
       LEFT JOIN page_restrictions ON pr_page = page_id
-        AND pr_level IN ('autoconfirmed', 'templateeditor', 'extendedconfirmed', 'sysop')
+        AND pr_level IN (#{Array.new(levels.length, '?').join(',')})
         AND pr_type = 'edit'
       WHERE tl_namespace = ?
         AND pr_page IS NULL
       GROUP BY page_title
-      HAVING COUNT(*) >= ?
+      #{having_clause}
     }
-    @mb.repl_query(sql, ns, threshold).to_a
+
+    args = [*levels, ns, low_threshold]
+    if high_threshold
+      args << high_threshold
+    end
+
+    @mb.repl_query(sql, *args)
   end
 
   def self.recently_protected?(ns, title)
