@@ -64,18 +64,8 @@ module TemplateProtector
             next
           end
 
-          old_move_level = get_move_level(row['id'])
-
-          # Use the same as edit_level for move, unless it is higher than the edit_level.
-          move_level = PROTECTION_WEIGHT[old_move_level].to_i > PROTECTION_WEIGHT[edit_level] ? old_move_level : edit_level
-
-          puts "PROTECT: #{edit_level}/#{move_level} ~ #{title} ~ #{row['count']}"
-
-          binding.pry
           # Protect!
-          unless @mb.opts[:dry]
-            protect(title, edit_level)
-          end
+          protect(row, title, edit_level)
         end
       end
     end
@@ -83,7 +73,18 @@ module TemplateProtector
     @mb.report_error('Fatal error', e)
   end
 
-  def self.protect(title, edit_level)
+  def self.protect(row, title, edit_level)
+    puts "PROTECT: #{edit_level}/#{move_level} ~ #{title} ~ #{row['count']}"
+
+    if @mb.opts[:dry]
+      return
+    end
+
+    old_move_level = get_move_level(row['id'])
+
+    # Use the same as edit_level for move, unless it is higher than the edit_level.
+    move_level = PROTECTION_WEIGHT[old_move_level].to_i > PROTECTION_WEIGHT[edit_level] ? old_move_level : edit_level
+
     protections = [{action: 'edit', group: edit_level}]
 
     if move_level != :autoconfirmed
