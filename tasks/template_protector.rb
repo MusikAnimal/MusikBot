@@ -74,16 +74,16 @@ module TemplateProtector
   end
 
   def self.protect(row, title, edit_level)
+    old_move_level = get_move_level(row['id'])
+
+    # Use the same as edit_level for move, unless it is higher than the edit_level.
+    move_level = PROTECTION_WEIGHT[old_move_level].to_i > PROTECTION_WEIGHT[edit_level] ? old_move_level : edit_level
+
     puts "PROTECT: #{edit_level}/#{move_level} ~ #{title} ~ #{row['count']}"
 
     if @mb.opts[:dry]
       return
     end
-
-    old_move_level = get_move_level(row['id'])
-
-    # Use the same as edit_level for move, unless it is higher than the edit_level.
-    move_level = PROTECTION_WEIGHT[old_move_level].to_i > PROTECTION_WEIGHT[edit_level] ? old_move_level : edit_level
 
     protections = [{action: 'edit', group: edit_level}]
 
