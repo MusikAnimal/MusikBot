@@ -2,7 +2,7 @@ $LOAD_PATH << '..'
 require 'musikbot'
 
 module PermClerk
-  COMMENT_INDENT = "\n::".freeze
+  COMMENT_INDENT = "\n:".freeze
   COMMENT_PREFIX = '{{comment|Automated comment}} '.freeze
   SPLIT_KEY = '====[[User:'.freeze
   AWB_CHECKPAGE = 'Wikipedia:AutoWikiBrowser/CheckPageJSON'.freeze
