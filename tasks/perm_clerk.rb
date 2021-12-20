@@ -280,7 +280,8 @@ module PermClerk
 
     info("    User has permission #{@permission}")
 
-    if sysop? || @permission == 'AutoWikiBrowser'
+    # FIXME: the `@permission != 'Autopatrolled'` is a hack; see api_relevant_permission() for more.
+    if (sysop? && @permission != 'Autopatrolled') || @permission == 'AutoWikiBrowser'
       # if sysop, no need to do other checks
       # for AWB just say "already done" as it's too expensive to figure out when they were added
       time_granted = @request_timestamp
@@ -860,7 +861,7 @@ module PermClerk
     when :autoformat
       'An extraneous header or other inappropriate text was removed from this request'
     when :autorespond
-      "#{'is a sysop and' if params[:sysop]} already has #{params[:permission] == 'AutoWikiBrowser' ? 'AutoWikiBrowser access' : "the \"#{params[:permission]}\" user right"}"
+      "#{'is a sysop and ' if (params[:sysop] && params[:permission] != 'autoreviewer')}already has #{params[:permission] == 'AutoWikiBrowser' ? 'AutoWikiBrowser access' : "the \"#{params[:permission]}\" user right"}"
     when :temp_granted
       log_link = "#{@mb.gateway.wiki_url.chomp('api.php')}index.php?title=Special:Log&" \
         "page=User:#{@username.score}&type=rights&offset=#{params[:granted]}&limit=1"
@@ -980,7 +981,8 @@ module PermClerk
   # API-related
   def self.api_relevant_permission
     info("  checking if #{@username} has permission #{@permission}")
-    return @permission if sysop?
+    # FIXME: right-hand conditional is a hack; should instead check if user already has the user right(s) that are part of the requested group
+    return @permission if sysop? && @permission != 'Autopatrolled'
 
     if @permission == 'AutoWikiBrowser'
       awb_checkpage_content.include?("\"#{@username}\"") ? 'AutoWikiBrowser' : nil
