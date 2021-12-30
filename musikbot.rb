@@ -29,6 +29,10 @@ module MusikBot
         args.on('-f', '--force', 'bypass check if the task is enabled') { @opts[:force] = true }
         args.on('-d', '--dry', 'pass to disable all editing and instead invoke debugger') { @opts[:dry] = true }
         args.on('-na', '--no-api', "Disable used of API-releated methods. Used for tasks that don't need the API.") { @opts[:no_api] = true }
+
+        if block_given?
+          yield(args)
+        end
       end.parse!
 
       unless @opts[:lang]
@@ -248,7 +252,7 @@ module MusikBot
       @gateway ||= MediaWiki::Gateway.new("https://#{project}/w/api.php",
         bot: bot?,
         retry_count: 5,
-        user_agent: "#{username}/1.1 (https://#{project}/wiki/User:#{username}/)",
+        user_agent: "#{username}/1.1 (https://#{project}/wiki/User:#{username})",
         ignorewarnings: true
       )
     end

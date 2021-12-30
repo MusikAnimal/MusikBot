@@ -1,18 +1,38 @@
 $LOAD_PATH << '..'
 require 'musikbot'
 require 'httparty'
+require 'resolv'
 
 # WishlistSurvey task
 # boot with:
-#   ruby wishlist_survey.rb --edition 3 --project meta.wikimedia --lang en
+#   ruby wishlist_survey.rb --edition 3 --project meta.wikimedia --lang en [--some-specific-task]
+#
+# Pass --help to see the other available scripts.
+# By default, the --main task is ran, but this probably not what you want if you're calling this script directly.
+#
 # --edition 3 instructs to use the 3rd set of credentials, in this case for Community_Tech_bot.
 module WishlistSurvey
   def self.run
-    @mb = MusikBot::Session.new(inspect)
+    task = :main
+
+    @mb = MusikBot::Session.new(inspect) do |args|
+      args.on(nil, '--main', 'Main WishlistSurvey task. Counts proposals/votes, rotates proposals, and updates the results page.') { task = :main }
+      args.on(nil, '--add-category-pages', 'Creates the category pages according to the bot\'s configuration.') { task = :add_category_pages }
+      args.on(nil, '--import-translations', 'Imports translations of the title from previous year\'s survey.') { task = :import_translations }
+      args.on(nil, '--fix-proposal-headers', 'Loops through proposals and enter debugger when an invalid proposal header is encountered.') { task = :fix_proposal_headers }
+      args.on(nil, '--add-voting-sections', 'Adds the voting sections to the proposal. To be ran just before voting starts.') { task = :add_voting_sections }
+      args.on(nil, '--get-old-participants', 'Script to fetch a list of participants, going off the bot\'s current configuration.') { task = :get_old_participants }
+      args.on(nil, '--analyze-participants', 'Script to report global edit counts and registration dates of participants.') { task = :analyze_participants }
+      args.on(nil, '--sock-check', 'Generates a report of new-ish users to the survey, for manual review of sock votes') { task = :sock_check }
+    end
 
     # Fetches from [[User:Community_Tech_bot/WishlistSurvey/config]].
     @survey_root = @mb.config[:survey_root]
 
+    self.public_send(task)
+  end
+
+  def self.main
     # Detect if this is the first run by simply checking if the total counts page exists.
     # If it doesn't, further down we'll create all the count pages with a value of 0.
     first_run = @mb.get("#{@survey_root}/Total editors").nil?
@@ -224,7 +244,7 @@ module WishlistSurvey
     prev_cat = categories[categories.index(category) - 1]
     next_cat = categories[(categories.index(category) + 1) % categories.length]
 
-    new_content = "{{:Community Wishlist Survey/Category header|#{prev_cat}|#{next_cat}" +
+    new_content = "{{Community Wishlist Survey/Category header|#{prev_cat}|#{next_cat}" +
       "|year=#{@mb.config[:year]}|phase=#{@mb.config[:phase]}}}\n" +
       proposals.map { |p| "\n{{:#{@survey_root}/#{category}/#{p}}}" }.join
 
@@ -248,9 +268,6 @@ module WishlistSurvey
 
   def self.parse_proposal(category, proposal)
     proposal_content = get_page("#{@survey_root}/#{category}/#{proposal}")
-
-    # Only used during voting phase.
-    votes = {}
 
     proposer = proposal_content.scan(/\n\*\s*'''Proposer'''\s*:.*?\[\[.*?(?:User(?: talk)?:|Special:Contributions\/)(.*?)(?:\]\]|\|)/i).flatten.first
 
@@ -285,7 +302,7 @@ module WishlistSurvey
     }
 
     if voting_phase?
-      unless proposer_voted = lines.select { |l| l =~ proposer_sig }.length == 1
+      unless lines.select { |l| l =~ proposer_sig }.length == 1
         supports += 1
       end
       votes.merge!(
@@ -434,10 +451,6 @@ module WishlistSurvey
       # end
       rank += 1
 
-      # Strip out links and nowiki tags from section title.
-      # XXX: May not need to do this anymore.
-      # proposal = proposal.gsub(/\<nowiki\>|\<\/nowiki\>|\[|\]/, '')
-
       all_proposers << proposer if proposer.present?
       all_phabs += phabs
       all_related_phabs += related_phabs
@@ -498,25 +511,6 @@ module WishlistSurvey
 
     content += "\n\n[[Category:#{@survey_root}]]"
 
-    # gateway ||= MediaWiki::Gateway.new('https://www.mediawiki.org/w/api.php',
-    #   bot: true,
-    #   retry_count: 5,
-    #   user_agent: 'User:Community_Tech_bot/1.1 (https://www.mediawiki.org/wiki/User:Community_Tech_bot/)',
-    #   ignorewarnings: true
-    # )
-    # credentials = YAML.load(
-    #   File.open(
-    #     File.dirname(__FILE__) + '/../config/application.yml'
-    #   ).read
-    # ).symbolize_keys
-    # gateway.login(
-    #   credentials[:api][:edition_3][:username],
-    #   credentials[:api][:edition_3][:password]
-    # )
-    # gateway.edit('User:Community_Tech_bot/Survey_tracking', content,
-    #   summary: 'Survey tracking - to be moved to Meta after a few days of voting'
-    # )
-
     @mb.edit("#{@survey_root}/Tracking",
       content: content,
       summary: "Updating voting results (#{rows.length} proposals, #{@total_editors} editors, #{total_supports} support votes)"
@@ -545,9 +539,6 @@ module WishlistSurvey
   #################### IDENTIFYING SOCKS/INELIGIBLE VOTERS AFTER VOTING PHASE HAS ENDED ####################
 
   def self.sock_check
-    @mb = MusikBot::Session.new(inspect, true)
-    @survey_root = @mb.config[:survey_root]
-
     @min_editcount = 500
     @min_days_tenure = 90
 
@@ -560,8 +551,6 @@ module WishlistSurvey
 
     # FIXME: check for {{unsigned|(.*?)\|}}
     @voter_regex = /\{\{\s*(#{support}|#{neutral}|#{oppose})\s*\}\}.*(?:\[\[.*?(?:(?:[Uu]ser|Benutzer|Utilisateur|:it:s:Utente|:fr:Discussion utilisateur)(?:[_ ]talk)?:(.*?)(?:[\|\]]|\/talk))|\{\{\s*unsigned\|(.*?)[\||\}]).*?\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)/i
-
-    # sock_parse_votes('Wiktionary', 'Wikisource dictionaries for Wiktionary')
 
     categories.each do |category|
       get_proposals(category).each do |page_id, proposal|
@@ -729,7 +718,6 @@ module WishlistSurvey
   # use Western Arabic numerals (0-9) won't get copied over. Not much we can do about that.
   # The account that runs this script must be a translation admin.
   def self.import_translations
-    @mb = MusikBot::Session.new(inspect)
     last_year = DateTime.now.year.to_s
     this_year = (DateTime.now.year + 1).to_s
 
@@ -757,33 +745,20 @@ module WishlistSurvey
     end
   end
 
+  # This uses the current bot config, so run just before starting a new survey.
   def self.get_old_participants
-    @mb = MusikBot::Session.new(inspect)
     usernames = []
 
-    @survey_root = 'Community Wishlist Survey 2020'
-    ['Wikibooks', 'Wikinews', 'Wikiquote', 'Wikisource', 'Wikispecies', 'Wikiversity', 'Wikivoyage', 'Wiktionary'].each do |cat|
-      proposals = get_proposals(cat)
-      usernames += get_editors_from_pages(proposals.keys)
-    end
-
-    @survey_root = 'Community Wishlist Survey 2019'
     categories.each do |cat|
       proposals = get_proposals(cat)
       usernames += get_editors_from_pages(proposals.keys)
     end
 
-    puts (usernames - [@mb.username]).uniq.sort
+    return (usernames - [@mb.username]).uniq.sort
       .select { |u| !u.include?('(WMF)') }
-      .map { |u| "# {{target | user = #{u} | site = meta.wikimedia.org}}" }
   end
 
   def self.add_voting_sections
-    @mb = MusikBot::Session.new(inspect)
-
-    # Fetches from [[User:Community_Tech_bot/WishlistSurvey/config]].
-    @survey_root = @mb.config[:survey_root]
-
     categories.each do |category|
       proposals = get_proposals(category)
 
@@ -793,7 +768,7 @@ module WishlistSurvey
         proposal_path = "#{@survey_root}/#{category}/#{proposal_title}"
         content = @mb.get(proposal_path)
 
-        if !content.include?("=== Voting ===")
+        unless content.include?("=== Voting ===")
           content += "\n\n=== Voting ==="
           @mb.edit(proposal_path,
             content: content,
@@ -804,59 +779,32 @@ module WishlistSurvey
     end
   end
 
-  def self.add_category_pages()
-    @mb = MusikBot::Session.new(inspect)
-
-    survey_root = @mb.config[:survey_root]
-    categories = @mb.config[:categories]
-    year = (DateTime.now.year + 1).to_s
+  def self.add_category_pages
+    year = @mb.config[:year]
 
     categories.each_with_index do |category, i|
       prev_cat = categories[i - 1]
       next_cat = categories[i + 1] || categories[0]
-      content = "{{:Community Wishlist Survey/Category header|#{prev_cat}|#{next_cat}}}\n"
-      @mb.edit("#{survey_root}/#{category}",
+      content = "{{Community Wishlist Survey/Category header|#{prev_cat}|#{next_cat}}}\n"
+      @mb.edit("#{@survey_root}/#{category}",
         content: content,
         summary: "Creating category pages for #{year} Wishlist Survey"
       )
-    end
 
-    # TODO: create talk page redirects to parent talk page
-
-    # Purge so links are up-to-date
-    categories.each do |category|
-      @mb.gateway.purge("#{survey_root}/#{category}")
-    end
-  end
-
-  def self.add_category_talk_pages(talk = true)
-    @mb = MusikBot::Session.new(inspect)
-
-    survey_root = @mb.config[:survey_root]
-    categories = @mb.config[:categories]
-    year = (DateTime.now.year + 1).to_s
-
-    categories.each_with_index do |category, i|
-      content = "#REDIRECT [[Talk:Community Wishlist Survey 2021]]"
-      binding.pry
-      @mb.edit("Talk:#{survey_root}/#{category}",
-        content: content,
-        summary: "Redirecting to [[Talk:Community Wishlist Survey 2019]]"
+      # Create talk page that redirects to main CWS talk page.
+      @mb.edit("Talk:#{@survey_root}/#{category}",
+         content: "#REDIRECT [[Talk:Community Wishlist Survey]]",
+         summary: "Redirecting to [[Talk:Community Wishlist Survey]]"
       )
     end
 
     # Purge so links are up-to-date
     categories.each do |category|
-      @mb.gateway.purge("#{survey_root}/#{category}")
+      @mb.gateway.purge("#{@survey_root}/#{category}")
     end
   end
 
   def self.fix_proposal_headers
-    @mb = MusikBot::Session.new(inspect)
-
-    @survey_root = @mb.config[:survey_root]
-    categories = @mb.config[:categories]
-
     categories.each do |category|
       puts category
       proposals = get_proposals(category)
@@ -871,13 +819,34 @@ module WishlistSurvey
     end
   end
 
+  def self.analyze_participants
+    contributors = get_old_participants
+
+    contributors.each_with_index do |user_name, i|
+      # Filter out IPs
+      next if user_name =~ Resolv::IPv4::Regex || user_name =~ Resolv::IPv6::Regex
+
+      # Wikidata + Commons edit counts
+      ret = @mb.http_get("https://commons.wikimedia.org/w/api.php?" \
+        "action=query&list=users&ususers=#{URI.escape(user_name.to_s)}&" \
+        "usprop=editcount&format=json&formatversion=2"
+      )
+      commons_editcount = ret['query']['users'][0]['editcount'] || 0
+      ret = @mb.http_get("https://www.wikidata.org/w/api.php?" \
+        "action=query&list=users&ususers=#{URI.escape(user_name.to_s)}&" \
+        "usprop=editcount&format=json&formatversion=2"
+      )
+      wikidata_editcount = ret['query']['users'][0]['editcount'] || 0
+
+      # Global edit count
+      ret = @mb.http_get("https://meta.wikimedia.org/w/api.php?" \
+        "action=query&meta=globaluserinfo&guiuser=#{URI.escape(user_name.to_s)}&" \
+        "guiprop=editcount&format=json&formatversion=2")['query']['globaluserinfo']
+
+      puts "#{i}\t#{user_name}\t#{ret['home']}\t#{ret['registration']}\t#{ret['editcount']}\t#{commons_editcount}\t#{wikidata_editcount}"
+    end
+  end
+
 end
 
 WishlistSurvey.run
-# WishlistSurvey.fix_proposal_headers
-# WishlistSurvey.get_old_participants
-# WishlistSurvey.sock_check
-# WishlistSurvey.import_translations
-# WishlistSurvey.add_category_pages
-# WishlistSurvey.add_voting_sections
-# WishlistSurvey.add_category_talk_pages
