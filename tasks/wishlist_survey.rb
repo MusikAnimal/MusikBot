@@ -203,6 +203,7 @@ module WishlistSurvey
     proposal_map = {}
 
     @mb.repl.query(sql).to_a.each do |row|
+      next if row['page_title'] =~ /.*?\/Proposal/
       proposal_map[row['page_id']] = row['page_title']
     end
 
@@ -244,8 +245,7 @@ module WishlistSurvey
     prev_cat = categories[categories.index(category) - 1]
     next_cat = categories[(categories.index(category) + 1) % categories.length]
 
-    new_content = "{{Community Wishlist Survey/Category header|#{prev_cat}|#{next_cat}" +
-      "|year=#{@mb.config[:year]}|phase=#{@mb.config[:phase]}}}\n" +
+    new_content = "{{Community Wishlist Survey/Category header|#{prev_cat}|#{next_cat}}}\n" +
       proposals.map { |p| "\n{{:#{@survey_root}/#{category}/#{p}}}" }.join
 
     @mb.edit("#{@survey_root}/#{category}",
@@ -494,6 +494,11 @@ module WishlistSurvey
       "!#{all_proposers.uniq.length} proposers\n"
     heading_content += "!#{total_supports}\n" if voting_phase?
     content = "#{heading_content}!#{all_phabs.uniq.length} phab tasks, #{all_related_phabs.uniq.length} related\n#{content}\n|}"
+
+    larger_suggestions = get_proposals('Larger suggestions')
+    if larger_suggestions.any?
+      content += "\n\n[[#{@survey_root}/Larger suggestions|Larger suggestions]] (#{larger_suggestions.length})"
+    end
 
     archived_proposals = get_proposals('Archive')
     if archived_proposals.any?
