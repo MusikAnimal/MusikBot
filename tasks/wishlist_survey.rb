@@ -286,7 +286,7 @@ module WishlistSurvey
 
     proposer_sig = /\{\{\s*(#{@mb.config[:support_templates]})\s*\}\}.*?\[\[.*?(?:User(?: talk)?:|Special:Contributions\/)#{proposer}(?:\]\]|\|).*?\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)/
 
-    statement, discussion = proposal_content.split(/===\s*(?:Community )?Discussion\s*===/i)
+    statement, discussion = proposal_content.split(/===\s*{{dynamite\|title=Community Wishlist Survey\/Discussion\|t=yes}}\s*===/i)
     discussion ||= '' # If no discussion has started yet.
 
     phab_regex = "\\[\\[:?phab(?:ricator)?:(T\\d+)|.*?phabricator\\.wikimedia\\.org\\/(T\\d+)|\\{\\{phab\\|(T\\d+)\\}\\}"
