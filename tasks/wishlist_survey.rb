@@ -14,8 +14,10 @@ require 'resolv'
 module WishlistSurvey
   def self.run
     task = :main
+    @proposal_to_translate = nil
 
     @mb = MusikBot::Session.new(inspect) do |args|
+      args.banner = 'Usage: wishlist_survey.rb [options]'
       args.on(nil, '--main', 'Main WishlistSurvey task. Counts proposals/votes, rotates proposals, and updates the results page.') { task = :main }
       args.on(nil, '--add-category-pages', 'Creates the category pages according to the bot\'s configuration.') { task = :add_category_pages }
       args.on(nil, '--import-translations', 'Imports translations of the title from previous year\'s survey.') { task = :import_translations }
@@ -23,7 +25,8 @@ module WishlistSurvey
       args.on(nil, '--add-voting-sections', 'Adds the voting sections to the proposal. To be ran just before voting starts.') { task = :add_voting_sections }
       args.on(nil, '--get-old-participants', 'Script to fetch a list of participants, going off the bot\'s current configuration.') { task = :get_old_participants }
       args.on(nil, '--analyze-participants', 'Script to report global edit counts and registration dates of participants.') { task = :analyze_participants }
-      args.on(nil, '--sock-check', 'Generates a report of new-ish users to the survey, for manual review of sock votes') { task = :sock_check }
+      args.on(nil, '--sock-check', 'Generates a report of new-ish users to the survey, for manual review of sock votes.') { task = :sock_check }
+      args.on('-t', '--setup-translate PAGETITLE', 'Setup a proposal page for translation.') { |v| @proposal_to_translate = v; task = :setup_for_translation }
     end
 
     # Fetches from [[User:Community_Tech_bot/WishlistSurvey/config]].
@@ -547,8 +550,7 @@ module WishlistSurvey
     @mb.config[:phase] == 'voting'
   end
 
-  #################### IDENTIFYING SOCKS/INELIGIBLE VOTERS AFTER VOTING PHASE HAS ENDED ####################
-
+  # Identifying socks/ineligible voters after voting phase has ended.
   def self.sock_check
     @min_editcount = 500
     @min_days_tenure = 90
@@ -856,6 +858,64 @@ module WishlistSurvey
 
       puts "#{i}\t#{user_name}\t#{ret['home']}\t#{ret['registration']}\t#{ret['editcount']}\t#{commons_editcount}\t#{wikidata_editcount}"
     end
+  end
+
+  def self.setup_for_translation
+    proposal_page_title = @proposal_to_translate.descore
+    content = @mb.get(proposal_page_title)
+
+    sections = {
+      problem: 'Problem',
+      beneficiaries: 'Who would benefit',
+      solution: 'Proposed solution',
+      comments: 'More comments',
+      phab: 'Phabricator tickets',
+      proposer: 'Proposer'
+    }
+
+    template_params = {
+      title: content.scan(/Proposal header\|1=(.*?)}}/).flatten.first
+    }
+
+    sections.values.each_with_index do |section, i|
+      if section == 'Proposer'
+        regex = /'''\s*Proposer\s*'''\s*:\s*(.*)\s*$/
+      else
+        regex = /'''\s*#{section}\s*'''\s*:\s*(.*)\s*\n\*\s*'''\s*#{sections.values[i + 1]}/m
+      end
+
+      value = content.scan(regex).flatten.first
+
+      if value.blank?
+        puts "'#{section}' section could not be parsed. Manual review required. Aborting."
+        return
+      end
+
+      template_params[sections.keys[i]] = value
+    end
+
+    new_content = "<noinclude><languages/></noinclude>{{:{{TNTN|Community Wishlist Survey/Proposal|uselang={{int:lang}}}}" \
+      "| title = <translate>#{template_params[:problem]}</translate>" \
+      "| problem = <translate>#{template_params[:problem]}</translate>" \
+      "| beneficiaries = <translate>#{template_params[:beneficiaries]}</translate>" \
+      "| solution = <translate>#{template_params[:solution]}</translate>" \
+      "| comments = <translate>#{template_params[:comments]}</translate>" \
+      "| phab = <translate>#{template_params[:phab]}</translate>" \
+      "| proposer = #{template_params[:proposer]}" \
+      "| titleonly = {{{titleonly|}}}" \
+      "}}"
+
+    @mb.edit(proposal_page_title + "/Proposal",
+      content: new_content,
+      summary: "Setting up Proposal subpage for translation"
+    )
+
+    # Remove content from original page.
+    content.gsub!(/<!-- DO NOT EDIT ABOVE THIS LINE.*?-->.*<!-- DO NOT EDIT BELOW THIS LINE.*?-->/m, '<!-- DO NOT EDIT ABOVE THIS LINE -->')
+    @mb.edit(proposal_page_title,
+      content: content,
+      summary: "Moving proposal content to [[#{proposal_page_title}/Proposal]] for translation (translators: please carefully review before marking for translation!)"
+    )
   end
 
 end
