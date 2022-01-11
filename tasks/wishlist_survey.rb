@@ -177,7 +177,7 @@ module WishlistSurvey
   end
 
   def self.categories
-    @mb.config[:categories]
+    @mb.config[:categories] + ['Larger suggestions']
   end
 
   # Get proposals within a given category.
@@ -224,6 +224,8 @@ module WishlistSurvey
 
   # Rotate proposals by moving the top proposal to the bottom.
   def self.rotate_proposals(category, throttle = 0)
+    return if category == 'Larger suggestions'
+
     content = get_page("#{@survey_root}/#{category}")
     proposals = content.scan(/#{@survey_root}\/#{category}\/(.*)}}/).flatten.uniq
     proposals_from_db = get_proposals(category).values
@@ -416,6 +418,10 @@ module WishlistSurvey
     rows = []
     cats.each do |category, proposals|
       create_report_category(category, proposals)
+
+      # Larger suggestions shouldn't be bundled with in-scope proposals.
+      next if category == 'Larger suggestions'
+
       proposals.sort.to_h.each do |proposal, count|
         rows << [proposal, category] + count.values
       end
