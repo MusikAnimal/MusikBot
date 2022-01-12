@@ -191,7 +191,7 @@ module WishlistSurvey
     @mb.gateway.custom_query(
       meta: 'siteinfo',
       siprop: 'languages',
-    ).elements['languages'].map { |l| l['code'] }
+    ).elements['languages'].map { |l| l.attributes['code'] }
   end
 
   # Get proposals within a given category.
@@ -298,7 +298,7 @@ module WishlistSurvey
       proposer = subpage_content.scan(/\n\|\s*proposer\s*=.*?#{username_sig_regex}/i).flatten.first
       statement = subpage_content # We only use this to look for related phab tickets, see where related_phabs is init'd below.
       discussion = proposal_content.split(discussion_regex).last
-      phab_tickets_section = subpage_content.split(/\n|\s*phab\s*=/).last
+      phab_tickets_section = subpage_content.split(/\n\|\s*phab\s*=/).last
     else
       proposer = proposal_content.scan(/\n\*\s*'''Proposer'''\s*:.*?#{username_sig_regex}/i).flatten.first
       statement, discussion = proposal_content.split(discussion_regex)
