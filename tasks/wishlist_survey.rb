@@ -162,7 +162,7 @@ module WishlistSurvey
         summary: "Updating total editor count (#{@total_editors})"
       )
       cached_counts['total_editors'] = @total_editors
-      report_needs_update = true
+      # report_needs_update = true
     end
 
     @untranslated = get_proposals('Untranslated')
@@ -175,12 +175,23 @@ module WishlistSurvey
 
     @mb.local_storage(
       'counts' => cached_counts,
+      'language_codes' => language_codes,
       'last_rotation' => rotation_needed ? @mb.now.to_s : last_rotation.to_s
     )
   end
 
   def self.categories
     @mb.config[:categories] + ['Larger suggestions']
+  end
+
+  def self.language_codes
+    codes = @mb.local_storage['language_codes']
+    return codes if codes.present?
+
+    @mb.gateway.custom_query(
+      meta: 'siteinfo',
+      siprop: 'languages',
+    ).elements['languages'].map { |l| l['code'] }
   end
 
   # Get proposals within a given category.
@@ -238,9 +249,12 @@ module WishlistSurvey
       proposals.delete(proposal) if !proposals_from_db.include?(proposal)
     end
 
-    # Append any proposals that aren't transcluded but should be.
+    # Append any orphaned proposals that aren't transcluded but should be.
     proposals_from_db.each do |proposal|
-      proposals << proposal.force_encoding('utf-8') if !proposals.include?(proposal)
+      # Second bit prevents translation subpages from being transcluded.
+      if !proposals.include?(proposal) && !language_codes.include?(proposal.split('/').last)
+        proposals << proposal.force_encoding('utf-8')
+      end
     end
 
     # Rotate.
@@ -272,9 +286,24 @@ module WishlistSurvey
   end
 
   def self.parse_proposal(category, proposal)
+    phab_regex = "\\[\\[:?phab(?:ricator)?:(T\\d+)|.*?phabricator\\.wikimedia\\.org\\/(T\\d+)|\\{\\{phab\\|(T\\d+)\\}\\}"
+    username_sig_regex = "\\[\\[.*?(?:User(?: talk)?:|Special:Contributions\\/)(.*?)(?:\\]\\]|\\|)"
+    discussion_regex = /===\s*{{dynamite\|title=Community Wishlist Survey\/Discussion\|t=yes}}\s*===/i
+
+    subpage_content = get_page("#{@survey_root}/#{category}/#{proposal}/Proposal")
     proposal_content = get_page("#{@survey_root}/#{category}/#{proposal}")
 
-    proposer = proposal_content.scan(/\n\*\s*'''Proposer'''\s*:.*?\[\[.*?(?:User(?: talk)?:|Special:Contributions\/)(.*?)(?:\]\]|\|)/i).flatten.first
+    if subpage_content.present?
+      # Proposal that has been set up for translation.
+      proposer = subpage_content.scan(/\n\|\s*proposer\s*=.*?#{username_sig_regex}/i).flatten.first
+      statement = subpage_content # We only use this to look for related phab tickets, see where related_phabs is init'd below.
+      discussion = proposal_content.split(discussion_regex).last
+      phab_tickets_section = subpage_content.split(/\n|\s*phab\s*=/).last
+    else
+      proposer = proposal_content.scan(/\n\*\s*'''Proposer'''\s*:.*?#{username_sig_regex}/i).flatten.first
+      statement, discussion = proposal_content.split(discussion_regex)
+      phab_tickets_section = statement.split(/''Phabricator tickets:?''':?/).last
+    end
 
     if voting_phase?
       voting_section = proposal_content.scan(/\n===\s*Voting.*?\n(.*)/m).flatten.first || ''
@@ -291,11 +320,8 @@ module WishlistSurvey
 
     proposer_sig = /\{\{\s*(#{@mb.config[:support_templates]})\s*\}\}.*?\[\[.*?(?:User(?: talk)?:|Special:Contributions\/)#{proposer}(?:\]\]|\|).*?\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)/
 
-    statement, discussion = proposal_content.split(/===\s*{{dynamite\|title=Community Wishlist Survey\/Discussion\|t=yes}}\s*===/i)
     discussion ||= '' # If no discussion has started yet.
 
-    phab_regex = "\\[\\[:?phab(?:ricator)?:(T\\d+)|.*?phabricator\\.wikimedia\\.org\\/(T\\d+)|\\{\\{phab\\|(T\\d+)\\}\\}"
-    phab_tickets_section = statement.split(/''Phabricator tickets:?''':?/).last
     phabs = phab_tickets_section.scan(/#{phab_regex}/).flatten.compact
     related_phabs = statement.scan(/#{phab_regex}/).flatten.compact +
       discussion.scan(/#{phab_regex}/).flatten.compact - phabs
@@ -891,19 +917,23 @@ module WishlistSurvey
         return
       end
 
+      if section == 'Phabricator tickets'
+        value.gsub!(/<!--.*?-->/, '')
+      end
+
       template_params[sections.keys[i]] = value
     end
 
     new_content = "<noinclude><languages/></noinclude>{{:{{TNTN|Community Wishlist Survey/Proposal|uselang={{int:lang}}}}" \
-      "| title = <translate>#{template_params[:problem]}</translate>" \
-      "| problem = <translate>#{template_params[:problem]}</translate>" \
-      "| beneficiaries = <translate>#{template_params[:beneficiaries]}</translate>" \
-      "| solution = <translate>#{template_params[:solution]}</translate>" \
-      "| comments = <translate>#{template_params[:comments]}</translate>" \
-      "| phab = <translate>#{template_params[:phab]}</translate>" \
-      "| proposer = #{template_params[:proposer]}" \
-      "| titleonly = {{{titleonly|}}}" \
-      "}}"
+      "\n| title = <translate>#{template_params[:title]}</translate>" \
+      "\n| problem = <translate>#{template_params[:problem]}</translate>" \
+      "\n| beneficiaries = <translate>#{template_params[:beneficiaries]}</translate>" \
+      "\n| solution = <translate>#{template_params[:solution]}</translate>" \
+      "\n| comments = <translate>#{template_params[:comments]}</translate>" \
+      "\n| phab = #{template_params[:phab]}" \
+      "\n| proposer = #{template_params[:proposer]}" \
+      "\n| titleonly = {{{titleonly|}}}" \
+      "\n}}"
 
     @mb.edit(proposal_page_title + "/Proposal",
       content: new_content,
