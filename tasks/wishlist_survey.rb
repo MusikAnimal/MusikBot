@@ -912,9 +912,8 @@ module WishlistSurvey
 
       value = content.scan(regex).flatten.first
 
-      if value.blank?
-        puts "'#{section}' section could not be parsed. Manual review required. Aborting."
-        return
+      if value.nil?
+        puts "'#{section}' section could not be parsed. Manual review required."
       end
 
       if section == 'Phabricator tickets'
@@ -941,10 +940,14 @@ module WishlistSurvey
     )
 
     # Remove content from original page.
-    content.gsub!(/<!-- DO NOT EDIT ABOVE THIS LINE.*?-->.*<!-- DO NOT EDIT BELOW THIS LINE.*?-->/m, '<!-- DO NOT EDIT ABOVE THIS LINE -->')
+    content.gsub!(
+      /<!-- DO NOT EDIT ABOVE THIS LINE.*?-->.*<!-- DO NOT EDIT BELOW THIS LINE.*?-->/m,
+      "<!-- DO NOT EDIT ABOVE THIS LINE! PROPOSAL CONTENT IS NOW ON THE /Proposal SUBPAGE (FOR TRANSLATION) AND SHOULD NOT BE MODIFIED FURTHER -->"
+    )
+
     @mb.edit(proposal_page_title,
       content: content,
-      summary: "Moving proposal content to [[#{proposal_page_title}/Proposal]] for translation (translators: please carefully review before marking for translation!)"
+      summary: "Moving proposal content to [[#{proposal_page_title}/Proposal]] for translation"
     )
   end
 
