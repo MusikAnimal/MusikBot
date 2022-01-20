@@ -924,11 +924,11 @@ module WishlistSurvey
     end
 
     new_content = "<noinclude><languages/></noinclude>{{:{{TNTN|Community Wishlist Survey/Proposal|uselang={{int:lang}}}}" \
-      "\n| title = #{template_params[:title]}" \
-      "\n| problem = #{template_params[:problem]}" \
-      "\n| beneficiaries = #{template_params[:beneficiaries]}" \
-      "\n| solution = #{template_params[:solution]}" \
-      "\n| comments = #{template_params[:comments]}" \
+      "\n| title = <translate>#{template_params[:title]}</translate>" \
+      "\n| problem = <translate>#{template_params[:problem]}</translate>" \
+      "\n| beneficiaries = <translate>#{template_params[:beneficiaries]}</translate>" \
+      "\n| solution = <translate>#{template_params[:solution]}</translate>" \
+      "\n| comments = <translate>#{template_params[:comments]}</translate>" \
       "\n| phab = #{template_params[:phab]}" \
       "\n| proposer = #{template_params[:proposer]}" \
       "\n| titleonly = {{{titleonly|}}}" \
