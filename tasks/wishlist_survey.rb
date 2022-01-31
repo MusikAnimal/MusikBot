@@ -307,7 +307,7 @@ module WishlistSurvey
     end
 
     if voting_phase?
-      voting_section = proposal_content.scan(/\n===\s*Voting.*?\n(.*)/m).flatten.first || ''
+      voting_section = proposal_content.scan(/\n===\s*\{\{dynamite\|title=Community Wishlist Survey\/Discussion\|t=yes}}.*?\n(.*)/m).flatten.first || ''
       lines = voting_section.scan(/^*[^:](.*?)(?:\n)?$/).flatten
 
       supports = proposal_content.downcase.scan(/\{\{\s*(#{@mb.config[:support_templates]})(?:\s*\|.*?)?\s*\}\}/).flatten.length
