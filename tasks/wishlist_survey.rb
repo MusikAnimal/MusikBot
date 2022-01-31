@@ -27,6 +27,7 @@ module WishlistSurvey
       args.on(nil, '--analyze-participants', 'Script to report global edit counts and registration dates of participants.') { task = :analyze_participants }
       args.on(nil, '--sock-check', 'Generates a report of new-ish users to the survey, for manual review of sock votes.') { task = :sock_check }
       args.on('-t', '--setup-translate PAGETITLE', 'Setup a proposal page for translation.') { |v| @proposal_to_translate = v; task = :setup_for_translation }
+      args.on(nil, '--group-proposal-msgs', 'Creates and writes to an aggregate group containing all of the translatable proposals.') { |v| task = :group_proposal_msgs }
     end
 
     # Fetches from [[User:Community_Tech_bot/WishlistSurvey/config]].
@@ -802,13 +803,12 @@ module WishlistSurvey
       proposals = get_proposals(category)
 
       proposals.each do |proposal|
-        proposal_id = proposal[0]
         proposal_title = proposal[1]
         proposal_path = "#{@survey_root}/#{category}/#{proposal_title}"
         content = @mb.get(proposal_path)
 
-        unless content.include?("=== Voting ===")
-          content += "\n\n=== Voting ==="
+        unless content.include?("=== {{dynamite|title=Community Wishlist Survey/Voting|t=yes}} ===")
+          content += "\n\n=== {{dynamite|title=Community Wishlist Survey/Voting|t=yes}} ==="
           @mb.edit(proposal_path,
             content: content,
             summary: "Adding voting section"
@@ -914,6 +914,7 @@ module WishlistSurvey
 
       if value.nil?
         puts "'#{section}' section could not be parsed. Manual review required."
+        return
       end
 
       if section == 'Phabricator tickets'
@@ -949,6 +950,27 @@ module WishlistSurvey
       content: content,
       summary: "Moving proposal content to [[#{proposal_page_title}/Proposal]] for translation"
     )
+  end
+
+  def self.group_proposal_msgs
+    pages = @mb.gateway.custom_query(
+      list: 'categorymembers',
+      cmtitle: "Category:#{@survey_root}/Proposals/Translatable",
+      cmprop: 'title',
+      cmlimit: 500
+    ).to_a[0].map { |r| r.attributes['title'] }.uniq
+
+    pages.each do |page|
+      binding.pry
+      @mb.gateway.send_request(
+        method: 'post',
+        action: 'aggregategroups',
+        do: 'associate',
+        aggregategroup: 'agg-Community_Wishlist_2022_Proposals',
+        group: "page-#{page}",
+        token: @mb.gateway.get_token('csrf')
+      )
+    end
   end
 
 end
