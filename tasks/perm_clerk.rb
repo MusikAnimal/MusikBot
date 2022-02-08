@@ -129,7 +129,7 @@ module PermClerk
 
     info("Checking section for User:#{@username}...")
 
-    timestamps = @section.scan(/(?<!\<!-- mbdate --\> )\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)/)
+    timestamps = @section.scan(/(?<!\<!-- mbdate --\> )\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)(?!\)\<!-- mb-temp-perm -->)/)
     @newest_timestamp = @mb.parse_date(timestamps.min { |a, b| @mb.parse_date(b) <=> @mb.parse_date(a) })
     @request_timestamp = @mb.parse_date(timestamps.min { |a, b| @mb.parse_date(a) <=> @mb.parse_date(b) })
 
