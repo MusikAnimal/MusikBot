@@ -5,8 +5,7 @@ require 'em-eventsource'
 
 module NSFW
   USERS_TO_PING = [
-    'MusikAnimal',
-    'DannyS712'
+    'MusikAnimal'
   ]
 
   def self.run
