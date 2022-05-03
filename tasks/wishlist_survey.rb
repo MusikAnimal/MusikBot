@@ -28,6 +28,7 @@ module WishlistSurvey
       args.on(nil, '--sock-check', 'Generates a report of new-ish users to the survey, for manual review of sock votes.') { task = :sock_check }
       args.on('-t', '--setup-translate PAGETITLE', 'Setup a proposal page for translation.') { |v| @proposal_to_translate = v; task = :setup_for_translation }
       args.on(nil, '--group-proposal-msgs', 'Creates and writes to an aggregate group containing all of the translatable proposals.') { |v| task = :group_proposal_msgs }
+      args.on(nil, '--late-votes', 'Show a list of possible late votes.') { |v| task = :late_votes }
     end
 
     # Fetches from [[User:Community_Tech_bot/WishlistSurvey/config]].
@@ -107,31 +108,31 @@ module WishlistSurvey
       # Only attempt to edit if there's a change in the counts, or if this is the first run.
       # (First run would only apply to the proposals/pending phase, not voting).
 
-      if voting_phase? && cached_counts[category]['votes'] != support_votes
-        @mb.edit("#{@survey_root}/Vote counts/#{category}",
-          content: support_votes,
-          summary: "Updating support vote count (#{support_votes})"
-        )
-        cached_counts[category]['votes'] = support_votes
-      end
+      # if voting_phase? && cached_counts[category]['votes'] != support_votes
+      #   @mb.edit("#{@survey_root}/Vote counts/#{category}",
+      #     content: support_votes,
+      #     summary: "Updating support vote count (#{support_votes})"
+      #   )
+      #   cached_counts[category]['votes'] = support_votes
+      # end
 
-      if first_run || cached_counts[category]['proposals'] != proposals.length
-        @mb.edit("#{@survey_root}/Proposal counts/#{category}",
-          content: proposals.length,
-          summary: "Updating proposal count (#{proposals.length})"
-        )
-        cached_counts[category]['proposals'] = proposals.length
-      end
+      # if first_run || cached_counts[category]['proposals'] != proposals.length
+      #   @mb.edit("#{@survey_root}/Proposal counts/#{category}",
+      #     content: proposals.length,
+      #     summary: "Updating proposal count (#{proposals.length})"
+      #   )
+      #   cached_counts[category]['proposals'] = proposals.length
+      # end
 
-      if first_run || cached_counts[category]['editors'] != editors.length
-        @mb.edit("#{@survey_root}/Editor counts/#{category}",
-          content: editors.length,
-          summary: "Updating editor count (#{editors.length})"
-        )
-        cached_counts[category]['editors'] = editors.length
-      end
+      # if first_run || cached_counts[category]['editors'] != editors.length
+      #   @mb.edit("#{@survey_root}/Editor counts/#{category}",
+      #     content: editors.length,
+      #     summary: "Updating editor count (#{editors.length})"
+      #   )
+      #   cached_counts[category]['editors'] = editors.length
+      # end
 
-      rotate_proposals(category) if rotation_needed
+      # rotate_proposals(category) if rotation_needed
     end
 
     @total_editors = all_editors.uniq.length
@@ -293,9 +294,11 @@ module WishlistSurvey
 
     subpage_content = get_page("#{@survey_root}/#{category}/#{proposal}/Proposal")
     proposal_content = get_page("#{@survey_root}/#{category}/#{proposal}")
+    translatable = false
 
     if subpage_content.present?
       # Proposal that has been set up for translation.
+      translatable = true
       proposer = subpage_content.scan(/\n\|\s*proposer\s*=.*?#{username_sig_regex}/i).flatten.first
       statement = subpage_content # We only use this to look for related phab tickets, see where related_phabs is init'd below.
       discussion = proposal_content.split(discussion_regex).last
@@ -330,7 +333,8 @@ module WishlistSurvey
     votes = {
       proposer: proposer,
       phabs: phabs.uniq,
-      related_phabs: related_phabs.uniq
+      related_phabs: related_phabs.uniq,
+      translatable: translatable
     }
 
     if voting_phase?
@@ -373,7 +377,7 @@ module WishlistSurvey
 
     if voting_phase?
       # Sort all rows by count, descending.
-      rows = rows.sort_by { |_proposal, _category, _proposer, _phabs, _rel_phabs, support| -support }
+      rows = rows.sort_by { |_proposal, _category, _proposer, _phabs, _rel_phabs, _translatable, support| -support }
 
       # Initialize counts.
       total_supports = 0
@@ -385,10 +389,8 @@ module WishlistSurvey
       total_opposes = '-'
     end
 
-    old_support_count = 0
-
     # Build markup.
-    rows.each do |proposal, category, proposer, phabs, related_phabs, supports, neutrals, opposes|
+    rows.each do |proposal, _category, proposer, phabs, related_phabs, translatable, supports, neutrals, opposes|
       rank += 1
 
       all_proposers << proposer if proposer.present?
@@ -411,24 +413,25 @@ module WishlistSurvey
 
       proposal = proposal.dup.force_encoding('utf-8')
       proposer_str = proposer_str.dup.force_encoding('utf-8')
+      proposal_name = translatable ? "{{TNT|#{@survey_root}/#{category_name}/#{proposal}/Proposal|titleonly=yes|uselang={{int:lang}}}}" : proposal
 
       content += "|-\n"
       content += "| #{rank}\n" if voting_phase?
-      content += "| [[#{@survey_root}/#{category_name}/#{proposal}|#{proposal}]]\n" \
+      content += "| [[#{@survey_root}/#{category_name}/#{proposal}|#{proposal_name}]]\n" \
         "| #{proposer_str}\n"
       content += "| #{supports}\n" if voting_phase?
       content += "| #{phabs}\n"
     end
 
-    heading = voting_phase? ? 'Voting results' : 'Results'
-    heading_content = "#{heading} for [[#{@survey_root}/#{category_name}|#{category_name}]] as of ~~~~~\n\n" \
+    heading_content = "{{TNT|Community Wishlist Survey/Results as of|2=~~~~~|uselang={{int:lang}}}}\n\n" \
       "{| class='wikitable sortable'\n"
     heading_content += "!\n" if voting_phase?
-    heading_content += "!#{rows.length} proposals\n" \
-      "!#{all_proposers.uniq.length} proposers\n"
+    heading_content += "!{{TNT|Community Wishlist Survey/Num proposals|2=#{rows.length}|uselang={{int:lang}}}}\n" \
+      "!{{TNT|Community Wishlist Survey/Num proposers|2=#{all_proposers.uniq.length}|uselang={{int:lang}}}}\n"
     heading_content += "!#{total_supports}\n" if voting_phase?
-    content = "#{heading_content}!#{all_phabs.uniq.length} phab tasks, #{all_related_phabs.uniq.length} related\n#{content}\n|}"
-
+    content = heading_content +
+      "!{{TNT|Community Wishlist Survey/Num tasks|2=#{all_phabs.uniq.length}|3=#{all_related_phabs.uniq.length}|uselang={{int:lang}}}}\n" +
+      "#{content}|}"
     content += "\n\n[[Category:#{@survey_root}]]"
 
     @mb.edit("#{@survey_root}/Tracking/#{category_name}",
@@ -447,7 +450,7 @@ module WishlistSurvey
     # Build array of proposal/category/votes for the report.
     rows = []
     cats.each do |category, proposals|
-      create_report_category(category, proposals)
+      # create_report_category(category, proposals)
 
       # Larger suggestions shouldn't be bundled with in-scope proposals.
       next if category == 'Larger suggestions'
@@ -465,7 +468,7 @@ module WishlistSurvey
 
     if voting_phase?
       # Sort all rows by count, descending.
-      rows = rows.sort_by { |_proposal, _category, _proposer, _phabs, _rel_phabs, support| -support }
+      rows = rows.sort_by { |_proposal, _category, _proposer, _phabs, _rel_phabs, _translatable, support| -support }
 
       # Initialize counts.
       total_supports = 0
@@ -480,11 +483,7 @@ module WishlistSurvey
     old_support_count = 0
 
     # Build markup.
-    rows.each do |proposal, category, proposer, phabs, related_phabs, supports, neutrals, opposes|
-      # if supports != old_support_count
-      #   rank += 1
-      #   old_support_count = supports
-      # end
+    rows.each do |proposal, category, proposer, phabs, related_phabs, translatable, supports, neutrals, opposes|
       rank += 1
 
       all_proposers << proposer if proposer.present?
@@ -500,10 +499,10 @@ module WishlistSurvey
 
       proposer_str = proposer ? "[[User:#{proposer}|#{proposer}]]" : '???'
 
-      phabs = phabs.map { |p| "[[phab:#{p}|#{p}]]" }.join(', ')
+      phabs = phabs.map { |p| "[[phab:#{p}|#{p}]]" }.join('{{int:comma-separator}}')
 
       if related_phabs.any?
-        related_phabs = related_phabs.map { |p| "[[phab:#{p}|#{p}]]" }.join(', ')
+        related_phabs = related_phabs.map { |p| "[[phab:#{p}|#{p}]]" }.join('{{int:comma-separator}}')
         phabs += "#{phabs.present? ? '<br/>' : ''}<small>Related: #{related_phabs}</small>"
       end
 
@@ -513,23 +512,30 @@ module WishlistSurvey
       proposal = proposal.dup.force_encoding('utf-8')
       proposer_str = proposer_str.dup.force_encoding('utf-8')
 
+      # This can't use {{TNT}} becuase eventually the list becomes too long
+      # and there are too many expensive Lua calls. Instead we transclude, and when the page is marked
+      # for translation, it will display in the correct language thanks to transclusion-awareness.
+      proposal_name = translatable ? "{{:#{@survey_root}/#{category}/#{proposal}/Proposal|titleonly=yes}}" : proposal
+
       content += "|-\n"
       content += "| #{rank}\n" if voting_phase?
-      content += "| [[#{@survey_root}/#{category}/#{proposal}|#{proposal}]]\n" \
-        "| [[#{@survey_root}/#{category}|#{category}]]\n" \
+      content += "| [[#{@survey_root}/#{category}/#{proposal}|#{proposal_name}]]\n" \
+        "| [[#{@survey_root}/#{category}|{{dynamite|title=Community Wishlist Survey/#{category}|t=yes}}]]\n" \
         "| #{proposer_str}\n"
       content += "| #{supports}\n" if voting_phase?
       content += "| #{phabs}\n"
     end
 
-    heading = voting_phase? ? 'Voting results' : 'Results'
-    heading_content = "#{heading} as of ~~~~~\n\n{{/Heading}}\n\n" \
+    heading_content = "{{TNT|Community Wishlist Survey/Results as of|2=~~~~~|uselang={{int:lang}}}}\n\n{{/Heading}}\n\n" \
       "{| class='wikitable sortable'\n"
     heading_content += "!\n" if voting_phase?
-    heading_content += "!#{rows.length} proposals\n!#{reported_categories.uniq.length} categories\n" \
-      "!#{all_proposers.uniq.length} proposers\n"
+    heading_content += "!{{TNT|Community Wishlist Survey/Num proposals|2=#{rows.length}|uselang={{int:lang}}}}\n" \
+      "!{{TNT|Community Wishlist Survey/Num categories|2=#{reported_categories.uniq.length}|uselang={{int:lang}}}}\n" \
+      "!{{TNT|Community Wishlist Survey/Num proposers|2=#{all_proposers.uniq.length}|uselang={{int:lang}}}}\n"
     heading_content += "!#{total_supports}\n" if voting_phase?
-    content = "#{heading_content}!#{all_phabs.uniq.length} phab tasks, #{all_related_phabs.uniq.length} related\n#{content}\n|}"
+    content = heading_content +
+      "!{{TNT|Community Wishlist Survey/Num tasks|2=#{all_phabs.uniq.length}|3=#{all_related_phabs.uniq.length}|uselang={{int:lang}}}}\n" +
+      "\n#{content}\n|}"
 
     larger_suggestions = get_proposals('Larger suggestions')
     if larger_suggestions.any?
@@ -552,6 +558,7 @@ module WishlistSurvey
 
     content += "\n\n[[Category:#{@survey_root}]]"
 
+    binding.pry
     @mb.edit("#{@survey_root}/Tracking",
       content: content,
       summary: "Updating voting results (#{rows.length} proposals, #{@total_editors} editors, #{total_supports} support votes)"
@@ -574,7 +581,7 @@ module WishlistSurvey
   end
 
   def self.voting_phase?
-    @mb.config[:phase] == 'voting'
+    @mb.config[:phase] == 'voting' || @mb.config[:phase] == 'closed'
   end
 
   # Identifying socks/ineligible voters after voting phase has ended.
@@ -582,7 +589,7 @@ module WishlistSurvey
     @min_editcount = 500
     @min_days_tenure = 90
 
-    @whitelist = @mb.local_storage['whitelist'] || []
+    @allowlist = @mb.local_storage['allowlist'] || []
     @user_cache = {}
 
     support = @mb.config[:support_templates]
@@ -590,14 +597,14 @@ module WishlistSurvey
     oppose = @mb.config[:oppose_templates]
 
     # FIXME: check for {{unsigned|(.*?)\|}}
-    @voter_regex = /\{\{\s*(#{support}|#{neutral}|#{oppose})\s*\}\}.*(?:\[\[.*?(?:(?:[Uu]ser|Benutzer|Utilisateur|:it:s:Utente|:fr:Discussion utilisateur)(?:[_ ]talk)?:(.*?)(?:[\|\]]|\/talk))|\{\{\s*unsigned\|(.*?)[\||\}]).*?\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)/i
+    @voter_regex = /\{\{\s*(#{support}|#{neutral}|#{oppose}|doubtful)(?:\s*\|.*?)?\s*\}\}.*(?:\[\[.*?(?:(?:[Uu]ser|Benutzer|Utilisateur|:it:s:Utente|:fr:Discussion utilisateur)(?:[_ ]talk)?:(.*?)(?:[\|\]]|\/talk))|\{\{\s*unsigned\|(.*?)[\||\}]).*?\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)/i
 
     categories.each do |category|
       get_proposals(category).each do |page_id, proposal|
         sock_parse_votes(category, proposal)
 
         @mb.local_storage(
-          'whitelist' => @whitelist
+          'allowlist' => @allowlist
         )
       end
     end
@@ -619,7 +626,7 @@ module WishlistSurvey
 
     content = @mb.get("#{@survey_root}/#{category}/#{proposal}")
 
-    voting_section = content.scan(/\n===\s*Voting.*?\n(.*)/m).flatten.first || ''
+    voting_section = content.scan(/\n===\s*\{\{dynamite\|title=Community Wishlist Survey\/Voting\|t=yes}}.*?\n(.*)/m).flatten.first || ''
     lines = voting_section.scan(/^*[^:](.*?)(?:\n)?$/).flatten
     proposal_voters = []
 
@@ -639,7 +646,7 @@ module WishlistSurvey
         next
       end
 
-      voter = CGI.unescapeHTML(voter.force_encoding('utf-8').strip.ucfirst)
+      voter = CGI.unescapeHTML(voter.force_encoding('utf-8').strip.ucfirst.gsub(/#top$/i, ''))
 
       # Duplicate vote
       if proposal_voters.include?(voter)
@@ -650,7 +657,7 @@ module WishlistSurvey
 
       proposal_voters << voter
 
-      if @whitelist.include?(voter)
+      if @allowlist.include?(voter)
         puts "  >> User:#{voter} meets criteria, from cache"
         next
       end
@@ -701,24 +708,21 @@ module WishlistSurvey
       return false
     end
 
+    ret = @mb.http_get("https://meta.wikimedia.org/w/api.php?" \
+        "action=query&meta=globaluserinfo&guiuser=#{URI.escape(username.to_s)}&" \
+        "guiprop=editcount&format=json&formatversion=2")['query']['globaluserinfo']
+    data[:global_editcount] = ret['editcount']
+
+    if data[:global_editcount] > @min_editcount
+      @allowlist << username
+      puts "    short-stopping, user meets qualifications (editcount)"
+      return true
+    end
+
     wikis.each do |wiki|
       if wiki['gu_locked'].to_i == 1
         puts "    ~~~ Globally locked"
         return false
-      end
-
-      editcount = user_editcount(wiki['lu_wiki'], username)
-      data[:global_editcount] += editcount
-
-      if data[:global_editcount] > @min_editcount
-        @whitelist << username
-        puts "    short-stopping, user meets qualifications (editcount)"
-        return true
-      end
-
-      if editcount > data[:max_editcount]
-        data[:max_editcount] = editcount
-        data[:max_editcount_wiki] = wiki['lu_wiki']
       end
 
       reg_date = @mb.parse_date(wiki['lu_attached_timestamp'])
@@ -729,16 +733,6 @@ module WishlistSurvey
     end
 
     data
-  end
-
-  def self.user_editcount(dbname, username)
-    sql = %{
-      SELECT user_editcount
-      FROM #{dbname}_p.user
-      WHERE user_name = ?
-    }
-    statement = @mb.repl.prepare(sql)
-    statement.execute(username.descore).to_a.first['user_editcount'].to_i
   end
 
   def self.local_wikis(username)
@@ -970,6 +964,34 @@ module WishlistSurvey
         group: "page-#{page}",
         token: @mb.gateway.get_token('csrf')
       )
+    end
+  end
+
+  def self.late_votes
+    categories.each do |category|
+      proposals = get_proposals(category)
+
+      proposals.each do |_proposal_id, proposal|
+        proposal_content = @mb.get("#{@survey_root}/#{category}/#{proposal}")
+        voting_section = proposal_content.scan(/\n===\s*\{\{dynamite\|title=Community Wishlist Survey\/Voting\|t=yes}}.*?\n(.*)/m).flatten.first || ''
+        lines = voting_section.scan(/^*[^:](.*?)(?:\n)?$/).flatten
+
+        lines.each do |line|
+          datestamps = line.scan(/\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)/)
+          datestamp = nil
+          begin
+            datestamp = datestamps ? @mb.parse_date(datestamps[0]) : nil
+          rescue => e
+            # Something weird going on
+            binding.pry
+          end
+
+          if datestamp && datestamp > @mb.parse_date('18:00, February 11 2022 (UTC)')
+            puts "#{category}/#{proposal}"
+            binding.pry
+          end
+        end
+      end
     end
   end
 
