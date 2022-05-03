@@ -46,7 +46,7 @@ module AbuseFilterIRC
       helpers do
         def authed(user)
           unless user.authed?
-            user.send "Your IRC nick must be identified to subscribe to filters. See https://freenode.net/kb/answer/registration"
+            user.send "Your IRC nick must be identified to subscribe to filters. See https://libera.chat/guides/registration"
             return false
           end
 
