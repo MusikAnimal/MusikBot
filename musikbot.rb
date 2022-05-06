@@ -7,7 +7,7 @@ require 'repl'
 require 'httparty'
 require 'core_extensions'
 require 'uri'
-require 'pry-byebug'
+require 'pry'
 
 module MusikBot
   class Session
