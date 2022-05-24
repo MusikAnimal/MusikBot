@@ -52,7 +52,7 @@ GEM
     multi_xml (0.6.0)
     mysql2 (0.5.4)
     netrc (0.11.0)
-    nokogiri (1.13.4)
+    nokogiri (1.13.6)
       mini_portile2 (~> 2.8.0)
       racc (~> 1.4)
     pry (0.14.1)
@@ -84,7 +84,7 @@ DEPENDENCIES
   i18n (= 0.7.0)
   mediawiki-gateway!
   mysql2
-  nokogiri (~> 1.13.4)
+  nokogiri (~> 1.13.6)
   pry
   redis
   unicode
