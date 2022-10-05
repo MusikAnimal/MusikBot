@@ -123,6 +123,19 @@ module MusikBot
       parse_date(date).strftime('%Y%m%d000000')
     end
 
+    def log(message, error = false)
+      message = "[#{parse_date(now()).strftime('%Y-%m-%d %H:%M:%S')}] #{message}"
+      if error
+        STDERR.puts message
+      else
+        puts message
+      end
+    end
+
+    def log_error(message)
+      log(message, true)
+    end
+
     # HTTParty getter
     def http_get(base_uri, params = {})
       @getter ||= HTTParty
@@ -359,9 +372,9 @@ module MusikBot
       page = "User:#{username}/#{@task}/Error log"
 
       if e
-        STDERR.puts "#{'>' * 20} #{DateTime.now.strftime('%Y-%m-%d %H:%M:%S')}"
-        STDERR.puts "Error during processing: #{$ERROR_INFO}"
-        STDERR.puts "Backtrace:\n\t#{e.backtrace.join("\n\t")}"
+        log_error("#{'>' * 20} #{DateTime.now.strftime('%Y-%m-%d %H:%M:%S')}")
+        log_error("Error during processing: #{$ERROR_INFO}")
+        log_error("Backtrace:\n\t#{e.backtrace.join("\n\t")}")
         message += " &mdash; in <code>#{e.backtrace_locations.first.label}</code>: ''#{e.message}''"
         opts[:summary] += ": #{e.message}"
       end
@@ -373,6 +386,7 @@ module MusikBot
       if last_message != message || parse_date(last_timestamp) < today - 1
         message = "\n*[~~~~~] #{message}"
         gateway.edit(page, content + message, opts)
+        log_error(message) # Also print to stderr
       end
 
       false

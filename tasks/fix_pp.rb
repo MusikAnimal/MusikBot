@@ -14,8 +14,9 @@ module FixPP
   end
 
   def self.add_pp
-    templates = (pp_hash.keys + pp_hash.values).uniq
-      .map { |t| "'#{t.to_s.dup.ucfirst}'" }
+    templates = (pp_hash.keys + pp_hash.values).uniq.map(&:to_s)
+    templates_sql = templates
+      .map { |t| "'#{t.dup.ucfirst}'" }
       .join(',')
 
     offset = @mb.parse_date(
@@ -35,8 +36,9 @@ module FixPP
       AND NOT EXISTS (
         SELECT 1
         FROM templatelinks
+        JOIN linktarget ON tl_target_id = lt_id
         WHERE tl_from = page_id
-        AND tl_title IN (#{templates})
+        AND lt_title IN (#{templates_sql})
       )
       GROUP BY page_title
     }
@@ -45,13 +47,21 @@ module FixPP
 
     rows.each do |row|
       title = row['page_title'].force_encoding('utf-8')
+      @mb.log("Processing [[#{title}]]")
+
       page_obj = get_protect_info(title)[0]
 
       # To guard against replication lag
-      next unless get_protections(page_obj) || get_flags(page_obj)
+      unless protected?(page_obj)
+        @mb.log("Page is not protected, skipping")
+        next
+      end
 
       # Leave TFAs alone
-      next if row['actor_name'] == 'TFA Protector Bot'
+      if row['actor_name'] == 'TFA Protector Bot'
+        @mb.log("Today's Featured Article, skipping")
+        next
+      end
 
       edit_data = get_protection_by_type(page_obj, 'edit')
       move_data = get_protection_by_type(page_obj, 'move')
@@ -74,14 +84,20 @@ module FixPP
       end
 
       content = @mb.get(title)
+      new_template = "{{#{template}|small=yes}}"
 
-      next if has_redir_template?(page_obj, content)
-      if page_obj.attributes['redirect']
-        content = content.chomp('') + "\n\n{{#{template}|small=yes}}"
-      else
-        content = "{{#{template}|small=yes}}\n" + content
+      if already_has_template?(page_obj, content, templates)
+        @mb.log("Already has template, skipping")
+        next
       end
 
+      if page_obj.attributes['redirect']
+        content = content.chomp('') + "\n\n#{new_template}"
+      else
+        content = "#{new_template}\n" + content
+      end
+
+      @mb.log("Adding missing template to [[#{title}]]")
       @mb.edit(title,
         content: content,
         summary: 'Adding missing protection template ([[User:MusikBot II/FixPP/FAQ|more info]])',
@@ -105,6 +121,13 @@ module FixPP
     end
 
     false
+  end
+
+  def self.already_has_template?(page_obj, content, templates)
+    return true if has_redir_template?(page_obj, content)
+
+    # This is just a safeguard against race conditions (editor added template after query finished).
+    return content.scan(/{{(\s*#{templates.join('|')})/).present?
   end
 
   def self.fix_pp
@@ -140,6 +163,7 @@ module FixPP
       @edit_summaries = ['Removing protection templates from unprotected page']
     end
 
+    @mb.log("Taking #{@edit_summaries.length} actions on [[#{@title}]]")
     @mb.edit(@title,
       content: @content,
       conflicts: true,
