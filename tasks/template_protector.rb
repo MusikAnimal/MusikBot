@@ -31,7 +31,7 @@ module TemplateProtector
       ns_name = namespace_map[ns_id]
 
       @thresholds.keys.each do |level|
-        puts "NAMESPACE #{ns_id} / THRESHOLD #{level}"
+        @mb.log("NAMESPACE #{ns_id} / THRESHOLD #{level}")
         fetch_templates(ns_id, level).each do |row|
           row['title'] = row['title'].force_encoding('utf-8')
           title = "#{ns_name}:#{row['title']}"
@@ -39,28 +39,28 @@ module TemplateProtector
 
           # Skip if excluded.
           if exclusions.include?(title)
-            puts ">> #{title} excluded"
+            @mb.log(">> #{title} excluded")
             next
           end
 
           # Skip if matches regex exclusions.
           if regex_excluded?(title)
             exclusions << title
-            puts ">> #{title} regex-excluded"
+            @mb.log(">> #{title} regex-excluded")
             next
           end
 
           # Skip if recently protected.
           if recently_protected?(ns_id, row['title'])
             exclusions << title
-            puts ">> #{title} recently protected"
+            @mb.log(">> #{title} recently protected")
             next
           end
 
           # Skip if title is blacklisted.
           if title_blacklisted?(title, edit_level)
             exclusions << title
-            puts ">> #{title} already blacklisted"
+            @mb.log(">> #{title} already blacklisted")
             next
           end
 
@@ -79,7 +79,7 @@ module TemplateProtector
     # Use the same as edit_level for move, unless it is higher than the edit_level.
     move_level = PROTECTION_WEIGHT[old_move_level].to_i > PROTECTION_WEIGHT[edit_level] ? old_move_level : edit_level
 
-    puts "PROTECT: #{edit_level}/#{move_level} ~ #{title} ~ #{row['count']}"
+    @mb.log("PROTECT: #{edit_level}/#{move_level} ~ #{title} ~ #{row['count']}")
 
     if @mb.opts[:dry]
       return
@@ -138,12 +138,13 @@ module TemplateProtector
     sql = %{
       SELECT page_title AS title, page_id AS id, COUNT(*) AS count
       FROM page
-      JOIN templatelinks ON page_title = tl_title
-        AND page_namespace = tl_namespace
+      JOIN linktarget ON lt_title = page_title
+        AND lt_namespace = page_namespace
+      JOIN templatelinks ON tl_target_id = lt_id
       LEFT JOIN page_restrictions ON pr_page = page_id
         AND pr_level IN (#{Array.new(levels.length, '?').join(',')})
         AND pr_type = 'edit'
-      WHERE tl_namespace = ?
+      WHERE lt_namespace = ?
         AND pr_page IS NULL
       GROUP BY page_title
       #{having_clause}
