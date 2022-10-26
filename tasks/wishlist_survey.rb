@@ -891,8 +891,8 @@ module WishlistSurvey
 
     sections = {
       problem: 'Problem',
-      beneficiaries: 'Who would benefit',
       solution: 'Proposed solution',
+      beneficiaries: 'Who would benefit',
       comments: 'More comments',
       phab: 'Phabricator tickets',
       proposer: 'Proposer'
