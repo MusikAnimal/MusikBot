@@ -205,20 +205,22 @@ module WishlistSurvey
     end
 
     category_path = "#{@survey_root.score}/#{category.score}"
+    category_path.slice!('User:')
 
+    namespace = @survey_root =~ /^User:/ ? 2 : 0
     sql = %{
       SELECT
         page_id,
         REPLACE(REPLACE(page_title, "#{category_path}/", ""), "_", " ") AS page_title
       FROM metawiki_p.page
-      WHERE page_namespace = 0
-      AND page_title RLIKE "#{category_path}/"
+      WHERE page_namespace = ?
+      AND page_title LIKE ?
       AND page_is_redirect = 0
     }
 
     proposal_map = {}
 
-    @mb.repl.query(sql).to_a.each do |row|
+    @mb.repl_query(sql, namespace, "#{category_path}/%").to_a.each do |row|
       next if row['page_title'] =~ /.*?\/Proposal/
       proposal_map[row['page_id']] = row['page_title']
     end
@@ -432,7 +434,9 @@ module WishlistSurvey
     content = heading_content +
       "!{{TNT|Community Wishlist Survey/Num tasks|2=#{all_phabs.uniq.length}|3=#{all_related_phabs.uniq.length}|uselang={{int:lang}}}}\n" +
       "#{content}|}"
-    content += "\n\n[[Category:#{@survey_root}]]"
+    unless @survey_root =~ /^User:/
+      content += "\n\n[[Category:#{@survey_root}]]"
+    end
 
     @mb.edit("#{@survey_root}/Tracking/#{category_name}",
       content: content,
@@ -558,7 +562,6 @@ module WishlistSurvey
 
     content += "\n\n[[Category:#{@survey_root}]]"
 
-    binding.pry
     @mb.edit("#{@survey_root}/Tracking",
       content: content,
       summary: "Updating voting results (#{rows.length} proposals, #{@total_editors} editors, #{total_supports} support votes)"
@@ -813,7 +816,9 @@ module WishlistSurvey
   end
 
   def self.add_category_pages
-    year = @mb.config[:year]
+    talk_page_root = @survey_root =~ /^User:/ ?
+      "User talk:" + @survey_root.sub('User:', '') :
+      "Talk:" + @survey_root
 
     categories.each_with_index do |category, i|
       prev_cat = categories[i - 1]
@@ -821,11 +826,11 @@ module WishlistSurvey
       content = "{{Community Wishlist Survey/Category header|#{prev_cat}|#{next_cat}}}\n"
       @mb.edit("#{@survey_root}/#{category}",
         content: content,
-        summary: "Creating category pages for #{year} Wishlist Survey"
+        summary: "Creating category pages for [[#{@mb.config[:survey_root]}]]"
       )
 
       # Create talk page that redirects to main CWS talk page.
-      @mb.edit("Talk:#{@survey_root}/#{category}",
+      @mb.edit("#{talk_page_root}/#{category}",
          content: "#REDIRECT [[Talk:Community Wishlist Survey]]",
          summary: "Redirecting to [[Talk:Community Wishlist Survey]]"
       )
@@ -955,7 +960,6 @@ module WishlistSurvey
     ).to_a[0].map { |r| r.attributes['title'] }.uniq
 
     pages.each do |page|
-      binding.pry
       @mb.gateway.send_request(
         method: 'post',
         action: 'aggregategroups',
