@@ -107,29 +107,29 @@ module WishlistSurvey
       # Only attempt to edit if there's a change in the counts, or if this is the first run.
       # (First run would only apply to the proposals/pending phase, not voting).
 
-      # if voting_phase? && cached_counts[category]['votes'] != support_votes
-      #   @mb.edit("#{@survey_root}/Vote counts/#{category}",
-      #     content: support_votes,
-      #     summary: "Updating support vote count (#{support_votes})"
-      #   )
-      #   cached_counts[category]['votes'] = support_votes
-      # end
+      if voting_phase? && cached_counts[category]['votes'] != support_votes
+        @mb.edit("#{@survey_root}/Vote counts/#{category}",
+          content: support_votes,
+          summary: "Updating support vote count (#{support_votes})"
+        )
+        cached_counts[category]['votes'] = support_votes
+      end
 
-      # if first_run || cached_counts[category]['proposals'] != proposals.length
-      #   @mb.edit("#{@survey_root}/Proposal counts/#{category}",
-      #     content: proposals.length,
-      #     summary: "Updating proposal count (#{proposals.length})"
-      #   )
-      #   cached_counts[category]['proposals'] = proposals.length
-      # end
+      if first_run || cached_counts[category]['proposals'] != proposals.length
+        @mb.edit("#{@survey_root}/Proposal counts/#{category}",
+          content: proposals.length,
+          summary: "Updating proposal count (#{proposals.length})"
+        )
+        cached_counts[category]['proposals'] = proposals.length
+      end
 
-      # if first_run || cached_counts[category]['editors'] != editors.length
-      #   @mb.edit("#{@survey_root}/Editor counts/#{category}",
-      #     content: editors.length,
-      #     summary: "Updating editor count (#{editors.length})"
-      #   )
-      #   cached_counts[category]['editors'] = editors.length
-      # end
+      if first_run || cached_counts[category]['editors'] != editors.length
+        @mb.edit("#{@survey_root}/Editor counts/#{category}",
+          content: editors.length,
+          summary: "Updating editor count (#{editors.length})"
+        )
+        cached_counts[category]['editors'] = editors.length
+      end
 
       # rotate_proposals(category) if rotation_needed
     end
