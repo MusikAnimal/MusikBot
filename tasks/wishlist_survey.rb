@@ -26,7 +26,6 @@ module WishlistSurvey
       args.on(nil, '--get-old-participants', 'Script to fetch a list of participants, going off the bot\'s current configuration.') { task = :get_old_participants }
       args.on(nil, '--analyze-participants', 'Script to report global edit counts and registration dates of participants.') { task = :analyze_participants }
       args.on(nil, '--sock-check', 'Generates a report of new-ish users to the survey, for manual review of sock votes.') { task = :sock_check }
-      args.on('-t', '--setup-translate PAGETITLE', 'Setup a proposal page for translation.') { |v| @proposal_to_translate = v; task = :setup_for_translation }
       args.on(nil, '--group-proposal-msgs', 'Creates and writes to an aggregate group containing all of the translatable proposals.') { |v| task = :group_proposal_msgs }
       args.on(nil, '--late-votes', 'Show a list of possible late votes.') { |v| task = :late_votes }
     end
@@ -755,8 +754,8 @@ module WishlistSurvey
   # use Western Arabic numerals (0-9) won't get copied over. Not much we can do about that.
   # The account that runs this script must be a translation admin.
   def self.import_translations
-    last_year = DateTime.now.year.to_s
-    this_year = (DateTime.now.year + 1).to_s
+    last_year = (DateTime.now.year - 1).to_s
+    this_year = DateTime.now.year.to_s
 
     # Get last year's page title translations
     old_titles = @mb.gateway.custom_query(
@@ -778,6 +777,29 @@ module WishlistSurvey
       @mb.edit(new_title,
         content: translation.sub(last_year, this_year),
         summary: "Importing translations from last year's survey"
+      )
+    end
+  end
+
+  def self.templatize_translations
+    @mb = MusikBot::Session.new(inspect)
+    source_page = 'Translations:Community Wishlist Survey 2022/11'
+    target_page = 'Translations:Template:Community Wishlist Survey/Resources/Cards/8'
+
+    old_titles = @mb.gateway.custom_query(
+      list: 'prefixsearch',
+      pssearch: source_page + '/',
+      pslimit: 500
+    ).elements['prefixsearch'].to_a.collect { |t| t['title'] }
+
+    old_titles.each do |title|
+      lang = title.split('/').last
+      translation = @mb.get(title)
+      new_title = target_page + '/' + lang
+
+      @mb.edit(new_title,
+        content: translation,
+        summary: "Moving translations to template so that they can be reused year-to-year"
       )
     end
   end
@@ -883,72 +905,6 @@ module WishlistSurvey
 
       puts "#{i}\t#{user_name}\t#{ret['home']}\t#{ret['registration']}\t#{ret['editcount']}\t#{commons_editcount}\t#{wikidata_editcount}"
     end
-  end
-
-  def self.setup_for_translation
-    proposal_page_title = @proposal_to_translate.descore
-    content = @mb.get(proposal_page_title)
-
-    sections = {
-      problem: 'Problem',
-      solution: 'Proposed solution',
-      beneficiaries: 'Who would benefit',
-      comments: 'More comments',
-      phab: 'Phabricator tickets',
-      proposer: 'Proposer'
-    }
-
-    template_params = {
-      title: content.scan(/Proposal header\|1=(.*?)}}/).flatten.first
-    }
-
-    sections.values.each_with_index do |section, i|
-      if section == 'Proposer'
-        regex = /'''\s*Proposer\s*'''\s*:\s*(.*)\s*$/
-      else
-        regex = /'''\s*#{section}\s*'''\s*:\s*(.*)\s*\n\*\s*'''\s*#{sections.values[i + 1]}/m
-      end
-
-      value = content.scan(regex).flatten.first
-
-      if value.nil?
-        puts "'#{section}' section could not be parsed. Manual review required."
-        return
-      end
-
-      if section == 'Phabricator tickets'
-        value.gsub!(/<!--.*?-->/, '')
-      end
-
-      template_params[sections.keys[i]] = value
-    end
-
-    new_content = "<noinclude><languages/></noinclude>{{:{{TNTN|Community Wishlist Survey/Proposal|uselang={{int:lang}}}}" \
-      "\n| title = <translate>#{template_params[:title]}</translate>" \
-      "\n| problem = <translate>#{template_params[:problem]}</translate>" \
-      "\n| beneficiaries = <translate>#{template_params[:beneficiaries]}</translate>" \
-      "\n| solution = <translate>#{template_params[:solution]}</translate>" \
-      "\n| comments = <translate>#{template_params[:comments]}</translate>" \
-      "\n| phab = #{template_params[:phab]}" \
-      "\n| proposer = #{template_params[:proposer]}" \
-      "\n| titleonly = {{{titleonly|}}}" \
-      "\n}}"
-
-    @mb.edit(proposal_page_title + "/Proposal",
-      content: new_content,
-      summary: "Setting up Proposal subpage for translation"
-    )
-
-    # Remove content from original page.
-    content.gsub!(
-      /<!-- DO NOT EDIT ABOVE THIS LINE.*?-->.*<!-- DO NOT EDIT BELOW THIS LINE.*?-->/m,
-      "<!-- DO NOT EDIT ABOVE THIS LINE! PROPOSAL CONTENT IS NOW ON THE /Proposal SUBPAGE (FOR TRANSLATION) AND SHOULD NOT BE MODIFIED FURTHER -->"
-    )
-
-    @mb.edit(proposal_page_title,
-      content: content,
-      summary: "Moving proposal content to [[#{proposal_page_title}/Proposal]] for translation"
-    )
   end
 
   def self.group_proposal_msgs
