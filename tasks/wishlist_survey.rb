@@ -54,7 +54,7 @@ module WishlistSurvey
 
     # Rotate the proposals every N hours (as specified by rotation_rate in config).
     last_rotation = @mb.local_storage['last_rotation'] || @mb.now
-    rotation_needed = @mb.parse_date(last_rotation) < @mb.now - (@mb.config[:rotation_rate].to_f / 24)
+    rotation_needed = @mb.config[:rotation_rate].to_i > 0 && @mb.parse_date(last_rotation) < (@mb.now - (@mb.config[:rotation_rate].to_f / 24))
 
     total_proposals = 0
     all_editors = []
@@ -131,7 +131,7 @@ module WishlistSurvey
         cached_counts[category]['editors'] = editors.length
       end
 
-      # rotate_proposals(category) if rotation_needed
+      sanitize_category(category, rotation_needed)
     end
 
     @total_editors = all_editors.uniq.length
@@ -163,7 +163,7 @@ module WishlistSurvey
         summary: "Updating total editor count (#{@total_editors})"
       )
       cached_counts['total_editors'] = @total_editors
-      # report_needs_update = true
+      report_needs_update = true
     end
 
     @untranslated = get_proposals('Untranslated')
@@ -239,12 +239,15 @@ module WishlistSurvey
     @mb.repl.query(sql).to_a.collect { |row| row['editor'] }
   end
 
-  # Rotate proposals by moving the top proposal to the bottom.
-  def self.rotate_proposals(category, throttle = 0)
+  # Pick up any orphaned proposals that are't transcluded,
+  # and remove transclusions that aren't a subpage of the given category.
+  # Also shuffles proposals according to the rotation_rate in the config.
+  def self.sanitize_category(category, rotation_needed = false, throttle = 0)
     return if category == 'Larger suggestions'
 
     content = get_page("#{@survey_root}/#{category}")
     proposals = content.scan(/#{@survey_root}\/#{category}\/(.*)}}/).flatten.uniq
+    original_proposal_count = proposals.length
     proposals_from_db = get_proposals(category).values
 
     # Remove any tranclusions of non-existent proposals.
@@ -254,14 +257,24 @@ module WishlistSurvey
 
     # Append any orphaned proposals that aren't transcluded but should be.
     proposals_from_db.each do |proposal|
-      # Second bit prevents translation subpages from being transcluded.
-      if !proposals.include?(proposal) && !language_codes.include?(proposal.split('/').last)
+      subpage_name = proposal.split('/').last
+      # Last two conditions prevent translation subpages from being transcluded.
+      if !proposals.include?(proposal) && !language_codes.include?(subpage_name) && subpage_name != 'Proposal'
         proposals << proposal.force_encoding('utf-8')
       end
     end
 
-    # Rotate.
-    proposals.shuffle!
+    edit_summary = "Cleanup"
+
+    if proposals.length > original_proposal_count
+      edit_summary += "; rescuing orphaned proposals"
+    end
+
+    # Suffle if necessary.
+    if rotation_needed
+      proposals.shuffle!
+      edit_summary += "; shuffling proposals to ensure fair visibility"
+    end
 
     # Rebuild the list, stripping out whitespace and extraneous new lines.
     prev_cat = categories[categories.index(category) - 1]
@@ -270,11 +283,13 @@ module WishlistSurvey
     new_content = "{{Community Wishlist Survey/Category header|#{prev_cat}|#{next_cat}}}\n" +
       proposals.map { |p| "\n{{:#{@survey_root}/#{category}/#{p}}}" }.join
 
-    @mb.edit("#{@survey_root}/#{category}",
-      content: new_content,
-      summary: "Shuffling proposals to ensure fair visibility",
-      conflicts: true
-    )
+    if content != new_content
+      @mb.edit("#{@survey_root}/#{category}",
+        content: new_content,
+        summary: edit_summary,
+        conflicts: true
+      )
+    end
   end
 
   # Process all proposals within a category.
@@ -920,7 +935,7 @@ module WishlistSurvey
         method: 'post',
         action: 'aggregategroups',
         do: 'associate',
-        aggregategroup: 'agg-Community_Wishlist_2022_Proposals',
+        aggregategroup: 'agg-Community_Wishlist_2023_Proposals',
         group: "page-#{page}",
         token: @mb.gateway.get_token('csrf')
       )
