@@ -922,26 +922,6 @@ module WishlistSurvey
     end
   end
 
-  def self.group_proposal_msgs
-    pages = @mb.gateway.custom_query(
-      list: 'categorymembers',
-      cmtitle: "Category:#{@survey_root}/Proposals/Translatable",
-      cmprop: 'title',
-      cmlimit: 500
-    ).to_a[0].map { |r| r.attributes['title'] }.uniq
-
-    pages.each do |page|
-      @mb.gateway.send_request(
-        method: 'post',
-        action: 'aggregategroups',
-        do: 'associate',
-        aggregategroup: 'agg-Community_Wishlist_2023_Proposals',
-        group: "page-#{page}",
-        token: @mb.gateway.get_token('csrf')
-      )
-    end
-  end
-
   def self.late_votes
     categories.each do |category|
       proposals = get_proposals(category)
