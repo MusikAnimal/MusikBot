@@ -243,8 +243,6 @@ module WishlistSurvey
   # and remove transclusions that aren't a subpage of the given category.
   # Also shuffles proposals according to the rotation_rate in the config.
   def self.sanitize_category(category, rotation_needed = false, throttle = 0)
-    return if category == 'Larger suggestions'
-
     content = get_page("#{@survey_root}/#{category}")
     proposals = content.scan(/#{@survey_root}\/#{category}\/(.*)}}/).flatten.uniq
     original_proposal_count = proposals.length
