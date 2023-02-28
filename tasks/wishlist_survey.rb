@@ -2,6 +2,7 @@ $LOAD_PATH << '..'
 require 'musikbot'
 require 'httparty'
 require 'resolv'
+require 'nokogiri'
 
 # WishlistSurvey task
 # boot with:
@@ -28,6 +29,7 @@ module WishlistSurvey
       args.on(nil, '--sock-check', 'Generates a report of new-ish users to the survey, for manual review of sock votes.') { task = :sock_check }
       args.on(nil, '--group-proposal-msgs', 'Creates and writes to an aggregate group containing all of the translatable proposals.') { |v| task = :group_proposal_msgs }
       args.on(nil, '--late-votes', 'Show a list of possible late votes.') { |v| task = :late_votes }
+      args.on(nil, '--prose-stats', 'Count prose stats for the whole survey.') { |v| task = :prose_stats }
     end
 
     # Fetches from [[User:Community_Tech_bot/WishlistSurvey/config]].
@@ -466,7 +468,7 @@ module WishlistSurvey
     # Build array of proposal/category/votes for the report.
     rows = []
     cats.each do |category, proposals|
-      # create_report_category(category, proposals)
+      create_report_category(category, proposals)
 
       # Larger suggestions shouldn't be bundled with in-scope proposals.
       next if category == 'Larger suggestions'
@@ -624,13 +626,13 @@ module WishlistSurvey
       end
     end
 
-    puts @user_cache
-    puts '------------------'
-
     filtered_users = @user_cache.select do |username, data|
       next(true) if data == false # Globally locked or is an IP.
       next(false) if data == true # Already determined to meet criteria.
-      (data[:global_editcount] > @min_editcount && (@mb.now - data[:min_registration]) > @min_days_tenure)
+
+      # Users who are very new or have a low-ish edit count.
+      is_new = (@mb.now - data[:min_registration]).to_i < @min_days_tenure
+      is_new || (is_new && data[:global_editcount] < @min_editcount)
     end
 
     build_sock_report(filtered_users)
@@ -651,7 +653,11 @@ module WishlistSurvey
       # From {{unsigned}} template.
       voter = unsigned if voter.nil?
 
-      if template.nil? # Just a comment, most likely.
+      # Just a comment, most likely.
+      if template.nil?
+        # Skip for things that are for sure comments.
+        next if line =~ /^(?:\*+|\**:+).*?\b\d\d:\d\d, \d+ \w+ \d{4} \(UTC\)$/
+
         binding.pry
         next
       end
@@ -661,7 +667,7 @@ module WishlistSurvey
         next
       end
 
-      voter = CGI.unescapeHTML(voter.force_encoding('utf-8').strip.ucfirst.gsub(/#top$/i, ''))
+      voter = CGI.unescapeHTML(voter.force_encoding('utf-8').strip.ucfirst.gsub(/(‪|‬|#top$)/i, ''))
 
       # Duplicate vote
       if proposal_voters.include?(voter)
@@ -699,35 +705,75 @@ module WishlistSurvey
         next
       end
 
-      @user_cache[voter] = ret
-      @user_cache[voter][:proposals] = [proposal]
+      # In case user was renamed
+      voter = ret[:username]
+
+      @user_cache[voter] ||= ret
+      @user_cache[voter][:proposals] ||= []
+      @user_cache[voter][:proposals] << {
+        category: category,
+        proposal: proposal
+      }
     end
   end
 
-  def self.build_sock_report(data)
-    puts data
+  def self.build_sock_report(user_cache)
+    content = <<~EOS
+      {| class="wikitable sortable"
+      ! Username
+      ! Global ec
+      ! Registration
+      ! Age in days
+      ! Proposals
+    EOS
+
+    user_cache.each do |username, data|
+      proposal_links = data[:proposals].map do |item|
+        "[[meta:#{@survey_root}/#{item[:category]}/#{item[:proposal]}|#{item[:proposal]}]]"
+      end
+
+      content += <<~EOS
+        |-
+        | [[meta:Special:CentralAuth/#{username}|#{username}]]
+        | #{data[:global_editcount]}
+        | #{data[:min_registration].strftime('%Y-%m-%d')}
+        | #{(@mb.now - data[:min_registration]).to_i}
+        | #{proposal_links.join("\n")}
+      EOS
+    end
+
+    puts content + "|}"
   end
 
   def self.get_voter_data(username)
     data = {
+      username: username,
       global_editcount: 0,
-      max_editcount: 0,
-      max_editcount_wiki: 0,
       min_registration: nil
     }
 
     wikis = local_wikis(username)
 
     if wikis.empty?
-      # Logged out
-      return false
+      # Check if user was renamed
+      new_username = moved_user_info(username)
+      if new_username.present? && username != new_username
+        puts "    #{username} was renamed to #{new_username}"
+        data[:username] = username = new_username
+        # Query again
+        wikis = local_wikis(username)
+      else
+        # Must be logged out.
+        return false
+      end
     end
 
+    parser = URI::Parser.new
     ret = @mb.http_get("https://meta.wikimedia.org/w/api.php?" \
-        "action=query&meta=globaluserinfo&guiuser=#{URI.escape(username.to_s)}&" \
+        "action=query&meta=globaluserinfo&guiuser=#{parser.escape(username.to_s)}&" \
         "guiprop=editcount&format=json&formatversion=2")['query']['globaluserinfo']
+    
     data[:global_editcount] = ret['editcount']
-
     if data[:global_editcount] > @min_editcount
       @allowlist << username
       puts "    short-stopping, user meets qualifications (editcount)"
@@ -748,6 +794,27 @@ module WishlistSurvey
     end
 
     data
+  end
+
+  def self.moved_user_info(username)
+    log_entries = @mb.repl.query(%{
+      SELECT log_timestamp, log_params FROM metawiki_p.logging
+      WHERE log_type = 'gblrename' AND log_params LIKE '%\"#{username.descore.sub("'"){ "\\'" }}\"%'
+    }).to_a
+
+    return nil if log_entries.blank?
+
+    log_entry = log_entries.first
+
+    if log_entries.length > 1 && log_entries.first['log_params'].scan(/olduser";s:\d*:"(.*?)";/).flatten.first
+      # User was renamed multiple times, so we'll just go with the last entry.
+      log_entry = log_entries.last
+    elsif username != log_entry['log_params'].scan(/olduser";s:\d*:"(.*?)";/).flatten.first
+      # something went wrong and this wasn't for the user we thought it was, so just bail out forcing manual review
+      return nil
+    end
+
+    log_entry['log_params'].scan(/newuser";s:\d*:"(.*?)";/).flatten.first
   end
 
   def self.local_wikis(username)
@@ -827,7 +894,7 @@ module WishlistSurvey
     end
 
     return (usernames - [@mb.username]).uniq.sort
-      .select { |u| !u.include?('(WMF)') }
+      .select { |u| !u.include?('(WMF)') && !u.include?('-WMF') }
   end
 
   def self.add_voting_sections
@@ -946,6 +1013,27 @@ module WishlistSurvey
         end
       end
     end
+  end
+
+  def self.prose_stats
+    total_words = 0
+    total_chars = 0
+    (categories + ['Archive']).each do |category|
+      puts "Processing #{category}..."
+      ret = @mb.http_get("https://meta.wikimedia.org/api/rest_v1/page/html/#{@survey_root.score}%2F#{category.score}")
+      Nokogiri::XML(ret).css('.mw-parser-output').children.drop(1).each do |child|
+        words = child.text
+          # Remove timestamps
+          .gsub(/\d{1,2}:\d{2}, \d+ \w+ \d{4} \(UTC\)/, '')
+          # Extract out only words
+          .split
+
+        total_words += words.length
+        total_chars += words.join.length
+      end
+    end
+
+    puts "Total words: #{total_words}\nTotal characters: #{total_chars}"
   end
 
 end
