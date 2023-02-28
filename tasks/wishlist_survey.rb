@@ -15,7 +15,6 @@ require 'nokogiri'
 module WishlistSurvey
   def self.run
     task = :main
-    @proposal_to_translate = nil
 
     @mb = MusikBot::Session.new(inspect) do |args|
       args.banner = 'Usage: wishlist_survey.rb [options]'
@@ -24,12 +23,13 @@ module WishlistSurvey
       args.on(nil, '--import-translations', 'Imports translations of the title from previous year\'s survey.') { task = :import_translations }
       args.on(nil, '--fix-proposal-headers', 'Loops through proposals and enter debugger when an invalid proposal header is encountered.') { task = :fix_proposal_headers }
       args.on(nil, '--add-voting-sections', 'Adds the voting sections to the proposal. To be ran just before voting starts.') { task = :add_voting_sections }
-      args.on(nil, '--get-old-participants', 'Script to fetch a list of participants, going off the bot\'s current configuration.') { task = :get_old_participants }
+      args.on(nil, '--get-participants', 'Script to fetch a list of participants, going off the bot\'s current configuration.') { task = :get_participants }
       args.on(nil, '--analyze-participants', 'Script to report global edit counts and registration dates of participants.') { task = :analyze_participants }
       args.on(nil, '--sock-check', 'Generates a report of new-ish users to the survey, for manual review of sock votes.') { task = :sock_check }
       args.on(nil, '--group-proposal-msgs', 'Creates and writes to an aggregate group containing all of the translatable proposals.') { |v| task = :group_proposal_msgs }
       args.on(nil, '--late-votes', 'Show a list of possible late votes.') { |v| task = :late_votes }
       args.on(nil, '--prose-stats', 'Count prose stats for the whole survey.') { |v| task = :prose_stats }
+      args.on(nil, '--results', 'Create the Result pages and redirect the Tracking pages.') { |v| task = :results }
     end
 
     # Fetches from [[User:Community_Tech_bot/WishlistSurvey/config]].
@@ -885,7 +885,7 @@ module WishlistSurvey
   end
 
   # This uses the current bot config, so run just before starting a new survey.
-  def self.get_old_participants
+  def self.get_participants(stdout = true)
     usernames = []
 
     categories.each do |cat|
@@ -893,8 +893,18 @@ module WishlistSurvey
       usernames += get_editors_from_pages(proposals.keys)
     end
 
-    return (usernames - [@mb.username]).uniq.sort
-      .select { |u| !u.include?('(WMF)') && !u.include?('-WMF') }
+    result = (usernames - [@mb.username]).uniq.sort
+      # Exclude WMF accounts
+      .reject { |u| u.include?('(WMF)') || u.include?('-WMF') }
+      # Filter out IPs
+      .reject { |u| u =~ Resolv::IPv4::Regex || u =~ Resolv::IPv6::Regex }
+
+    if stdout
+      puts "----------- LIST OF #{@survey_root.descore} PARTICIPANTS -----------"
+      puts result
+    else
+      result
+    end
   end
 
   def self.add_voting_sections
@@ -960,12 +970,9 @@ module WishlistSurvey
   end
 
   def self.analyze_participants
-    contributors = get_old_participants
+    contributors = get_participants(false)
 
     contributors.each_with_index do |user_name, i|
-      # Filter out IPs
-      next if user_name =~ Resolv::IPv4::Regex || user_name =~ Resolv::IPv6::Regex
-
       # Wikidata + Commons edit counts
       ret = @mb.http_get("https://commons.wikimedia.org/w/api.php?" \
         "action=query&list=users&ususers=#{URI.escape(user_name.to_s)}&" \
