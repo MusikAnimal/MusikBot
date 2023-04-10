@@ -51,6 +51,11 @@ module FixPP
 
       page_obj = get_protect_info(title)[0]
 
+      if page_obj.attributes['missing']
+        @mb.log("Page was deleted, skipping")
+        next
+      end
+
       # To guard against replication lag
       unless protected?(page_obj)
         @mb.log("Page is not protected, skipping")
