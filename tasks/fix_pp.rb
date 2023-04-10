@@ -1,7 +1,7 @@
 $LOAD_PATH << '..'
 require 'musikbot'
 
-CATEGORY = 'Category:Wikipedia pages with incorrect protection templates'.freeze
+CATEGORY = 'Wikipedia pages with incorrect protection templates'.freeze
 
 module FixPP
   def self.run
@@ -509,14 +509,27 @@ module FixPP
 
   def self.get_category_members
     return @category_members if @category_members
+
+    # First fetch from category.
     @mb.gateway.purge(CATEGORY)
     @category_members = @mb.gateway.custom_query(
       list: 'categorymembers',
-      cmtitle: CATEGORY,
+      cmtitle: "Category:#{CATEGORY}",
       cmlimit: 5000,
       cmprop: 'title',
       cmtype: 'page'
     ).elements['categorymembers'].map { |cm| cm.attributes['title'] }
+
+    # Also use search API which gives some results the category doesn't.
+    # See [[Special:Permalink/1145867851#FixPP_issue]]
+    search_results = @mb.gateway.custom_query(
+      list: 'search',
+      srlimit: 5000,
+      srsearch: "incategory:\"#{CATEGORY}\""
+    ).elements['search'].map { |s| s.attributes['title'] }
+
+    @category_members += search_results
+    @category_members.uniq!
   end
 
   def self.redirects(title)
