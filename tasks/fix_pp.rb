@@ -535,6 +535,7 @@ module FixPP
 
     @category_members += search_results
     @category_members.uniq!
+    @category_members
   end
 
   def self.redirects(title)
