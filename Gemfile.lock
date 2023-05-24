@@ -40,7 +40,7 @@ GEM
     httparty (0.20.0)
       mime-types (~> 3.0)
       multi_xml (>= 0.5.2)
-    i18n (0.7.0)
+    i18n (0.8.0)
     i18n_data (0.8.0)
     method_source (1.0.0)
     mime-types (3.4.1)
@@ -81,7 +81,7 @@ DEPENDENCIES
   countries (= 2.1.4)
   em-eventsource (= 0.3.1)
   httparty
-  i18n (= 0.7.0)
+  i18n (= 0.8.0)
   mediawiki-gateway!
   mysql2
   nokogiri (~> 1.13.4)
