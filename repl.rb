@@ -8,14 +8,14 @@ module Repl
       @client = Mysql2::Client.new(opts)
       @db = opts[:db] || 'enwiki_p'
       @getter = HTTParty
-      @base_uri = 'https://xtools.wmflabs.org/api/user'
+      @base_uri = 'https://xtools.wmcloud.org/api/user'
       @uri = URI::Parser.new
     end
 
     def count_articles_created(username)
       @getter.get(
         "#{@base_uri}/pages_count/#{@db}/#{@uri.escape(username.score)}"
-      )['counts']['count'].to_i
+      )['counts']['0']['count'].to_i
     end
 
     def count_namespace_edits(username, namespace = 0)
