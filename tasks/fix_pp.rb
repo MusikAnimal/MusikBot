@@ -541,7 +541,8 @@ module FixPP
   def self.redirects(title)
     ret = @mb.gateway.custom_query(
       prop: 'redirects',
-      titles: title
+      titles: title,
+      rdlimit: 500
     ).elements['pages'][0].elements['redirects']
     [title] + (ret ? ret.map { |r| r.attributes['title'] } : [])
   end
