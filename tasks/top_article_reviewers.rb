@@ -165,7 +165,7 @@ module TopArticleReviewers
         JOIN page ON page_title = log_title AND page_namespace = log_namespace
         WHERE log_timestamp BETWEEN ? AND ?
         AND log_type = 'pagetriage-curation'
-        AND log_action = 'reviewed'
+        AND log_action IN ('reviewed', 'reviewed-article', 'reviewed-redirect')
         AND log_namespace = 0
       ) logtemp
       JOIN actor ON actor_id = log_actor
@@ -187,9 +187,9 @@ module TopArticleReviewers
         FROM logging_userindex
           JOIN page ON page_title = log_title AND page_namespace = log_namespace
         WHERE log_timestamp BETWEEN ? AND ?
-          AND 
+          AND
           ((log_type = 'patrol'  AND log_action = 'patrol') OR
-           (log_type = 'pagetriage-curation' AND log_action = 'reviewed'))
+           (log_type = 'pagetriage-curation' AND log_action IN ('reviewed', 'reviewed-article', 'reviewed-redirect')))
           AND log_namespace = 0
       ) logtemp
     }
