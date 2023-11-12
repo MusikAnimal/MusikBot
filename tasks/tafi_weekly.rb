@@ -56,8 +56,8 @@ module TAFIWeekly
     end
     page = 'Wikipedia:Articles for improvement/Articles/List'
     old_content = @mb.get(page)
-    # FIXME: check for entires with underscores instead of spaces too!
-    new_content = old_content.gsub(/#.*?\[\[#{article}\]\]\s*\n/i, '') || old_content.gsub(/#.*?\[\[#{article.gsub(/ /, '_')}\]\]\s*\n/i, '')
+    new_content = old_content.gsub(/#.*?\[\[#{Regexp.escape(article.score)}\]\]\s*\n/i, '') ||
+      old_content.gsub(/#.*?\[\[#{Regexp.escape(article.descore)}\]\]\s*\n/i, '')
 
     unless new_content
       @mb.report_error("Unable to locate [[#{article}]] within [[#{page}]]")
