@@ -56,8 +56,7 @@ module TAFIWeekly
     end
     page = 'Wikipedia:Articles for improvement/Articles/List'
     old_content = @mb.get(page)
-    new_content = old_content.gsub(/#.*?\[\[#{Regexp.escape(article.score)}\]\]\s*\n/i, '') ||
-      old_content.gsub(/#.*?\[\[#{Regexp.escape(article.descore)}\]\]\s*\n/i, '')
+    new_content = old_content.gsub(/#.*?\[\[(#{Regexp.escape(article.score)}|#{Regexp.escape(article.descore)})\]\]\s*\n/i, '')
 
     unless new_content
       @mb.report_error("Unable to locate [[#{article}]] within [[#{page}]]")
