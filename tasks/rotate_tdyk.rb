@@ -7,9 +7,20 @@ module RotateTDYK
   def self.run
     @mb = MusikBot::Session.new(inspect)
 
+    # Keep track of the last successful run so we can retry the job
+    last_run = @mb.parse_date(
+      @mb.local_storage['last_run'] || (@mb.now - 1).to_s
+    ).to_date
+    if last_run.to_date === @mb.now.to_date
+      # Already ran today
+      return
+    end
+
     @num_days = @mb.get('User:MusikBot/RotateTDYK/Offset').to_i
 
     process_page
+
+    @mb.local_storage('last_run' => @mb.now.to_s)
   rescue => e
     @mb.report_error('Fatal error', e)
   end
