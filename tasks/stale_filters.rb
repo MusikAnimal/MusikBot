@@ -66,7 +66,7 @@ module StaleFilters
         "[[#{t('Special:AbuseFilter')}/#{filter['af_id']}|#{filter['af_id']}]]",
         filter['af_public_comments'].force_encoding('utf-8'),
         "data-sort-value=\"#{@mb.api_date(filter['afl_timestamp'])}\" | " + t(:plain_link, url: log(filter['af_id']), name: fdate(filter['afl_timestamp'])),
-        t(:user_link, name: filter['af_user_text'].force_encoding('utf-8')),
+        t(:user_link, name: filter['actor_name'].force_encoding('utf-8')),
         "data-sort-value=\"#{@mb.api_date(filter['af_timestamp'])}\" | [[#{history(filter['af_id'])}|#{fdate(filter['af_timestamp'])}]]",
         filter['af_hidden'] == 1 ? t('yes') : t('no'),
         translate(filter['af_actions'])
@@ -99,8 +99,9 @@ module StaleFilters
     db = @mb.database.present? ? "#{@mb.database}_p" : "#{@mb.lang}wiki_p"
 
     sql = %{
-      SELECT af_id, af_user_text, afl.afl_timestamp, af_timestamp, af_public_comments, af_hidden, af_actions
+      SELECT af_id, actor_name, afl.afl_timestamp, af_timestamp, af_public_comments, af_hidden, af_actions
       FROM #{db}.abuse_filter af
+      JOIN actor ON actor_id = af_actor
       INNER JOIN (
         SELECT afl_id, afl_filter_id, MAX(afl_timestamp) afl_timestamp
         FROM #{db}.abuse_filter_log
