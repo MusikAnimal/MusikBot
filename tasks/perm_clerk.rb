@@ -808,15 +808,6 @@ module PermClerk
       ret = false
     end
 
-    if old_wikitext.scan(/REVISIONUSER|\{\{subst:/).any?
-      error('Possible unsubstituted or improperly substituted request')
-      @errors[@permission] = @errors[@permission].to_a << {
-        group: 'formatting',
-        message: 'Possible unsubstituted or improperly substituted request. Bot may be unable to parse the page.'
-      }
-      ret = false
-    end
-
     ret
   end
 
