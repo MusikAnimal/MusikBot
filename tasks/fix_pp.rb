@@ -141,7 +141,7 @@ module FixPP
       page_obj = get_protect_info(page).first
 
       if page_obj.elements['revisions'][0].attributes['user'] == 'MusikBot'
-        log('MusikBot was last to edit page')
+        @mb.log('MusikBot was last to edit page')
       else
         process_page(page_obj)
       end
@@ -192,6 +192,12 @@ module FixPP
 
       pp_type = pp_hash[old_pp_type]
       type = pp_protect_type[pp_type]
+
+      # When no protection type has been specified
+      if type == '' then
+        type = get_protections(@page_obj)[0].attributes['type'] rescue 'edit'
+      end
+
       expiry = get_expiry(@page_obj, type)
 
       # generic pp template is handled differently
@@ -545,10 +551,6 @@ module FixPP
       rdlimit: 500
     ).elements['pages'][0].elements['redirects']
     [title] + (ret ? ret.map { |r| r.attributes['title'] } : [])
-  end
-
-  def self.log(message)
-    puts(@mb.now.strftime("%e %b %H:%M:%S | #{message}"))
   end
 end
 
