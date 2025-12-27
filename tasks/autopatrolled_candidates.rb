@@ -334,7 +334,7 @@ module AutopatrolledCandidates
       WHERE rc_timestamp > #{@mb.db_date(@mb.now - 3)}
         AND rc_namespace = 0
         AND rc_bot = 0
-        AND rc_new = 1
+        AND rc_source = 'mw.new'
         AND page_is_redirect = 0
         AND NOT EXISTS
         (
