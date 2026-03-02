@@ -867,7 +867,7 @@ module PermClerk
       "has <!-- mb-editCount -->#{params[:editCount]}<!-- mb-editCount-end --> total edits"
     when :fetchdeclined
       "has had #{params[:numDeclined]} request#{'s' if params[:numDeclined].to_i > 1} for #{@permission.downcase} " \
-        "declined in the past #{@mb.config[:fetchdeclined_config][:offset]} days (#{params[:declinedLinks]})"
+        "declined or withdrawn in the past #{@mb.config[:fetchdeclined_config][:offset]} days (#{params[:declinedLinks]})"
     when :mainSpaceCount
       "has <!-- mb-mainSpaceCount -->#{params[:mainSpaceCount]}<!-- mb-mainSpaceCount-end --> " \
         "edit#{'s' if params[:mainSpaceCount] != 1} in the [[WP:MAINSPACE|mainspace]]"
