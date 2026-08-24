@@ -285,8 +285,10 @@ module AutopatrolledCandidates
     sql = %{
       SELECT COUNT(DISTINCT(cl_from)) AS count
       FROM categorylinks
+      JOIN linktarget ON cl_target_id = lt_id
       WHERE cl_from IN (#{article_ids.join(',')})
-        AND cl_to IN (#{categories_sql})
+        AND lt_title IN (#{categories_sql})
+        AND lt_namespace = 14
         AND cl_type = 'page'
     }
     @mb.repl.query(sql).to_a.first['count']
