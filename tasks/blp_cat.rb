@@ -68,17 +68,25 @@ module BLPCat
     param_str = Array.new(categories.length).fill('?').join(', ')
 
     sql = %{
-      SELECT DISTINCT(page_title)
-      FROM page
-      JOIN categorylinks
-      ON cl_from = page_id
-      WHERE page_namespace = 0
-      AND page_id IN (
-        SELECT cl_from
-        FROM categorylinks
-        WHERE cl_to = 'Living_people'
-      )
-      AND cl_to IN (#{param_str})
+      SELECT DISTINCT p.page_title
+      FROM page p
+      -- First link to get target categories (?, ?, ?)
+      JOIN categorylinks cl_target 
+        ON p.page_id = cl_target.cl_from
+      JOIN linktarget lt_target 
+        ON cl_target.cl_target_id = lt_target.lt_id
+
+      -- Second link to check for 'Living_people'
+      JOIN categorylinks cl_living 
+        ON p.page_id = cl_living.cl_from
+      JOIN linktarget lt_living 
+        ON cl_living.cl_target_id = lt_living.lt_id
+
+      WHERE p.page_namespace = 0
+        AND lt_living.lt_namespace = 14
+        AND lt_living.lt_title = 'Living_people'
+        AND lt_target.lt_namespace = 14
+        AND lt_target.lt_title IN (#{param_str});
     }
 
     @pages = @mb.repl_query(sql, *categories.map{ |cat| cat.score })
