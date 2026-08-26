@@ -2,15 +2,7 @@ $LOAD_PATH << '..'
 require 'musikbot'
 
 MIN_ARTICLE_COUNT = 25
-MAINTENANCE_CATEGORIES = [
-  'All_articles_lacking_sources',
-  'All_articles_needing_additional_references',
-  'All_unreferenced_BLPs',
-  'All_BLP_articles_lacking_sources',
-  'All_articles_lacking_reliable_references',
-  'All_articles_with_a_promotional_tone',
-  'All_articles_with_topics_of_unclear_notability'
-]
+MAINTENANCE_CATEGORIES = %w[All_articles_lacking_sources All_articles_needing_additional_references All_unreferenced_BLPs All_BLP_articles_lacking_sources All_articles_lacking_reliable_references All_articles_with_a_promotional_tone All_articles_with_topics_of_unclear_notability]
 REPORT_PAGE = 'Wikipedia:Database reports/Editors eligible for Autopatrol privilege'
 
 module AutopatrolledCandidates
@@ -20,7 +12,7 @@ module AutopatrolledCandidates
     users = {}
 
     page_creators.each_with_index do |user, i|
-      username = user['user_name']
+      username = user['user_name'].force_encoding('utf-8')
       actor_id = user['actor_id']
 
       # not sure how this happens
@@ -274,22 +266,33 @@ module AutopatrolledCandidates
 
   # Get the number of articles created by the user that are in maintenance categories
   def self.maintenance_count(articles)
-    # Create list of categories to be used in the `cl_to IN ()` clause
-    categories_sql = MAINTENANCE_CATEGORIES.collect { |c| "'#{c}'" }.join(',')
+    # Create list of categories to be used in the `cl_target_id IN ()` clause
+    category_target_ids = get_category_target_ids( MAINTENANCE_CATEGORIES )
+      .collect{ |c| c['lt_id'] }
 
     # Create list of article IDs to be used in the `cl_from IN ()` clause
     article_ids = articles
       .select { |a| @mb.parse_date(a['rev_timestamp']) > @mb.now - 365 }
-      .collect { |a| a['page_id'] }
+      .collect { |a| a['page_id'].to_i }
 
     sql = %{
       SELECT COUNT(DISTINCT(cl_from)) AS count
       FROM categorylinks
       WHERE cl_from IN (#{article_ids.join(',')})
-        AND cl_to IN (#{categories_sql})
+        AND cl_target_id IN (#{category_target_ids.join(',')})
         AND cl_type = 'page'
     }
     @mb.repl.query(sql).to_a.first['count']
+  end
+
+  def self.get_category_target_ids( category_names )
+    sql = %{
+      SELECT lt_id, lt_title
+      FROM linktarget
+      WHERE lt_namespace = 14
+        AND lt_title IN (#{category_names.collect { |c| "'#{@mb.repl.escape(c)}'" }.join(',')})
+    }
+    @mb.repl_query(sql).to_a
   end
 
   def self.perm_request_declined?(username)
