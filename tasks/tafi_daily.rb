@@ -150,7 +150,7 @@ module TAFIDaily
       index_content.sub!(year_line, '')
       index_content.sub!(/<!-- mb-break.*? -->/,
         "<!-- mb-break (do not remove comment) -->#{year_line}#{' &middot; ' if year_line.include?('[[')}" \
-        "[[/#{@mb.today.year}/#{@mb.today.month}|#{@mb.today.strftime('%b')}]]\n"
+        "[[/#{@mb.today.year}/#{@mb.today.month}|#{@mb.today.strftime('%b')}]]"
       )
       @mb.edit(index_page,
         content: index_content,
