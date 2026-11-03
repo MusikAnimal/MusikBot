@@ -87,15 +87,15 @@ module TAFIDaily
       if !was_approved && newest_timestamp < @mb.today - @mb.config[:config][:auto_unapprove_offset]
         unapproved_entires_count += 1
         text.gsub!(section, '')
-        archive_entries << section.chomp('') + "\n\n{{unapproved}} (automated closure) No further input after 21 days ~~~~"
+        archive_entries << section.chomp('') + "\n\n{{unapproved}} (automated closure) No further input after #{@mb.config[:config][:auto_unapprove_offset]} days ~~~~"
       elsif was_approved
         approved_entries << "# {{icon|#{assessment || 'unknown'}}} [[#{article}]]"
         text.gsub!(section, '')
         archive_entries << section if should_archive
-      elsif entry =~ /{{\s*(not\s*approved|unapproved)\s*}}/i
+      elsif entry =~ /{{\s*(not\s*approved|unapproved)\s*}}/i && should_archive
         unapproved_entires_count += 1
         text.gsub!(section, '')
-        archive_entries << section if should_archive
+        archive_entries << section
       end
     end
 
