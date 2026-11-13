@@ -1,5 +1,8 @@
 $LOAD_PATH << '..'
 require 'musikbot'
+require 'rexml/document'
+REXML::Security.entity_expansion_text_limit *= 2
+REXML::Security.entity_expansion_limit *= 2
 
 CATEGORY = 'Wikipedia pages with incorrect protection templates'.freeze
 
