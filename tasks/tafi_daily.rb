@@ -71,7 +71,7 @@ module TAFIDaily
     archive_entries = []
     text.split("\n===").each do |entry|
       section = "\n===#{entry}"
-      article, assessment = entry.scan(/{{\s*T?AFI nom\s*\|\s*article\s*=(.*?)\s*(?:\||}})(?:class\s*=\s*(\w+))?/i).flatten
+      article, assessment = entry.scan(/{{\s*T?AFI nom\s*.*\|\s*article\s*=\s*(.*?)\s*(?:\||}})\s*(?:class\s*=\s*(\w+))?/im).flatten
 
       next unless article
 
