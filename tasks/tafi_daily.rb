@@ -122,13 +122,12 @@ module TAFIDaily
   end
 
   def self.add_afti_entries(entries)
-    page = 'Wikipedia:Articles for improvement/Articles/List'
-    text = @mb.get(page)
+    text = @mb.get(article_list_page_name)
     text.sub!(/\<!--.*?--\>\n*\z/, '')
     comment = '<!-- This page is automatically updated by MusikBot. There is no need to edit directly -->'
     new_entries = entries.select { |entry| !text.include?(entry.scan(/(\[\[.*?\]\])/).flatten[0].to_s) }
     new_text = "#{text.chomp('')}\n#{new_entries.join("\n")}".chomp('')
-    @mb.edit(page,
+    @mb.edit(article_list_page_name,
       content: "#{new_text}\n#{comment}",
       summary: "Adding #{new_entries.length} newly approved article#{'s' if new_entries.length > 1} for improvement"
     )
@@ -162,6 +161,10 @@ module TAFIDaily
 
   def self.nominations_board_page_name
     @mb.config[:config][:nominations_board_page_name]
+  end
+
+  def self.article_list_page_name
+    @mb.config[:config][:article_list_page_name]
   end
 
   def self.archive_page_name
